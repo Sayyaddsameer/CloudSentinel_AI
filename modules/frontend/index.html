@@ -1,0 +1,216 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="description" content="Secure sign-in to CloudSentinel AI risk intelligence platform">
+  <title>Sign In — CloudSentinel</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="css/styles.css">
+  <script src="js/theme.js"></script><!-- runs before body to prevent flash -->
+  <script src="js/env.js"></script>
+</head>
+<body>
+
+<!-- Theme toggle -->
+<div style="position:fixed;top:1rem;right:1rem;z-index:100">
+  <button class="theme-toggle-btn" onclick="toggleTheme()" id="theme-toggle">Light</button>
+</div>
+
+<div class="auth-page">
+  <div class="auth-bg-orb auth-bg-orb-1"></div>
+  <div class="auth-bg-orb auth-bg-orb-2"></div>
+
+  <div class="auth-card">
+    <!-- Brand -->
+    <div class="auth-logo">
+      <div class="auth-logo-icon">CS</div>
+      <span class="auth-logo-name">CloudSentinel</span>
+    </div>
+
+    <!-- Heading -->
+    <div class="flex items-center justify-between mb-1" style="margin-bottom:1.25rem">
+      <h1 class="auth-heading" style="margin-bottom:0">Welcome back</h1>
+      <span class="security-pill">Secured</span>
+    </div>
+    <p class="auth-sub">Sign in to your risk intelligence dashboard</p>
+
+    <!-- Session timeout notice -->
+    <div id="timeout-banner" style="display:none" class="info-box warning-box" style="margin-bottom:1rem">
+      <span class="info-icon">[!]</span>
+      <span>You were signed out due to inactivity. Please sign in again.</span>
+    </div>
+
+    <!-- Rate limit lockout banner -->
+    <div class="lockout-banner" id="lockout-banner">
+      Account locked. Try again in <strong id="lockout-countdown" class="lockout-countdown">--</strong>
+    </div>
+
+    <!-- Error -->
+    <div class="auth-error" id="auth-error"></div>
+
+    <!-- Form -->
+    <form class="auth-form" id="login-form" novalidate autocomplete="on">
+      <div class="form-group">
+        <label class="form-label" for="email">Email address</label>
+        <input class="form-input" id="email" type="email"
+          placeholder="you@company.com" autocomplete="email" required>
+        <span class="form-error" id="email-err">Please enter a valid email address</span>
+      </div>
+
+      <div class="form-group">
+        <label class="form-label" for="password">Password</label>
+        <div class="input-group">
+          <input class="form-input" id="password" type="password"
+            placeholder="&bull;&bull;&bull;&bull;&bull;&bull;&bull;&bull;" autocomplete="current-password" required>
+          <span class="input-icon" id="toggle-password" title="Show/hide password">show</span>
+        </div>
+      </div>
+
+      <!-- Attempt counter hint -->
+      <div id="attempt-hint" style="display:none;font-size:.78rem;color:var(--medium);margin-top:-.5rem">
+        [!] <span id="attempt-count"></span> failed attempt(s). Account locks after 5.
+      </div>
+
+      <button type="submit" class="btn btn-gradient btn-lg w-full auth-submit" id="login-btn">
+        <span id="btn-text">Sign In</span>
+        <span id="btn-icon">&#8594;</span>
+      </button>
+    </form>
+
+    <p class="auth-footer">
+      Don't have an account? <a href="signup.html" class="auth-link">Create account</a>
+    </p>
+  </div>
+</div>
+
+<div id="toast-container"></div>
+
+<script src="js/auth.js"></script>
+<script>
+  /* ── Redirect if already logged in ── */
+  if (getSession()) window.location.href = 'dashboard.html';
+
+  /* ── Show session timeout reason ── */
+  if (new URLSearchParams(location.search).get('reason') === 'timeout') {
+    document.getElementById('timeout-banner').style.display = 'flex';
+  }
+
+  /* ── Password toggle ── */
+  document.getElementById('toggle-password').addEventListener('click', function () {
+    const pw = document.getElementById('password');
+    pw.type = pw.type === 'password' ? 'text' : 'password';
+    this.textContent = pw.type === 'password' ? 'show' : 'hide';
+  });
+
+  /* ── Email validation ── */
+  const emailRe = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
+
+  /* ── Rate limiting helpers (client-side layer) ── */
+  function getRlData(email) {
+    try { return JSON.parse(localStorage.getItem(`cs_rl_${btoa(email).slice(0, 12)}`) || '{"fails":0,"lockedUntil":0}'); }
+    catch { return { fails: 0, lockedUntil: 0 }; }
+  }
+  function setRlData(email, data) {
+    localStorage.setItem(`cs_rl_${btoa(email).slice(0, 12)}`, JSON.stringify(data));
+  }
+  function recordFail(email) {
+    const d = getRlData(email);
+    d.fails++;
+    if (d.fails >= 10) d.lockedUntil = Date.now() + 30 * 60 * 1000;
+    else if (d.fails >= 5) d.lockedUntil = Date.now() + 5 * 60 * 1000;
+    else if (d.fails >= 3) d.lockedUntil = Date.now() + 60 * 1000;
+    setRlData(email, d);
+    return d;
+  }
+  function clearFails(email) { localStorage.removeItem(`cs_rl_${btoa(email).slice(0, 12)}`); }
+
+  let lockoutInterval = null;
+  function startLockoutCountdown(lockedUntil) {
+    const banner = document.getElementById('lockout-banner');
+    const timer  = document.getElementById('lockout-countdown');
+    const btn    = document.getElementById('login-btn');
+    banner.classList.add('show');
+    btn.disabled = true;
+    clearInterval(lockoutInterval);
+    lockoutInterval = setInterval(() => {
+      const rem = Math.max(0, Math.ceil((lockedUntil - Date.now()) / 1000));
+      const m = Math.floor(rem / 60), s = rem % 60;
+      timer.textContent = rem > 60 ? `${m}m ${s}s` : `${s}s`;
+      if (rem <= 0) {
+        clearInterval(lockoutInterval);
+        banner.classList.remove('show');
+        btn.disabled = false;
+        document.getElementById('attempt-hint').style.display = 'none';
+      }
+    }, 1000);
+  }
+
+  /* ── Submit handler ── */
+  document.getElementById('login-form').addEventListener('submit', async function (e) {
+    e.preventDefault();
+
+    const email    = document.getElementById('email').value.trim();
+    const password = document.getElementById('password').value;
+    const errEl    = document.getElementById('auth-error');
+    const emailErr = document.getElementById('email-err');
+    const btnText  = document.getElementById('btn-text');
+    const btnIcon  = document.getElementById('btn-icon');
+    const btn      = document.getElementById('login-btn');
+
+    /* Reset errors */
+    errEl.classList.remove('show');
+    document.getElementById('email').classList.remove('error');
+    emailErr.classList.remove('show');
+
+    /* Validate */
+    if (!email || !emailRe.test(email)) {
+      document.getElementById('email').classList.add('error');
+      emailErr.classList.add('show');
+      return;
+    }
+    if (!password) {
+      errEl.textContent = 'Please enter your password.';
+      errEl.classList.add('show');
+      return;
+    }
+
+    /* Client-side rate limit */
+    const rlData = getRlData(email);
+    if (rlData.lockedUntil > Date.now()) {
+      startLockoutCountdown(rlData.lockedUntil);
+      return;
+    }
+
+    /* Submit */
+    btn.disabled = true;
+    btnText.textContent = 'Signing in...';
+    btnIcon.textContent = '[...]';
+
+    try {
+      await login(email, password);
+      clearFails(email);
+      window.location.href = 'dashboard.html';
+    } catch (err) {
+      const d = recordFail(email);
+      btnText.textContent = 'Sign In';
+      btnIcon.innerHTML   = '&#8594;';
+      btn.disabled = false;
+
+      if (d.lockedUntil > Date.now()) {
+        startLockoutCountdown(d.lockedUntil);
+        document.getElementById('attempt-hint').style.display = 'none';
+      } else {
+        if (d.fails >= 2) {
+          document.getElementById('attempt-hint').style.display = 'block';
+          document.getElementById('attempt-count').textContent = d.fails;
+        }
+        errEl.textContent = err.message || 'Invalid email or password.';
+        errEl.classList.add('show');
+      }
+    }
+  });
+</script>
+</body>
+</html>
