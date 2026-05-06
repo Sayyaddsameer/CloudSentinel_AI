@@ -1,0 +1,47 @@
+# Terraform — never commit state or secrets
+terraform.tfstate
+terraform.tfstate.backup
+.terraform/
+*.tfvars
+*.auto.tfvars
+.terraform.lock.hcl
+
+# Lambda build artifacts
+*.zip
+package/
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.env
+deploy.env
+.venv/
+venv/
+*.egg-info/
+dist/
+build/
+
+# Node (future tooling)
+node_modules/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Security scan output
+bandit-report.txt
+
+# GCP service account key files — never commit
+*-service-account*.json
+*-key.json
+gcp-*.json
+
+# Coverage reports
+.coverage
+htmlcov/
+coverage.xml
+
+teardown.py
+wire_frontend.py
