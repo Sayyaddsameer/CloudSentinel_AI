@@ -1,0 +1,214 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="description" content="CloudSentinel risk intelligence dashboard">
+  <title>Dashboard — CloudSentinel</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="css/styles.css">
+  <script src="js/theme.js"></script>
+  <script src="js/env.js"></script>
+</head>
+<body>
+
+<!-- Navbar -->
+<nav class="navbar">
+  <div class="navbar-brand">
+    <div class="logo-icon">CS</div>
+    CloudSentinel
+  </div>
+  <div class="navbar-divider"></div>
+  <div class="navbar-breadcrumb">
+    <span class="current">Dashboard</span>
+  </div>
+  <div class="navbar-actions">
+    <div class="user-menu" id="user-menu">
+      <div class="user-avatar" id="nav-user-avatar">--</div>
+      <span class="user-name" id="nav-user-name">Loading...</span>
+      <span style="color:var(--text-3);font-size:.7rem">&#9660;</span>
+      <div class="user-dropdown" id="user-dropdown">
+        <div style="padding:.625rem .875rem .5rem;border-bottom:1px solid var(--border);margin-bottom:.375rem;">
+          <div style="font-size:.875rem;font-weight:600;color:var(--text)" id="dd-user-name"></div>
+          <div style="font-size:.75rem;color:var(--text-2)" id="dd-user-email"></div>
+        </div>
+        <a href="history.html" class="user-dropdown-item">Risk History</a>
+        <div class="user-dropdown-divider"></div>
+        <div class="user-dropdown-item danger" id="logout-btn">Sign Out</div>
+      </div>
+    </div>
+  </div>
+</nav>
+
+<!-- Content -->
+<div class="page-content">
+
+  <!-- Welcome card -->
+  <div class="dashboard-welcome">
+    <div class="dashboard-welcome-left">
+      <div class="welcome-avatar" id="welcome-avatar">--</div>
+      <div>
+        <div class="welcome-greeting" id="welcome-greeting">Welcome</div>
+        <div class="welcome-detail" id="welcome-detail">Manage and monitor your infrastructure risk across all modules</div>
+      </div>
+    </div>
+    <div class="welcome-stats" id="welcome-stats">
+      <div class="welcome-stat">
+        <div class="welcome-stat-value" id="ws-total" style="color:var(--blue)">--</div>
+        <div class="welcome-stat-label">Total Risks</div>
+      </div>
+      <div class="welcome-stat">
+        <div class="welcome-stat-value" id="ws-high" style="color:var(--high)">--</div>
+        <div class="welcome-stat-label">High Priority</div>
+      </div>
+      <div class="welcome-stat">
+        <div class="welcome-stat-value" id="ws-connected" style="color:var(--low)">--</div>
+        <div class="welcome-stat-label">Connected</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modules -->
+  <div class="flex items-center justify-between mb-2">
+    <div>
+      <div class="text-xl font-bold" style="letter-spacing:-.03em">Intelligence Modules</div>
+      <div class="text-sm text-muted mt-1">Select a module to connect, scan, and analyze risks</div>
+    </div>
+    <a href="history.html" class="btn btn-outline btn-sm">Risk History</a>
+  </div>
+
+  <div class="modules-grid" id="modules-grid">
+
+    <!-- Cloud Infrastructure -->
+    <div class="module-card" onclick="window.location.href='cloud.html'" id="mod-cloud">
+      <div class="module-card-top">
+        <div class="module-card-icon" style="background:linear-gradient(135deg,rgba(74,126,255,.2),rgba(74,126,255,.08))">
+          <span style="font-size:1.25rem;font-weight:700;color:var(--blue)">AWS</span>
+        </div>
+        <span class="module-card-badge badge-disconnected" id="badge-cloud">Not Connected</span>
+      </div>
+      <div>
+        <div class="module-card-name">Cloud Infrastructure</div>
+        <div class="module-card-desc">Scan AWS and GCP environments for misconfigurations in S3 buckets, security groups, IAM policies, and firewall rules.</div>
+      </div>
+      <div class="module-card-meta">
+        <span id="risk-count-cloud">--</span>
+        <span id="trend-cloud"></span>
+        <span style="margin-left:auto">AWS &middot; GCP</span>
+        <span class="module-card-arrow">&#8594;</span>
+      </div>
+    </div>
+
+    <!-- DevOps -->
+    <div class="module-card" onclick="window.location.href='devops.html'" id="mod-devops">
+      <div class="module-card-top">
+        <div class="module-card-icon" style="background:linear-gradient(135deg,rgba(124,92,252,.2),rgba(124,92,252,.08))">
+          <span style="font-size:1.25rem;font-weight:700;color:var(--purple)">CI</span>
+        </div>
+        <span class="module-card-badge badge-disconnected" id="badge-devops">Not Connected</span>
+      </div>
+      <div>
+        <div class="module-card-name">DevOps Intelligence</div>
+        <div class="module-card-desc">Analyze CI/CD pipelines for hardcoded secrets, missing test steps, absent rollback strategies, and deploy monitoring gaps.</div>
+      </div>
+      <div class="module-card-meta">
+        <span id="risk-count-devops">--</span>
+        <span id="trend-devops"></span>
+        <span style="margin-left:auto">GitHub Actions</span>
+        <span class="module-card-arrow">&#8594;</span>
+      </div>
+    </div>
+
+    <!-- Full-Stack -->
+    <div class="module-card" onclick="window.location.href='fullstack.html'" id="mod-fullstack">
+      <div class="module-card-top">
+        <div class="module-card-icon" style="background:linear-gradient(135deg,rgba(0,212,170,.2),rgba(0,212,170,.08))">
+          <span style="font-size:1.25rem;font-weight:700;color:var(--teal)">API</span>
+        </div>
+        <span class="module-card-badge badge-disconnected" id="badge-fullstack">Not Connected</span>
+      </div>
+      <div>
+        <div class="module-card-name">Full-Stack Application</div>
+        <div class="module-card-desc">Inspect API Gateway endpoints for missing authentication, rate limiting gaps, high error rates, and API latency issues.</div>
+      </div>
+      <div class="module-card-meta">
+        <span id="risk-count-fullstack">--</span>
+        <span id="trend-fullstack"></span>
+        <span style="margin-left:auto">API Gateway</span>
+        <span class="module-card-arrow">&#8594;</span>
+      </div>
+    </div>
+
+    <!-- Data Engineering -->
+    <div class="module-card" onclick="window.location.href='data.html'" id="mod-data">
+      <div class="module-card-top">
+        <div class="module-card-icon" style="background:linear-gradient(135deg,rgba(255,165,2,.2),rgba(255,165,2,.08))">
+          <span style="font-size:1.25rem;font-weight:700;color:var(--amber)">ETL</span>
+        </div>
+        <span class="module-card-badge badge-disconnected" id="badge-data">Not Connected</span>
+      </div>
+      <div>
+        <div class="module-card-name">Data Engineering</div>
+        <div class="module-card-desc">Audit S3 data buckets, DynamoDB tables, and Glue ETL pipelines for encryption gaps, public exposure, and repeated failures.</div>
+      </div>
+      <div class="module-card-meta">
+        <span id="risk-count-data">--</span>
+        <span id="trend-data"></span>
+        <span style="margin-left:auto">S3 &middot; Glue</span>
+        <span class="module-card-arrow">&#8594;</span>
+      </div>
+    </div>
+
+    <!-- Mobile -->
+    <div class="module-card" onclick="window.location.href='mobile.html'" id="mod-mobile">
+      <div class="module-card-top">
+        <div class="module-card-icon" style="background:linear-gradient(135deg,rgba(255,71,87,.2),rgba(255,71,87,.08))">
+          <span style="font-size:1.25rem;font-weight:700;color:var(--high)">MOB</span>
+        </div>
+        <span class="module-card-badge badge-disconnected" id="badge-mobile">Not Connected</span>
+      </div>
+      <div>
+        <div class="module-card-name">Mobile Backend (Flutter)</div>
+        <div class="module-card-desc">Monitor backend APIs serving mobile apps for latency spikes, CORS misconfigurations, Lambda error rates, and service reliability.</div>
+      </div>
+      <div class="module-card-meta">
+        <span id="risk-count-mobile">--</span>
+        <span id="trend-mobile"></span>
+        <span style="margin-left:auto">Flutter &middot; Lambda</span>
+        <span class="module-card-arrow">&#8594;</span>
+      </div>
+    </div>
+
+  </div><!-- /modules-grid -->
+
+  <!-- Recent Activity -->
+  <div style="margin-top:2.5rem">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:1rem">
+      <div>
+        <div class="text-xl font-bold" style="letter-spacing:-.03em">Recent Activity</div>
+        <div class="text-sm text-muted">Latest scan results across all your modules</div>
+      </div>
+      <a href="history.html" class="btn btn-ghost btn-sm">View all &#8594;</a>
+    </div>
+    <div class="card" style="padding:0;overflow:hidden">
+      <div class="activity-feed" id="activity-feed" style="padding:.5rem 1.5rem">
+        <div class="empty-state" style="padding:2rem">
+          <div class="empty-state-icon">[inbox]</div>
+          <div class="empty-state-title">No activity yet</div>
+          <div class="empty-state-desc">Connect a module and run your first scan to see activity here.</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+</div><!-- /page-content -->
+
+<div id="toast-container"></div>
+
+<script src="js/auth.js"></script>
+<script src="js/app.js"></script>
+<script src="js/session.js"></script>
+<script src="js/dashboard.js"></script>
+</body>
+</html>
