@@ -1,0 +1,277 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="description" content="Create your CloudSentinel account">
+  <title>Create Account — CloudSentinel</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="css/styles.css">
+  <script src="js/theme.js"></script>
+  <script src="js/env.js"></script>
+</head>
+<body>
+
+<div style="position:fixed;top:1rem;right:1rem;z-index:100">
+  <button class="theme-toggle-btn" onclick="toggleTheme()" id="theme-toggle">Light</button>
+</div>
+
+<div class="auth-page">
+  <div class="auth-bg-orb auth-bg-orb-1"></div>
+  <div class="auth-bg-orb auth-bg-orb-2"></div>
+
+  <div class="auth-card">
+    <div class="auth-logo">
+      <div class="auth-logo-icon">CS</div>
+      <span class="auth-logo-name">CloudSentinel</span>
+    </div>
+
+    <div class="flex items-center justify-between" style="margin-bottom:1.25rem">
+      <h1 class="auth-heading" style="margin-bottom:0">Create account</h1>
+      <span class="security-pill">Secured</span>
+    </div>
+    <p class="auth-sub">Start monitoring your infrastructure risk in minutes</p>
+
+    <div class="auth-error" id="auth-error"></div>
+
+    <form class="auth-form" id="signup-form" novalidate autocomplete="off">
+      <div class="form-group">
+        <label class="form-label" for="name">Full name</label>
+        <input class="form-input" id="name" type="text" placeholder="Your full name" autocomplete="name" required>
+        <span class="form-error" id="name-err">Please enter your full name</span>
+      </div>
+
+      <div class="form-group">
+        <label class="form-label" for="email">Work email</label>
+        <input class="form-input" id="email" type="email" placeholder="you@company.com" autocomplete="email" required>
+        <span class="form-error" id="email-err">Please enter a valid email address</span>
+      </div>
+
+      <div class="form-group">
+        <label class="form-label" for="password">Password</label>
+        <div class="input-group">
+          <input class="form-input" id="password" type="password" placeholder="Min. 12 characters" autocomplete="new-password" required>
+          <span class="input-icon" id="toggle-pw">show</span>
+        </div>
+        <!-- Strength meter -->
+        <div class="pw-strength">
+          <div class="pw-strength-bar">
+            <div class="pw-strength-fill" id="pw-fill"></div>
+          </div>
+          <div class="pw-strength-label" id="pw-label"></div>
+        </div>
+        <!-- Requirements -->
+        <ul class="pw-requirements">
+          <li class="pw-req" id="req-len">12+ chars</li>
+          <li class="pw-req" id="req-upper">Uppercase</li>
+          <li class="pw-req" id="req-num">Number</li>
+          <li class="pw-req" id="req-sym">Symbol</li>
+        </ul>
+      </div>
+
+      <div class="form-group">
+        <label class="form-label" for="confirm-password">Confirm password</label>
+        <input class="form-input" id="confirm-password" type="password" placeholder="Repeat your password" autocomplete="new-password" required>
+        <span class="form-error" id="confirm-err">Passwords do not match</span>
+      </div>
+
+      <div class="form-group">
+        <label class="checkbox-group">
+          <input type="checkbox" id="tos">
+          <span class="form-hint">I agree to the <a href="#" class="auth-link">Terms of Service</a> and <a href="#" class="auth-link">Privacy Policy</a></span>
+        </label>
+      </div>
+
+      <button type="submit" class="btn btn-gradient btn-lg w-full auth-submit" id="signup-btn">
+        <span id="btn-text">Create Account</span>
+        <span>&#8594;</span>
+      </button>
+    </form>
+
+    <p class="auth-footer">
+      Already have an account? <a href="index.html" class="auth-link">Sign in</a>
+    </p>
+
+    <!-- Step 2: Verify email code (hidden until registration succeeds) -->
+    <div id="verify-step" style="display:none">
+      <div style="text-align:center;margin-bottom:1.5rem">
+        <div style="font-size:2.5rem;margin-bottom:.5rem">&#9993;</div>
+        <h2 class="auth-heading" style="margin-bottom:.5rem">Check your email</h2>
+        <p class="auth-sub">We sent a 6-digit code to <strong id="verify-email-display"></strong></p>
+      </div>
+
+      <div class="auth-error" id="verify-error"></div>
+
+      <form class="auth-form" id="verify-form" novalidate>
+        <div class="form-group">
+          <label class="form-label" for="verify-code">Verification code</label>
+          <input class="form-input" id="verify-code" type="text"
+            inputmode="numeric" maxlength="6"
+            placeholder="123456" autocomplete="one-time-code" required
+            style="font-size:1.5rem;letter-spacing:.5rem;text-align:center">
+          <span class="form-error" id="code-err">Please enter the 6-digit code</span>
+        </div>
+
+        <button type="submit" class="btn btn-gradient btn-lg w-full auth-submit" id="verify-btn">
+          <span id="verify-btn-text">Confirm Account</span>
+          <span>&#8594;</span>
+        </button>
+      </form>
+
+      <p class="auth-footer" style="margin-top:1.25rem">
+        Wrong email? <a href="signup.html" class="auth-link">Start over</a>
+      </p>
+    </div>
+
+  </div>
+</div>
+
+<div id="toast-container"></div>
+
+<script src="js/auth.js"></script>
+<script>
+  if (getSession()) window.location.href = 'dashboard.html';
+
+  const emailRe = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
+
+  /* ── Password toggle ── */
+  document.getElementById('toggle-pw').addEventListener('click', function () {
+    const pw = document.getElementById('password');
+    pw.type = pw.type === 'password' ? 'text' : 'password';
+    this.textContent = pw.type === 'password' ? 'show' : 'hide';
+  });
+
+  /* ── Password strength meter ── */
+  const pwInput = document.getElementById('password');
+  const reqs = {
+    'req-len':   pw => pw.length >= 12,
+    'req-upper': pw => /[A-Z]/.test(pw),
+    'req-num':   pw => /[0-9]/.test(pw),
+    'req-sym':   pw => /[^A-Za-z0-9]/.test(pw),
+  };
+
+  function calcStrength(pw) {
+    const passed = Object.values(reqs).filter(fn => fn(pw)).length;
+    if (passed === 0 && pw.length === 0) return null;
+    if (passed <= 1) return 'weak';
+    if (passed === 2) return 'fair';
+    if (passed === 3) return 'good';
+    return 'strong';
+  }
+
+  pwInput.addEventListener('input', () => {
+    const pw = pwInput.value;
+    Object.entries(reqs).forEach(([id, fn]) => {
+      document.getElementById(id)?.classList.toggle('met', fn(pw));
+    });
+    const strength = calcStrength(pw);
+    const fill  = document.getElementById('pw-fill');
+    const label = document.getElementById('pw-label');
+    if (!strength) { fill.className = 'pw-strength-fill'; label.textContent = ''; return; }
+    fill.className = `pw-strength-fill ${strength}`;
+    const labels = {
+      weak:   'Weak — add length and complexity',
+      fair:   'Fair — add symbols or uppercase',
+      good:   'Good — one more improvement needed',
+      strong: 'Strong',
+    };
+    label.className   = `pw-strength-label ${strength}`;
+    label.textContent = labels[strength];
+  });
+
+  /* ── Confirm password live check ── */
+  document.getElementById('confirm-password').addEventListener('input', function () {
+    const err = document.getElementById('confirm-err');
+    if (this.value && this.value !== pwInput.value) {
+      this.classList.add('error');
+      err.classList.add('show');
+    } else {
+      this.classList.remove('error');
+      err.classList.remove('show');
+    }
+  });
+
+  /* ── Submit signup ── */
+  let _pendingEmail = '';
+
+  document.getElementById('signup-form').addEventListener('submit', async function (e) {
+    e.preventDefault();
+    const name    = document.getElementById('name').value.trim();
+    const email   = document.getElementById('email').value.trim();
+    const pw      = document.getElementById('password').value;
+    const confirm = document.getElementById('confirm-password').value;
+    const tos     = document.getElementById('tos').checked;
+    const errEl   = document.getElementById('auth-error');
+    const btn     = document.getElementById('signup-btn');
+    const btnText = document.getElementById('btn-text');
+
+    errEl.classList.remove('show');
+    let valid = true;
+
+    if (!name) { document.getElementById('name-err').classList.add('show'); valid = false; }
+    else document.getElementById('name-err').classList.remove('show');
+
+    if (!email || !emailRe.test(email)) { document.getElementById('email-err').classList.add('show'); valid = false; }
+    else document.getElementById('email-err').classList.remove('show');
+
+    if (!calcStrength(pw) || calcStrength(pw) === 'weak') {
+      errEl.textContent = 'Password is too weak. Use 12+ characters with uppercase, numbers, and symbols.';
+      errEl.classList.add('show');
+      valid = false;
+    }
+    if (pw !== confirm) { document.getElementById('confirm-err').classList.add('show'); valid = false; }
+    if (!tos) { errEl.textContent = 'Please agree to the Terms of Service to continue.'; errEl.classList.add('show'); valid = false; }
+    if (!valid) return;
+
+    btn.disabled = true;
+    btnText.textContent = 'Creating account...';
+    try {
+      const result = await register(name, email, pw);
+      if (result && result.pending) {
+        /* Show verification code step */
+        _pendingEmail = result.email;
+        document.getElementById('signup-form').style.display = 'none';
+        document.getElementById('verify-email-display').textContent = result.email;
+        document.getElementById('verify-step').style.display = 'block';
+      } else if (result) {
+        window.location.href = 'dashboard.html';
+      }
+    } catch (err) {
+      errEl.textContent   = err.message || 'Registration failed. Please try again.';
+      errEl.classList.add('show');
+      btn.disabled        = false;
+      btnText.textContent = 'Create Account';
+    }
+  });
+
+  /* ── Submit verification code ── */
+  document.getElementById('verify-form').addEventListener('submit', async function (e) {
+    e.preventDefault();
+    const code   = document.getElementById('verify-code').value.trim();
+    const errEl  = document.getElementById('verify-error');
+    const btn    = document.getElementById('verify-btn');
+    const btnTxt = document.getElementById('verify-btn-text');
+
+    errEl.classList.remove('show');
+    if (!code || code.length < 6) {
+      document.getElementById('code-err').classList.add('show');
+      return;
+    }
+    document.getElementById('code-err').classList.remove('show');
+
+    btn.disabled = true;
+    btnTxt.textContent = 'Confirming...';
+    try {
+      await confirmSignUp(_pendingEmail, code);
+      window.location.href = 'index.html?verified=1';
+    } catch (err) {
+      errEl.textContent = err.message || 'Invalid code. Please try again.';
+      errEl.classList.add('show');
+      btn.disabled = false;
+      btnTxt.textContent = 'Confirm Account';
+    }
+  });
+</script>
+</body>
+</html>
