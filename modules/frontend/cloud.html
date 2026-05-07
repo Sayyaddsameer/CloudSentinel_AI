@@ -1,0 +1,359 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="description" content="Cloud Infrastructure risk analysis — CloudSentinel">
+  <title>Cloud Infrastructure — CloudSentinel</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="css/styles.css">
+  <script src="js/theme.js"></script>
+  <script src="js/env.js"></script>
+</head>
+<body>
+
+<nav class="navbar">
+  <div class="navbar-brand"><div class="logo-icon">CS</div>CloudSentinel</div>
+  <div class="navbar-divider"></div>
+  <div class="navbar-breadcrumb">
+    <a href="dashboard.html">Dashboard</a>
+    <span class="sep">&#8250;</span>
+    <span class="current">Cloud Infrastructure</span>
+  </div>
+  <div class="navbar-actions">
+    <div class="user-menu" id="user-menu">
+      <div class="user-avatar" id="nav-user-avatar">--</div>
+      <span class="user-name" id="nav-user-name"></span>
+      <span style="color:var(--text-3);font-size:.7rem">&#9660;</span>
+      <div class="user-dropdown" id="user-dropdown">
+        <div style="padding:.625rem .875rem .5rem;border-bottom:1px solid var(--border);margin-bottom:.375rem;">
+          <div style="font-size:.875rem;font-weight:600;color:var(--text)" id="dd-user-name"></div>
+          <div style="font-size:.75rem;color:var(--text-2)" id="dd-user-email"></div>
+        </div>
+        <a href="dashboard.html" class="user-dropdown-item">Dashboard</a>
+        <div class="user-dropdown-divider"></div>
+        <div class="user-dropdown-item danger" id="logout-btn">Sign Out</div>
+      </div>
+    </div>
+  </div>
+</nav>
+
+<div class="page-content">
+
+  <!-- Header -->
+  <div class="page-header">
+    <div class="page-header-left">
+      <div class="page-title">Cloud Infrastructure Intelligence</div>
+      <div class="page-subtitle">Connect your AWS and GCP accounts to scan for misconfigurations and security risks</div>
+    </div>
+    <div class="page-header-actions" id="header-actions">
+      <!-- injected by JS -->
+    </div>
+  </div>
+
+  <!-- CONNECT STATE -->
+  <div id="view-connect">
+
+    <div class="info-box mb-3">
+      <span class="info-icon">[lock]</span>
+      <div>CloudSentinel uses <strong>read-only access</strong> to scan your environment. We deploy a CloudFormation stack that creates a read-only IAM role. No data is modified. You can revoke access anytime by clicking <em>Disconnect</em>.</div>
+    </div>
+
+    <div class="grid-2">
+      <!-- AWS Card -->
+      <div class="provider-card aws-card" id="aws-card">
+        <div class="provider-logo">AWS</div>
+        <div class="provider-name">Amazon Web Services</div>
+        <div class="provider-desc">Scan S3 buckets, EC2 security groups, IAM policies, and AWS Config findings across your AWS account.</div>
+        <div class="provider-status" id="aws-status"><span style="color:var(--text-3)">&#9679; Not connected</span></div>
+        <button class="btn btn-primary w-full" id="btn-connect-aws">Connect AWS Account</button>
+      </div>
+
+      <!-- GCP Card -->
+      <div class="provider-card gcp-card" id="gcp-card">
+        <div class="provider-logo">GCP</div>
+        <div class="provider-name">Google Cloud Platform</div>
+        <div class="provider-desc">Scan GCS bucket permissions and GCP firewall rules for public exposure and open ports.</div>
+        <div class="provider-status" id="gcp-status"><span style="color:var(--text-3)">&#9679; Not connected</span></div>
+        <button class="btn btn-outline w-full" id="btn-connect-gcp">Connect GCP Project</button>
+      </div>
+    </div>
+
+  </div><!-- /view-connect -->
+
+  <!-- SCAN STATE -->
+  <div id="view-scan" style="display:none">
+    <div class="card" style="text-align:center;padding:3rem 2rem">
+      <div class="pulse-ring mb-3"></div>
+      <div class="text-lg font-semibold mb-1" id="scan-label">Scanning your environment...</div>
+      <div class="text-sm text-muted mb-3" id="scan-sub">Checking S3 buckets, security groups, IAM policies and AWS Config rules</div>
+      <div class="scan-progress-bar" style="max-width:360px;margin:0 auto">
+        <div class="scan-progress-fill" id="scan-fill" style="width:0%"></div>
+      </div>
+      <div class="text-xs text-dimmer mt-2" id="scan-pct">0%</div>
+    </div>
+  </div>
+
+  <!-- RISK DASHBOARD -->
+  <div id="view-risks" style="display:none">
+
+    <!-- Stats row -->
+    <div class="grid-3 mb-3" id="stats-row">
+      <div class="stat-card">
+        <div class="stat-value blue" id="stat-total">0</div>
+        <div class="stat-label">Total Risks</div>
+        <div class="stat-change">Last scan: <span id="last-scan-time">--</span></div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-value high" id="stat-high">0</div>
+        <div class="stat-label">High Priority</div>
+        <div class="stat-change">Requires immediate action</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-value medium" id="stat-medium">0</div>
+        <div class="stat-label">Medium Priority</div>
+        <div class="stat-change"><span class="stat-value low" id="stat-low" style="font-size:1.25rem">0</span> Low</div>
+      </div>
+    </div>
+
+    <!-- Connected providers -->
+    <div class="card card-sm mb-3" id="connected-providers">
+      <div style="font-size:.8rem;font-weight:600;color:var(--text-3);text-transform:uppercase;letter-spacing:.07em;margin-bottom:.75rem">Connected Providers</div>
+      <div class="flex gap-2 flex-wrap" id="provider-pills"></div>
+    </div>
+
+    <!-- Risk list -->
+    <div class="card" style="padding:0;overflow:hidden">
+      <div style="padding:1.25rem 1.5rem;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:.75rem">
+        <div>
+          <div class="card-title">Detected Risks</div>
+          <div class="card-subtitle">Click any risk card to view remediation steps and AI explanation</div>
+        </div>
+        <div class="flex gap-1 flex-wrap">
+          <div class="filter-tabs">
+            <button class="filter-tab active" onclick="filterRisks('All',this)">All</button>
+            <button class="filter-tab" onclick="filterRisks('High',this)">High</button>
+            <button class="filter-tab" onclick="filterRisks('Medium',this)">Medium</button>
+            <button class="filter-tab" onclick="filterRisks('Low',this)">Low</button>
+          </div>
+          <button class="btn btn-outline btn-sm" id="btn-rescan">Rescan</button>
+        </div>
+      </div>
+      <div style="padding:1.25rem;display:flex;flex-direction:column;gap:.875rem" id="risk-list">
+        <div class="empty-state"><div class="empty-state-icon">[loading]</div><div class="empty-state-title">Loading risks...</div></div>
+      </div>
+    </div>
+
+    <!-- Disconnect -->
+    <div class="disconnect-panel mt-3">
+      <div>
+        <div class="disconnect-panel-title">Remove Access</div>
+        <div class="disconnect-panel-text">Disconnecting will delete the CloudFormation stack from your AWS account and revoke all scanner permissions. Your risk history is preserved locally.</div>
+      </div>
+      <button class="btn btn-danger" id="btn-disconnect">Disconnect &amp; Remove</button>
+    </div>
+
+  </div><!-- /view-risks -->
+</div><!-- /page-content -->
+
+<!-- AWS Connect Modal -->
+<div class="modal-overlay" id="modal-aws">
+  <div class="modal" style="max-width:580px">
+    <div class="modal-header">
+      <div>
+        <div class="modal-title">Connect AWS Account</div>
+        <div class="modal-subtitle">CloudSentinel needs read-only access to scan your AWS account</div>
+      </div>
+      <span class="modal-close" onclick="closeModal('modal-aws')">&#10005;</span>
+    </div>
+
+    <!-- Wizard steps -->
+    <div class="wizard-steps" id="aws-wizard">
+      <div class="wizard-step active" id="ws-1"><div class="wizard-step-num">1</div><div class="wizard-step-label">Choose Method</div></div>
+      <div class="wizard-step" id="ws-2"><div class="wizard-step-num">2</div><div class="wizard-step-label">Deploy Stack</div></div>
+      <div class="wizard-step" id="ws-3"><div class="wizard-step-num">3</div><div class="wizard-step-label">Confirm</div></div>
+    </div>
+
+    <div id="aws-step-1" class="modal-body">
+      <div class="info-box">
+        <span class="info-icon">[lock]</span>
+        <div>CloudSentinel will deploy a <strong>read-only IAM role</strong> into your account. We can never modify or delete your resources. You can revoke access anytime.</div>
+      </div>
+      <div style="display:flex;flex-direction:column;gap:.75rem">
+        <div class="card" style="padding:1rem;cursor:pointer;border:2px solid var(--blue)" id="method-cfn" onclick="selectMethod('cfn')">
+          <div class="flex items-center gap-2">
+            <span style="font-size:1.5rem;font-weight:700;color:var(--blue)">CFN</span>
+            <div>
+              <div class="font-semibold">CloudFormation (Recommended)</div>
+              <div class="text-sm text-muted">One-click stack deployment. Fastest setup. AWS manages the role lifecycle.</div>
+            </div>
+          </div>
+        </div>
+        <div class="card" style="padding:1rem;cursor:pointer" id="method-tf" onclick="selectMethod('tf')">
+          <div class="flex items-center gap-2">
+            <span style="font-size:1.5rem;font-weight:700;color:var(--purple)">TF</span>
+            <div>
+              <div class="font-semibold">Terraform</div>
+              <div class="text-sm text-muted">For teams that manage infrastructure as code. Run terraform apply to deploy.</div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-outline" onclick="closeModal('modal-aws')">Cancel</button>
+        <button class="btn btn-primary" id="btn-next-1" onclick="awsStep2()">Next &#8594;</button>
+      </div>
+    </div>
+
+    <div id="aws-step-2" class="modal-body" style="display:none">
+      <div id="cfn-instructions">
+        <div class="info-box mb-2">
+          <span class="info-icon">[info]</span>
+          <div>Click the button below to open CloudFormation in your AWS Console. The stack will create a read-only IAM role with an External ID for security.</div>
+        </div>
+        <a id="cfn-link" href="#" target="_blank" class="btn btn-primary w-full" style="text-decoration:none;justify-content:center;margin-bottom:.75rem">
+          Open CloudFormation Console &#8594;
+        </a>
+        <div style="font-size:.8rem;font-weight:600;color:var(--text-3);margin-bottom:.5rem">Or deploy via AWS CLI:</div>
+        <div class="code-block" id="cfn-cli-cmd">aws cloudformation create-stack \
+  --stack-name CloudSentinel-Scanner \
+  --template-url https://cloudsentinel-templates.s3.amazonaws.com/scanner-role.yaml \
+  --capabilities CAPABILITY_NAMED_IAM \
+  --region us-east-1</div>
+        <button class="copy-btn mt-1" onclick="copyToClipboard(document.getElementById('cfn-cli-cmd').textContent,this)">Copy</button>
+      </div>
+      <div id="tf-instructions" style="display:none">
+        <div class="info-box mb-2">
+          <span class="info-icon">[info]</span>
+          <div>Add the following to your Terraform configuration and run <code>terraform apply</code>.</div>
+        </div>
+        <div class="code-block">module "cloudsentinel_scanner" {
+  source = "github.com/Sayyaddsameer/CloudSentinel_AI//infrastructure/terraform?ref=main"
+
+  cloudsentinel_account_id = var.cloudsentinel_account_id
+  external_id              = var.cloudsentinel_external_id
+}</div>
+      </div>
+      <div class="form-group mt-2">
+        <label class="form-label">Your AWS Account ID (12 digits)</label>
+        <input class="form-input" id="aws-account-id" placeholder="123456789012" maxlength="12">
+        <span class="form-hint">Found in the top right of your AWS Console</span>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-outline" onclick="awsStep1()">&#8592; Back</button>
+        <button class="btn btn-primary" onclick="awsStep3()">I've deployed the stack &#8594;</button>
+      </div>
+    </div>
+
+    <div id="aws-step-3" class="modal-body" style="display:none">
+      <div class="info-box">
+        <span class="info-icon">[ok]</span>
+        <div>Almost done. Check the box below to confirm you have deployed the stack and grant CloudSentinel permission to scan your account.</div>
+      </div>
+      <label class="checkbox-group">
+        <input type="checkbox" id="aws-consent">
+        <span class="form-hint">I confirm that the <strong>CloudSentinel-Scanner</strong> CloudFormation stack has been deployed in my AWS account and I consent to CloudSentinel performing read-only scans.</span>
+      </label>
+      <div class="modal-footer">
+        <button class="btn btn-outline" onclick="awsStep2()">&#8592; Back</button>
+        <button class="btn btn-gradient" id="btn-confirm-aws" onclick="confirmAwsConnect()" disabled>Start First Scan</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- GCP Connect Modal -->
+<div class="modal-overlay" id="modal-gcp">
+  <div class="modal">
+    <div class="modal-header">
+      <div>
+        <div class="modal-title">Connect GCP Project</div>
+        <div class="modal-subtitle">Upload a service account key with Viewer permissions</div>
+      </div>
+      <span class="modal-close" onclick="closeModal('modal-gcp')">&#10005;</span>
+    </div>
+    <div class="modal-body">
+      <div class="info-box">
+        <span class="info-icon">[lock]</span>
+        <div>Create a GCP service account with the <strong>Viewer</strong> role, download the JSON key, and upload it here. The key is stored securely in AWS Secrets Manager.</div>
+      </div>
+      <div style="font-size:.8rem;font-weight:600;color:var(--text-3);margin-bottom:.5rem">Steps to generate the key:</div>
+      <div class="remediation-steps">
+        <div class="remediation-step"><span class="step-num">1</span><span>GCP Console &rarr; IAM &amp; Admin &rarr; Service Accounts &rarr; Create Service Account</span></div>
+        <div class="remediation-step"><span class="step-num">2</span><span>Assign the <strong>Viewer</strong> role (roles/viewer)</span></div>
+        <div class="remediation-step"><span class="step-num">3</span><span>Keys tab &rarr; Add Key &rarr; Create new key &rarr; JSON &rarr; Download</span></div>
+        <div class="remediation-step"><span class="step-num">4</span><span>Upload the JSON file below</span></div>
+      </div>
+      <div class="form-group mt-2">
+        <label class="form-label">GCP Project ID</label>
+        <input class="form-input" id="gcp-project-id" placeholder="my-gcp-project-id">
+      </div>
+      <div class="form-group">
+        <label class="form-label">Service Account Key (JSON)</label>
+        <input class="form-input" id="gcp-key-file" type="file" accept=".json" style="padding:.5rem">
+        <span class="form-hint">The key is stored securely in AWS Secrets Manager and never exposed in the frontend.</span>
+      </div>
+      <label class="checkbox-group">
+        <input type="checkbox" id="gcp-consent">
+        <span class="form-hint">I consent to CloudSentinel using this service account to perform read-only scans of my GCP project.</span>
+      </label>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-outline" onclick="closeModal('modal-gcp')">Cancel</button>
+      <button class="btn btn-primary" onclick="confirmGcpConnect()">Connect GCP</button>
+    </div>
+  </div>
+</div>
+
+<!-- Disconnect Modal -->
+<div class="modal-overlay" id="modal-disconnect">
+  <div class="modal" style="max-width:460px">
+    <div class="modal-header">
+      <div>
+        <div class="modal-title" style="color:var(--high)">Remove Access</div>
+        <div class="modal-subtitle">This will revoke CloudSentinel's scanner access</div>
+      </div>
+      <span class="modal-close" onclick="closeModal('modal-disconnect')">&#10005;</span>
+    </div>
+    <div class="modal-body">
+      <div class="info-box danger-box">
+        <span class="info-icon">[!]</span>
+        <div>This will remove the <strong>CloudSentinel-Scanner</strong> stack from your AWS account. To also remove GCP access, delete the service account from the GCP console.</div>
+      </div>
+      <div class="code-block"># Delete the CloudFormation stack
+aws cloudformation delete-stack \
+  --stack-name CloudSentinel-Scanner \
+  --region us-east-1</div>
+      <button class="copy-btn" onclick="copyToClipboard(document.querySelector('#modal-disconnect .code-block').textContent,this)">Copy command</button>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-outline" onclick="closeModal('modal-disconnect')">Cancel</button>
+      <button class="btn btn-danger" onclick="performDisconnect()">Disconnect &amp; Remove</button>
+    </div>
+  </div>
+</div>
+
+<!-- Chatbot FAB -->
+<button id="chatbot-fab" title="Ask CloudSentinel AI">AI</button>
+<div id="chatbot-panel">
+  <div class="chatbot-header">
+    <div class="chatbot-header-icon">AI</div>
+    <div><div class="chatbot-header-title">CloudSentinel AI</div><div class="chatbot-header-sub">Ask about your cloud risks</div></div>
+    <span class="chatbot-close" id="chatbot-close">&#10005;</span>
+  </div>
+  <div class="chatbot-messages" id="chatbot-messages"></div>
+  <div class="chatbot-input-area">
+    <input class="chatbot-input" id="chatbot-input" placeholder="Ask about your risks..." type="text">
+    <button class="chatbot-send" id="chatbot-send">&#10148;</button>
+  </div>
+</div>
+
+<div id="toast-container"></div>
+
+<script src="js/auth.js"></script>
+<script src="js/app.js"></script>
+<script src="js/session.js"></script>
+<script src="js/cloud.js"></script>
+</body>
+</html>
