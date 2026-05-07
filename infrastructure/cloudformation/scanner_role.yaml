@@ -1,0 +1,61 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: >
+  CloudSentinel Scanner Role — deploy this stack in a target AWS account
+  to allow the CloudSentinel cloud-scanner Lambda to assume a read-only
+  scanning role. This is how CloudSentinel accesses accounts it doesn't
+  own without requiring permanent credentials.
+
+Parameters:
+  CloudSentinelAccountId:
+    Type: String
+    Description: AWS account ID of the CloudSentinel platform (where the Lambda runs)
+  CloudSentinelLambdaRoleArn:
+    Type: String
+    Description: ARN of the cloudsentinel-lambda-role in the platform account
+  ExternalId:
+    Type: String
+    Default: cloudsentinel
+    Description: External ID used in the STS AssumeRole trust condition for extra security
+
+Resources:
+  CloudSentinelScannerRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: cloudsentinel-scanner-role
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              AWS: !Ref CloudSentinelLambdaRoleArn
+            Action: sts:AssumeRole
+            Condition:
+              StringEquals:
+                sts:ExternalId: !Ref ExternalId
+      Policies:
+        - PolicyName: CloudSentinelReadOnly
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: Allow
+                Action:
+                  - s3:ListAllMyBuckets
+                  - s3:GetBucketPublicAccessBlock
+                  - s3:GetBucketEncryption
+                  - ec2:DescribeSecurityGroups
+                  - iam:GetAccountPasswordPolicy
+                  - config:GetComplianceDetailsByConfigRule
+                  - config:DescribeComplianceByConfigRule
+                Resource: "*"
+      Tags:
+        - Key: Project
+          Value: CloudSentinel
+        - Key: Purpose
+          Value: cross-account-scanner
+
+Outputs:
+  ScannerRoleArn:
+    Description: >
+      Copy this ARN and set it as the TARGET_ROLE_ARN environment variable
+      on the cloudsentinel-cloud-scanner Lambda function.
+    Value: !GetAtt CloudSentinelScannerRole.Arn
