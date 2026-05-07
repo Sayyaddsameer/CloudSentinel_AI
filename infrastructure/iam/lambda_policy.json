@@ -1,0 +1,187 @@
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Sid": "CloudWatchLogs",
+      "Effect": "Allow",
+      "Action": [
+        "logs:CreateLogGroup",
+        "logs:CreateLogStream",
+        "logs:PutLogEvents"
+      ],
+      "Resource": "arn:aws:logs:*:*:*"
+    },
+    {
+      "Sid": "DynamoDB",
+      "Effect": "Allow",
+      "Action": [
+        "dynamodb:GetItem",
+        "dynamodb:PutItem",
+        "dynamodb:UpdateItem",
+        "dynamodb:DeleteItem",
+        "dynamodb:Query",
+        "dynamodb:Scan",
+        "dynamodb:DescribeTable",
+        "dynamodb:ListTables"
+      ],
+      "Resource": [
+        "arn:aws:dynamodb:*:*:table/cloudsentinel-risks",
+        "arn:aws:dynamodb:*:*:table/cloudsentinel-risks/index/*"
+      ]
+    },
+    {
+      "Sid": "S3BucketScan",
+      "Effect": "Allow",
+      "Action": [
+        "s3:ListAllMyBuckets",
+        "s3:GetBucketLocation",
+        "s3:GetBucketPublicAccessBlock",
+        "s3:GetBucketEncryption",
+        "s3:GetBucketVersioning",
+        "s3:GetBucketPolicy",
+        "s3:GetBucketAcl"
+      ],
+      "Resource": "*"
+    },
+    {
+      "Sid": "S3ArtifactReadWrite",
+      "Effect": "Allow",
+      "Action": [
+        "s3:GetObject",
+        "s3:PutObject"
+      ],
+      "Resource": "arn:aws:s3:::cloudsentinel-artifacts-*/*"
+    },
+    {
+      "Sid": "EC2Scan",
+      "Effect": "Allow",
+      "Action": [
+        "ec2:DescribeSecurityGroups",
+        "ec2:DescribeInstances",
+        "ec2:DescribeRegions"
+      ],
+      "Resource": "*"
+    },
+    {
+      "Sid": "IAMScan",
+      "Effect": "Allow",
+      "Action": [
+        "iam:GetAccountPasswordPolicy",
+        "iam:ListUsers",
+        "iam:GetUser"
+      ],
+      "Resource": "*"
+    },
+    {
+      "Sid": "AWSConfig",
+      "Effect": "Allow",
+      "Action": [
+        "config:DescribeConfigRules",
+        "config:GetComplianceDetailsByConfigRule",
+        "config:DescribeComplianceByConfigRule"
+      ],
+      "Resource": "*"
+    },
+    {
+      "Sid": "Bedrock",
+      "Effect": "Allow",
+      "Action": [
+        "bedrock:InvokeModel",
+        "bedrock:InvokeModelWithResponseStream"
+      ],
+      "Resource": "*"
+    },
+    {
+      "Sid": "Comprehend",
+      "Effect": "Allow",
+      "Action": [
+        "comprehend:DetectKeyPhrases",
+        "comprehend:DetectEntities",
+        "comprehend:DetectDominantLanguage"
+      ],
+      "Resource": "*"
+    },
+    {
+      "Sid": "CloudWatch",
+      "Effect": "Allow",
+      "Action": [
+        "cloudwatch:GetMetricStatistics",
+        "cloudwatch:GetMetricData",
+        "cloudwatch:ListMetrics",
+        "cloudwatch:DescribeAlarms"
+      ],
+      "Resource": "*"
+    },
+    {
+      "Sid": "APIGatewayScan",
+      "Effect": "Allow",
+      "Action": [
+        "apigateway:GET"
+      ],
+      "Resource": "*"
+    },
+    {
+      "Sid": "GlueScan",
+      "Effect": "Allow",
+      "Action": [
+        "glue:GetJobs",
+        "glue:GetJob",
+        "glue:GetJobRuns",
+        "glue:ListJobs"
+      ],
+      "Resource": "*"
+    },
+    {
+      "Sid": "LambdaScan",
+      "Effect": "Allow",
+      "Action": [
+        "lambda:ListFunctions",
+        "lambda:GetFunction"
+      ],
+      "Resource": "*"
+    },
+    {
+      "Sid": "SecretsManager",
+      "Effect": "Allow",
+      "Action": [
+        "secretsmanager:GetSecretValue"
+      ],
+      "Resource": "arn:aws:secretsmanager:*:*:secret:cloudsentinel-*"
+    },
+    {
+      "Sid": "SNSPublish",
+      "Effect": "Allow",
+      "Action": [
+        "sns:Publish",
+        "sns:ListSubscriptionsByTopic"
+      ],
+      "Resource": "arn:aws:sns:*:*:cloudsentinel-alerts"
+    },
+    {
+      "Sid": "STS",
+      "Effect": "Allow",
+      "Action": [
+        "sts:AssumeRole",
+        "sts:GetCallerIdentity"
+      ],
+      "Resource": "*"
+    },
+    {
+      "Sid": "StepFunctions",
+      "Effect": "Allow",
+      "Action": [
+        "states:StartExecution"
+      ],
+      "Resource": "arn:aws:states:*:*:stateMachine:CloudSentinelScanOrchestrator"
+    },
+    {
+      "Sid": "XRayTracing",
+      "Effect": "Allow",
+      "Action": [
+        "xray:PutTraceSegments",
+        "xray:PutTelemetryRecords"
+      ],
+      "Resource": "*"
+    }
+  ]
+}
