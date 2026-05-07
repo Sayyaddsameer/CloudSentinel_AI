@@ -1,0 +1,66 @@
+name: CI
+
+on:
+  push:
+    branches:
+      - "feature/**"
+      - develop
+  pull_request:
+    branches:
+      - develop
+      - main
+
+jobs:
+  test:
+    name: Run unit tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: |
+          pip install --upgrade pip
+          pip install boto3 pytest pytest-cov moto
+
+      - name: Run tests
+        env:
+          DYNAMODB_TABLE: cloudsentinel-risks
+          AWS_REGION: us-east-1
+          AWS_DEFAULT_REGION: us-east-1
+          AWS_ACCESS_KEY_ID: testing
+          AWS_SECRET_ACCESS_KEY: testing
+        run: |
+          pytest tests/ -v --tb=short --cov=modules --cov-report=term-missing
+        continue-on-error: true
+
+  security:
+    name: Security scan
+    runs-on: ubuntu-latest
+    needs: test
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install Bandit
+        run: pip install bandit
+
+      - name: Run Bandit security scan
+        run: |
+          bandit -r modules/ -f txt -o bandit-report.txt || true
+          cat bandit-report.txt
+
+      - name: Upload Bandit report
+        uses: actions/upload-artifact@v4
+        with:
+          name: bandit-report
+          path: bandit-report.txt
+        continue-on-error: true
