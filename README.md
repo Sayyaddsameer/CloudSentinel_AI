@@ -144,20 +144,6 @@ terraform init && terraform plan && terraform apply
 
 ---
 
-## Branch Strategy
-
-| Branch | Purpose |
-|--------|---------|
-| `main` | Production — merged via pull request only |
-| `develop` | Integration — all feature branches merge here |
-| `feature/cloud-infra` | Cloud Infrastructure and AI Layer |
-| `feature/devops` | DevOps Intelligence |
-| `feature/fullstack` | Full-Stack Intelligence |
-| `feature/data-eng` | Data Engineering Intelligence |
-| `feature/mobile` | Mobile Backend Intelligence |
-| `feature/frontend` | Frontend Portal |
-
----
 
 ## License
 
