@@ -1,0 +1,75 @@
+# terraform.tfvars.example
+# ---------------------------------------------------------------------------
+# Copy this file to terraform.tfvars and fill in every value before running
+# terraform apply. Never commit terraform.tfvars to version control.
+# terraform.tfvars is listed in .gitignore.
+# ---------------------------------------------------------------------------
+
+# AWS region where all CloudSentinel resources will be deployed.
+aws_region = "us-east-1"
+
+# Short identifier used as a prefix on every resource name and tag.
+# Must be lowercase alphanumeric + hyphens, max 24 characters.
+project = "cloudsentinel"
+
+# Deployment environment label applied to resource tags.
+# Accepted values: dev | staging | prod
+environment = "dev"
+
+# ---------------------------------------------------------------------------
+# Notifications
+# ---------------------------------------------------------------------------
+
+# Email address that will receive SNS risk alert notifications.
+# The recipient must click the AWS confirmation link before alerts are delivered.
+alert_email = "your-email@domain.com"
+
+# Public URL of the deployed Amplify frontend.
+# Included in alert email links. Leave empty if Amplify is not yet deployed.
+app_url = "https://your-app.amplifyapp.com"
+
+# Minimum risk priority level that triggers an email notification.
+# Accepted values: High | Medium | All
+notification_threshold = "High"
+
+# ---------------------------------------------------------------------------
+# AI and Bedrock
+# ---------------------------------------------------------------------------
+
+# Amazon Bedrock model ID used by the AI explainer and chatbot Lambda functions.
+# Must be enabled in your account via the Bedrock Model Access console.
+bedrock_model_id = "anthropic.claude-3-haiku-20240307-v1:0"
+
+# Maximum tokens per Bedrock response. Higher values increase cost.
+max_tokens = 400
+
+# Maximum number of OPEN risks the AI explainer processes per scheduled run.
+max_risks_per_run = 50
+
+# Number of recent risks loaded as context for each chatbot response.
+chatbot_context_risks = 20
+
+# Maximum number of risk records returned per API call.
+risks_page_limit = 100
+
+# ---------------------------------------------------------------------------
+# Optional integrations
+# ---------------------------------------------------------------------------
+
+# GitHub personal access token for AWS Amplify source connection.
+# Required only if deploying the Amplify frontend via Terraform.
+# Create at: https://github.com/settings/tokens  (classic, repo scope)
+github_token = ""
+
+# Name of the AWS Secrets Manager secret that holds the GCP service account
+# JSON key. Required only if enabling GCP scanning in the cloud-scanner Lambda.
+# Leave empty to disable GCP scanning.
+gcp_secret_name = ""
+
+# ARN of the Secrets Manager secret holding the GitHub webhook HMAC secret.
+# Required only if using the DevOps analyzer webhook verification feature.
+webhook_secret_arn = ""
+
+# IAM role ARN to assume for cross-account scanning.
+# Leave empty to scan resources in the same AWS account as the Lambda function.
+target_role_arn = ""
