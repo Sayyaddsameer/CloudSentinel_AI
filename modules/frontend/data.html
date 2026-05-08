@@ -1,0 +1,181 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="description" content="Data Engineering Intelligence — S3, DynamoDB and Glue risk analysis — CloudSentinel">
+  <title>Data Engineering — CloudSentinel</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="css/styles.css">
+  <script src="js/theme.js"></script>
+  <script src="js/env.js"></script>
+</head>
+<body>
+
+<nav class="navbar">
+  <div class="navbar-brand"><div class="logo-icon">CS</div>CloudSentinel</div>
+  <div class="navbar-divider"></div>
+  <div class="navbar-breadcrumb">
+    <a href="dashboard.html">Dashboard</a><span class="sep">&#8250;</span>
+    <span class="current">Data Engineering</span>
+  </div>
+  <div class="navbar-actions">
+    <div class="user-menu" id="user-menu">
+      <div class="user-avatar" id="nav-user-avatar">--</div>
+      <span class="user-name" id="nav-user-name"></span>
+      <span style="color:var(--text-3);font-size:.7rem">&#9660;</span>
+      <div class="user-dropdown" id="user-dropdown">
+        <div style="padding:.625rem .875rem .5rem;border-bottom:1px solid var(--border);margin-bottom:.375rem;">
+          <div style="font-size:.875rem;font-weight:600;color:var(--text)" id="dd-user-name"></div>
+          <div style="font-size:.75rem;color:var(--text-2)" id="dd-user-email"></div>
+        </div>
+        <a href="dashboard.html" class="user-dropdown-item">Dashboard</a>
+        <div class="user-dropdown-divider"></div>
+        <div class="user-dropdown-item danger" id="logout-btn">Sign Out</div>
+      </div>
+    </div>
+  </div>
+</nav>
+
+<div class="page-content">
+  <div class="page-header">
+    <div class="page-header-left">
+      <div class="page-title">Data Engineering Intelligence</div>
+      <div class="page-subtitle">Audit data buckets, databases, and ETL pipelines for encryption gaps and exposure risks</div>
+    </div>
+    <div class="page-header-actions" id="header-actions"></div>
+  </div>
+
+  <div id="view-connect">
+    <div class="info-box mb-3">
+      <span class="info-icon">[lock]</span>
+      <div>Connect your AWS data environment to scan S3 data buckets for public access and encryption settings, DynamoDB tables for server-side encryption, and Glue ETL jobs for pipeline reliability.</div>
+    </div>
+    <div class="grid-2">
+      <div class="provider-card" id="aws-data-card">
+        <div class="provider-logo">AWS</div>
+        <div class="provider-name">AWS Data Services</div>
+        <div class="provider-desc">Scan S3 data buckets, DynamoDB tables, and AWS Glue ETL pipelines for security and reliability risks.</div>
+        <div class="provider-status" id="aws-data-status"><span style="color:var(--text-3)">&#9679; Not connected</span></div>
+        <button class="btn btn-primary w-full" id="btn-connect-data">Connect AWS Data Environment</button>
+      </div>
+      <div class="provider-card" id="gcp-data-card">
+        <div class="provider-logo">GCP</div>
+        <div class="provider-name">Google BigQuery (Coming Soon)</div>
+        <div class="provider-desc">Dataset permission analysis and BigQuery job failure monitoring planned for next release.</div>
+        <div class="provider-status"><span style="color:var(--text-3)">&#9679; Not available yet</span></div>
+        <button class="btn btn-outline w-full" disabled>Coming Soon</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="view-scan" style="display:none">
+    <div class="card" style="text-align:center;padding:3rem 2rem">
+      <div class="pulse-ring mb-3"></div>
+      <div class="text-lg font-semibold mb-1" id="scan-label">Scanning data environment...</div>
+      <div class="text-sm text-muted mb-3" id="scan-sub">Checking S3 buckets, DynamoDB tables and Glue jobs</div>
+      <div class="scan-progress-bar" style="max-width:360px;margin:0 auto">
+        <div class="scan-progress-fill" id="scan-fill" style="width:0%"></div>
+      </div>
+    </div>
+  </div>
+
+  <div id="view-risks" style="display:none">
+    <div class="grid-3 mb-3">
+      <div class="stat-card"><div class="stat-value blue" id="stat-total">0</div><div class="stat-label">Total Risks</div><div class="stat-change">Last scan: <span id="last-scan-time">--</span></div></div>
+      <div class="stat-card"><div class="stat-value high" id="stat-high">0</div><div class="stat-label">High Priority</div><div class="stat-change">Data exposure risks</div></div>
+      <div class="stat-card"><div class="stat-value medium" id="stat-medium">0</div><div class="stat-label">Medium Priority</div><div class="stat-change"><span class="stat-value low" id="stat-low" style="font-size:1.25rem">0</span> Low</div></div>
+    </div>
+
+    <!-- Services scanned summary -->
+    <div class="grid-3 mb-3">
+      <div class="card card-sm" style="display:flex;align-items:center;gap:.875rem">
+        <div class="card-icon amber"><span style="font-size:.9rem;font-weight:700">S3</span></div>
+        <div><div class="font-semibold text-sm">S3 Data Buckets</div><div class="text-xs text-muted" id="s3-count">Scanned</div></div>
+      </div>
+      <div class="card card-sm" style="display:flex;align-items:center;gap:.875rem">
+        <div class="card-icon blue"><span style="font-size:.9rem;font-weight:700">DDB</span></div>
+        <div><div class="font-semibold text-sm">DynamoDB Tables</div><div class="text-xs text-muted" id="ddb-count">Scanned</div></div>
+      </div>
+      <div class="card card-sm" style="display:flex;align-items:center;gap:.875rem">
+        <div class="card-icon purple"><span style="font-size:.9rem;font-weight:700">ETL</span></div>
+        <div><div class="font-semibold text-sm">Glue ETL Jobs</div><div class="text-xs text-muted" id="glue-count">Scanned</div></div>
+      </div>
+    </div>
+
+    <div class="card" style="padding:0;overflow:hidden">
+      <div style="padding:1.25rem 1.5rem;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:.75rem">
+        <div><div class="card-title">Data Risk Findings</div><div class="card-subtitle">Encryption gaps &middot; Public exposure &middot; Pipeline failures &middot; Compliance risks</div></div>
+        <div class="flex gap-1">
+          <div class="filter-tabs">
+            <button class="filter-tab active" onclick="filterRisks('All',this)">All</button>
+            <button class="filter-tab" onclick="filterRisks('High',this)">High</button>
+            <button class="filter-tab" onclick="filterRisks('Medium',this)">Medium</button>
+            <button class="filter-tab" onclick="filterRisks('Low',this)">Low</button>
+          </div>
+          <button class="btn btn-outline btn-sm" onclick="startScan()">Rescan</button>
+        </div>
+      </div>
+      <div style="padding:1.25rem;display:flex;flex-direction:column;gap:.875rem" id="risk-list"></div>
+    </div>
+    <div class="disconnect-panel mt-3">
+      <div><div class="disconnect-panel-title">Disconnect Data Environment</div><div class="disconnect-panel-text">Revoke scanner access by deleting the CloudSentinel-Scanner CloudFormation stack from your AWS account.</div></div>
+      <button class="btn btn-danger" onclick="performDisconnect()">Disconnect</button>
+    </div>
+  </div>
+</div>
+
+<div class="modal-overlay" id="modal-data">
+  <div class="modal">
+    <div class="modal-header">
+      <div><div class="modal-title">Connect AWS Data Environment</div><div class="modal-subtitle">Read-only access to scan your data infrastructure</div></div>
+      <span class="modal-close" onclick="closeModal('modal-data')">&#10005;</span>
+    </div>
+    <div class="modal-body">
+      <div class="info-box">
+        <span class="info-icon">[lock]</span>
+        <div>CloudSentinel will only read <strong>bucket metadata</strong> (public access settings, encryption config) and <strong>Glue job run history</strong>. We never read the contents of your data files.</div>
+      </div>
+      <div class="form-group">
+        <label class="form-label">AWS Account ID</label>
+        <input class="form-input" id="data-account-id" placeholder="123456789012" maxlength="12">
+        <span class="form-hint">Deploy the CloudSentinel-Scanner CloudFormation stack first if not already done</span>
+      </div>
+      <div class="form-group">
+        <label class="form-label">AWS Region (where your data services are)</label>
+        <input class="form-input" id="data-region" placeholder="us-east-1">
+      </div>
+      <label class="checkbox-group">
+        <input type="checkbox" id="data-consent">
+        <span class="form-hint">I consent to CloudSentinel performing read-only scans of my AWS data services (S3, DynamoDB, Glue) metadata.</span>
+      </label>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-outline" onclick="closeModal('modal-data')">Cancel</button>
+      <button class="btn btn-primary" onclick="confirmDataConnect()">Connect &amp; Scan</button>
+    </div>
+  </div>
+</div>
+
+<button id="chatbot-fab" title="Ask AI about data risks">AI</button>
+<div id="chatbot-panel">
+  <div class="chatbot-header">
+    <div class="chatbot-header-icon">AI</div>
+    <div class="chatbot-header-info"><div class="chatbot-header-title">CloudSentinel AI</div><div class="chatbot-header-sub">Online</div></div>
+    <span class="chatbot-close" id="chatbot-close">&#10005;</span>
+  </div>
+  <div class="chatbot-messages" id="chatbot-messages"></div>
+  <div class="chatbot-input-area">
+    <input class="chatbot-input" id="chatbot-input" placeholder="e.g. How to enable S3 encryption?" type="text">
+    <button class="chatbot-send" id="chatbot-send">&#10148;</button>
+  </div>
+</div>
+<div id="toast-container"></div>
+
+<script src="js/auth.js"></script>
+<script src="js/app.js"></script>
+<script src="js/session.js"></script>
+<script src="js/data.js"></script>
+</body>
+</html>
