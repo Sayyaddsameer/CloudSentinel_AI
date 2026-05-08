@@ -1,0 +1,184 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="description" content="DevOps Intelligence — CloudSentinel CI/CD pipeline risk analysis">
+  <title>DevOps Intelligence — CloudSentinel</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="css/styles.css">
+  <script src="js/theme.js"></script>
+  <script src="js/env.js"></script>
+</head>
+<body>
+
+<nav class="navbar">
+  <div class="navbar-brand"><div class="logo-icon">CS</div>CloudSentinel</div>
+  <div class="navbar-divider"></div>
+  <div class="navbar-breadcrumb">
+    <a href="dashboard.html">Dashboard</a><span class="sep">&#8250;</span>
+    <span class="current">DevOps Intelligence</span>
+  </div>
+  <div class="navbar-actions">
+    <div class="user-menu" id="user-menu">
+      <div class="user-avatar" id="nav-user-avatar">--</div>
+      <span class="user-name" id="nav-user-name"></span>
+      <span style="color:var(--text-3);font-size:.7rem">&#9660;</span>
+      <div class="user-dropdown" id="user-dropdown">
+        <div style="padding:.625rem .875rem .5rem;border-bottom:1px solid var(--border);margin-bottom:.375rem;">
+          <div style="font-size:.875rem;font-weight:600;color:var(--text)" id="dd-user-name"></div>
+          <div style="font-size:.75rem;color:var(--text-2)" id="dd-user-email"></div>
+        </div>
+        <a href="dashboard.html" class="user-dropdown-item">Dashboard</a>
+        <div class="user-dropdown-divider"></div>
+        <div class="user-dropdown-item danger" id="logout-btn">Sign Out</div>
+      </div>
+    </div>
+  </div>
+</nav>
+
+<div class="page-content">
+  <div class="page-header">
+    <div class="page-header-left">
+      <div class="page-title">DevOps Intelligence</div>
+      <div class="page-subtitle">Analyze CI/CD pipelines for security gaps, missing tests, and deployment risks</div>
+    </div>
+    <div class="page-header-actions" id="header-actions"></div>
+  </div>
+
+  <!-- Connect View -->
+  <div id="view-connect">
+    <div class="info-box mb-3">
+      <span class="info-icon">[link]</span>
+      <div>Connect your GitHub repositories to analyze pipeline configurations for hardcoded secrets, missing test steps, rollback strategies, and post-deploy monitoring gaps.</div>
+    </div>
+    <div class="grid-2">
+      <div class="provider-card" id="github-card">
+        <div class="provider-logo">GH</div>
+        <div class="provider-name">GitHub Repositories</div>
+        <div class="provider-desc">Analyze GitHub Actions workflows in your repositories for CI/CD security risks and pipeline best practice violations.</div>
+        <div class="provider-status" id="github-status"><span style="color:var(--text-3)">&#9679; Not connected</span></div>
+        <button class="btn btn-primary w-full" id="btn-connect-github">Connect GitHub</button>
+      </div>
+      <div class="provider-card" id="gitlab-card">
+        <div class="provider-logo">GL</div>
+        <div class="provider-name">GitLab CI (Coming Soon)</div>
+        <div class="provider-desc">Support for GitLab CI/CD pipeline analysis is planned for the next release.</div>
+        <div class="provider-status"><span style="color:var(--text-3)">&#9679; Not available yet</span></div>
+        <button class="btn btn-outline w-full" disabled>Coming Soon</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Scan View -->
+  <div id="view-scan" style="display:none">
+    <div class="card" style="text-align:center;padding:3rem 2rem">
+      <div class="pulse-ring mb-3"></div>
+      <div class="text-lg font-semibold mb-1" id="scan-label">Analyzing pipelines...</div>
+      <div class="text-sm text-muted mb-3" id="scan-sub">Reviewing workflow files for security and reliability issues</div>
+      <div class="scan-progress-bar" style="max-width:360px;margin:0 auto">
+        <div class="scan-progress-fill" id="scan-fill" style="width:0%"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Risk View -->
+  <div id="view-risks" style="display:none">
+    <div class="grid-3 mb-3">
+      <div class="stat-card"><div class="stat-value blue" id="stat-total">0</div><div class="stat-label">Total Risks</div><div class="stat-change">Last scan: <span id="last-scan-time">--</span></div></div>
+      <div class="stat-card"><div class="stat-value high" id="stat-high">0</div><div class="stat-label">High Priority</div><div class="stat-change">Immediate action needed</div></div>
+      <div class="stat-card"><div class="stat-value medium" id="stat-medium">0</div><div class="stat-label">Medium Priority</div><div class="stat-change"><span class="stat-value low" id="stat-low" style="font-size:1.25rem">0</span> Low</div></div>
+    </div>
+
+    <div class="card card-sm mb-3" style="display:flex;align-items:center;gap:1rem;flex-wrap:wrap">
+      <div class="flex items-center gap-1">
+        <span style="color:var(--low);font-size:.9rem">&#9679;</span>
+        <span class="text-sm font-medium" id="connected-repo-name">GitHub Connected</span>
+      </div>
+      <span class="badge badge-info">Workflows analyzed</span>
+    </div>
+
+    <div class="card" style="padding:0;overflow:hidden">
+      <div style="padding:1.25rem 1.5rem;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:.75rem">
+        <div><div class="card-title">Pipeline Risk Findings</div><div class="card-subtitle">GitHub Actions workflow analysis results</div></div>
+        <div class="flex gap-1 flex-wrap">
+          <div class="filter-tabs">
+            <button class="filter-tab active" onclick="filterRisks('All',this)">All</button>
+            <button class="filter-tab" onclick="filterRisks('High',this)">High</button>
+            <button class="filter-tab" onclick="filterRisks('Medium',this)">Medium</button>
+            <button class="filter-tab" onclick="filterRisks('Low',this)">Low</button>
+          </div>
+          <button class="btn btn-outline btn-sm" onclick="startScan()">Re-analyze</button>
+        </div>
+      </div>
+      <div style="padding:1.25rem;display:flex;flex-direction:column;gap:.875rem" id="risk-list"></div>
+    </div>
+
+    <div class="disconnect-panel mt-3">
+      <div>
+        <div class="disconnect-panel-title">Disconnect GitHub</div>
+        <div class="disconnect-panel-text">Revoke the GitHub personal access token or uninstall the GitHub App. No data is deleted from GitHub.</div>
+      </div>
+      <button class="btn btn-danger" onclick="performDisconnect()">Disconnect</button>
+    </div>
+  </div>
+</div>
+
+<!-- GitHub Connect Modal -->
+<div class="modal-overlay" id="modal-github">
+  <div class="modal">
+    <div class="modal-header">
+      <div><div class="modal-title">Connect GitHub</div><div class="modal-subtitle">Grant read-only access to analyze pipeline configs</div></div>
+      <span class="modal-close" onclick="closeModal('modal-github')">&#10005;</span>
+    </div>
+    <div class="modal-body">
+      <div class="info-box">
+        <span class="info-icon">[lock]</span>
+        <div>CloudSentinel only reads <code>.github/workflows/</code> files. We never access your source code, push changes, or access private data beyond CI configuration.</div>
+      </div>
+      <div class="form-group">
+        <label class="form-label">GitHub Organization or Username</label>
+        <input class="form-input" id="github-org" placeholder="your-org-or-username">
+      </div>
+      <div class="form-group">
+        <label class="form-label">Personal Access Token (repo scope)</label>
+        <div class="input-group">
+          <input class="form-input" id="github-token" type="password" placeholder="ghp_xxxxxxxxxxxxxxxxxxxx">
+          <span class="input-icon" id="toggle-gh-token">show</span>
+        </div>
+        <span class="form-hint">Generate at github.com/settings/tokens — needs <code>repo</code> scope (read-only)</span>
+      </div>
+      <label class="checkbox-group">
+        <input type="checkbox" id="github-consent">
+        <span class="form-hint">I authorize CloudSentinel to read my GitHub Actions workflow files for security analysis.</span>
+      </label>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-outline" onclick="closeModal('modal-github')">Cancel</button>
+      <button class="btn btn-primary" onclick="confirmGithubConnect()">Connect &amp; Analyze</button>
+    </div>
+  </div>
+</div>
+
+<button id="chatbot-fab" title="Ask AI about DevOps risks">AI</button>
+<div id="chatbot-panel">
+  <div class="chatbot-header">
+    <div class="chatbot-header-icon">AI</div>
+    <div><div class="chatbot-header-title">CloudSentinel AI</div><div class="chatbot-header-sub">Ask about DevOps risks</div></div>
+    <span class="chatbot-close" id="chatbot-close">&#10005;</span>
+  </div>
+  <div class="chatbot-messages" id="chatbot-messages"></div>
+  <div class="chatbot-input-area">
+    <input class="chatbot-input" id="chatbot-input" placeholder="e.g. How do I remove hardcoded secrets?" type="text">
+    <button class="chatbot-send" id="chatbot-send">&#10148;</button>
+  </div>
+</div>
+<div id="toast-container"></div>
+
+<script src="js/auth.js"></script>
+<script src="js/app.js"></script>
+<script src="js/session.js"></script>
+<script src="js/devops.js"></script>
+</body>
+</html>
