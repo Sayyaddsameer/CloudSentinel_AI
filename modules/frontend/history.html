@@ -1,0 +1,197 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="description" content="Risk History — CloudSentinel">
+  <title>Risk History — CloudSentinel</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="css/styles.css">
+  <script src="js/theme.js"></script>
+  <script src="js/env.js"></script>
+</head>
+<body>
+
+<nav class="navbar">
+  <div class="navbar-brand"><div class="logo-icon">CS</div>CloudSentinel</div>
+  <div class="navbar-divider"></div>
+  <div class="navbar-breadcrumb">
+    <a href="dashboard.html">Dashboard</a><span class="sep">&#8250;</span>
+    <span class="current">Risk History</span>
+  </div>
+  <div class="navbar-actions">
+    <div class="user-menu" id="user-menu">
+      <div class="user-avatar" id="nav-user-avatar">--</div>
+      <span class="user-name" id="nav-user-name"></span>
+      <span style="color:var(--text-3);font-size:.7rem">&#9660;</span>
+      <div class="user-dropdown" id="user-dropdown">
+        <div style="padding:.625rem .875rem .5rem;border-bottom:1px solid var(--border);margin-bottom:.375rem;">
+          <div style="font-size:.875rem;font-weight:600;color:var(--text)" id="dd-user-name"></div>
+          <div style="font-size:.75rem;color:var(--text-2)" id="dd-user-email"></div>
+        </div>
+        <a href="dashboard.html" class="user-dropdown-item">Dashboard</a>
+        <div class="user-dropdown-divider"></div>
+        <div class="user-dropdown-item danger" id="logout-btn">Sign Out</div>
+      </div>
+    </div>
+  </div>
+</nav>
+
+<div class="page-content">
+  <div class="page-header">
+    <div class="page-header-left">
+      <div class="page-title">Risk History</div>
+      <div class="page-subtitle">Timeline of all past scans across all modules. Sorted by most recent.</div>
+    </div>
+    <div class="page-header-actions">
+      <div class="filter-tabs">
+        <button class="filter-tab active" onclick="filterHistory('All',this)">All</button>
+        <button class="filter-tab" onclick="filterHistory('cloud-infra',this)">Cloud</button>
+        <button class="filter-tab" onclick="filterHistory('devops',this)">DevOps</button>
+        <button class="filter-tab" onclick="filterHistory('fullstack',this)">Full-Stack</button>
+        <button class="filter-tab" onclick="filterHistory('data-eng',this)">Data</button>
+        <button class="filter-tab" onclick="filterHistory('mobile',this)">Mobile</button>
+      </div>
+      <button class="btn btn-outline btn-sm" onclick="exportHistory()">Download JSON</button>
+      <button class="btn btn-danger btn-sm" onclick="clearHistory()">Clear History</button>
+    </div>
+  </div>
+
+  <!-- Summary stat strip -->
+  <div class="grid-3 mb-3" id="history-stats">
+    <div class="stat-card">
+      <div class="stat-value blue" id="hs-scans">0</div>
+      <div class="stat-label">Total Scans</div>
+      <div class="stat-change">Across all modules</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-value high" id="hs-high">0</div>
+      <div class="stat-label">High Risks Found</div>
+      <div class="stat-change">Cumulative across all scans</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-value low" id="hs-resolved">0</div>
+      <div class="stat-label">Scans with Improvement</div>
+      <div class="stat-change">Count decreased vs prior scan</div>
+    </div>
+  </div>
+
+  <!-- History list -->
+  <div id="history-list">
+    <div class="empty-state">
+      <div class="empty-state-icon">[history]</div>
+      <div class="empty-state-title">No scan history yet</div>
+      <div class="empty-state-desc">Run your first scan from any module dashboard to start building your risk history.</div>
+    </div>
+  </div>
+</div>
+
+<div id="toast-container"></div>
+<script src="js/auth.js"></script>
+<script src="js/app.js"></script>
+<script src="js/session.js"></script>
+<script>
+  const MODULE_NAMES = { 'cloud-infra':'Cloud Infrastructure','devops':'DevOps','fullstack':'Full-Stack','data-eng':'Data Engineering','mobile':'Mobile Backend' };
+  let allHistoryData = [];
+  let activeFilter   = 'All';
+
+  document.addEventListener('DOMContentLoaded', () => {
+    initPage('history');
+    loadHistory();
+  });
+
+  function loadHistory() {
+    allHistoryData = getAllHistory(100);
+    renderHistory(allHistoryData);
+    renderStats(allHistoryData);
+  }
+
+  function renderStats(data) {
+    const totalHigh = data.reduce((s,h) => s + (h.high||0), 0);
+    let improved = 0;
+    const byModule = {};
+    data.forEach(h => {
+      if (!byModule[h.module]) byModule[h.module] = [];
+      byModule[h.module].push(h);
+    });
+    Object.values(byModule).forEach(arr => {
+      arr.sort((a,b) => new Date(b.timestamp)-new Date(a.timestamp));
+      for (let i=0;i<arr.length-1;i++) {
+        if (arr[i].total < arr[i+1].total) improved++;
+      }
+    });
+    const s=(id,v)=>{const e=document.getElementById(id);if(e)e.textContent=v;};
+    s('hs-scans', data.length);
+    s('hs-high', totalHigh);
+    s('hs-resolved', improved);
+  }
+
+  function renderHistory(data) {
+    const list = document.getElementById('history-list');
+    const filtered = activeFilter==='All' ? data : data.filter(h=>h.module===activeFilter);
+    if (!filtered.length) {
+      list.innerHTML = `<div class="empty-state"><div class="empty-state-icon">[history]</div><div class="empty-state-title">No history for this module</div><div class="empty-state-desc">Run a scan from the ${MODULE_NAMES[activeFilter]||'selected'} module to see results here.</div></div>`;
+      return;
+    }
+    list.innerHTML = filtered.map((h,i) => {
+      const d    = new Date(h.timestamp);
+      const date = d.toLocaleDateString('en-US',{day:'2-digit',month:'short',year:'numeric'});
+      const time = d.toLocaleTimeString('en-US',{hour:'2-digit',minute:'2-digit'});
+      const prev = filtered[i+1];
+      let trend = '';
+      if (prev && prev.module===h.module) {
+        const diff = h.total - prev.total;
+        if (diff > 0)      trend = `<span class="risk-trend up">&#8593; ${diff} more than prev</span>`;
+        else if (diff < 0) trend = `<span class="risk-trend down">&#8595; ${Math.abs(diff)} fewer than prev</span>`;
+        else               trend = `<span class="risk-trend same">&#8594; same as prev</span>`;
+      }
+      return `
+        <div class="history-item" style="animation-delay:${i*0.04}s;margin-bottom:.625rem">
+          <div style="width:40px;height:40px;border-radius:50%;background:rgba(74,126,255,.1);display:flex;align-items:center;justify-content:center;font-size:1.1rem;flex-shrink:0">${(MODULE_NAMES[h.module]||'').charAt(0)}</div>
+          <div style="flex:1;min-width:0">
+            <div style="display:flex;align-items:center;gap:.625rem;flex-wrap:wrap">
+              <span style="font-size:.875rem;font-weight:600;color:var(--text)">${MODULE_NAMES[h.module]||h.module}</span>
+              ${trend}
+            </div>
+            <div style="font-size:.78rem;color:var(--text-3);margin-top:.2rem">${date} &middot; ${time}</div>
+          </div>
+          <div style="display:flex;gap:.875rem;text-align:center;flex-shrink:0">
+            <div><div style="font-size:1.125rem;font-weight:700;color:var(--high)">${h.high||0}</div><div style="font-size:.68rem;color:var(--text-3)">High</div></div>
+            <div><div style="font-size:1.125rem;font-weight:700;color:var(--medium)">${h.medium||0}</div><div style="font-size:.68rem;color:var(--text-3)">Med</div></div>
+            <div><div style="font-size:1.125rem;font-weight:700;color:var(--low)">${h.low||0}</div><div style="font-size:.68rem;color:var(--text-3)">Low</div></div>
+            <div><div style="font-size:1.125rem;font-weight:700;color:var(--blue)">${h.total||0}</div><div style="font-size:.68rem;color:var(--text-3)">Total</div></div>
+          </div>
+        </div>`;
+    }).join('');
+  }
+
+  function filterHistory(mod, btn) {
+    document.querySelectorAll('.filter-tab').forEach(b=>b.classList.remove('active'));
+    btn.classList.add('active');
+    activeFilter = mod;
+    renderHistory(allHistoryData);
+  }
+
+  function exportHistory() {
+    const blob = new Blob([JSON.stringify(allHistoryData, null, 2)], { type: 'application/json' });
+    const url  = URL.createObjectURL(blob);
+    const a    = document.createElement('a');
+    a.href     = url;
+    a.download = `cloudsentinel-history-${new Date().toISOString().slice(0,10)}.json`;
+    a.click();
+    URL.revokeObjectURL(url);
+    showToast('History exported', 'success');
+  }
+
+  function clearHistory() {
+    if (!confirm('Clear all scan history? This cannot be undone.')) return;
+    ['cloud-infra','devops','fullstack','data-eng','mobile'].forEach(m => localStorage.removeItem(`cs_history_${m}`));
+    allHistoryData = [];
+    renderHistory([]);
+    renderStats([]);
+    showToast('History cleared', 'info');
+  }
+</script>
+</body>
+</html>
