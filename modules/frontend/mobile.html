@@ -1,0 +1,191 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="description" content="Mobile Backend Intelligence — Flutter API monitoring — CloudSentinel">
+  <title>Mobile Backend — CloudSentinel</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="css/styles.css">
+  <script src="js/theme.js"></script>
+  <script src="js/env.js"></script>
+</head>
+<body>
+
+<nav class="navbar">
+  <div class="navbar-brand"><div class="logo-icon">CS</div>CloudSentinel</div>
+  <div class="navbar-divider"></div>
+  <div class="navbar-breadcrumb">
+    <a href="dashboard.html">Dashboard</a><span class="sep">&#8250;</span>
+    <span class="current">Mobile Backend (Flutter)</span>
+  </div>
+  <div class="navbar-actions">
+    <div class="user-menu" id="user-menu">
+      <div class="user-avatar" id="nav-user-avatar">--</div>
+      <span class="user-name" id="nav-user-name"></span>
+      <span style="color:var(--text-3);font-size:.7rem">&#9660;</span>
+      <div class="user-dropdown" id="user-dropdown">
+        <div style="padding:.625rem .875rem .5rem;border-bottom:1px solid var(--border);margin-bottom:.375rem;">
+          <div style="font-size:.875rem;font-weight:600;color:var(--text)" id="dd-user-name"></div>
+          <div style="font-size:.75rem;color:var(--text-2)" id="dd-user-email"></div>
+        </div>
+        <a href="dashboard.html" class="user-dropdown-item">Dashboard</a>
+        <div class="user-dropdown-divider"></div>
+        <div class="user-dropdown-item danger" id="logout-btn">Sign Out</div>
+      </div>
+    </div>
+  </div>
+</nav>
+
+<div class="page-content">
+  <div class="page-header">
+    <div class="page-header-left">
+      <div class="page-title">Mobile Backend Intelligence (Flutter)</div>
+      <div class="page-subtitle">Monitor backend APIs for latency, CORS issues, error rates, and reliability problems affecting mobile users</div>
+    </div>
+    <div class="page-header-actions" id="header-actions"></div>
+  </div>
+
+  <div id="view-connect">
+    <div class="info-box mb-3">
+      <span class="info-icon">[mob]</span>
+      <div>Connect your mobile app's backend to identify latency spikes, missing CORS headers, Lambda errors, and API reliability issues that degrade the Flutter app's user experience.</div>
+    </div>
+    <div class="grid-2">
+      <div class="provider-card" id="mobile-aws-card">
+        <div class="provider-logo">AWS</div>
+        <div class="provider-name">AWS Mobile Backend</div>
+        <div class="provider-desc">Monitor API Gateway and Lambda functions serving your Flutter app. Analyzes CloudWatch metrics for latency, error rates, and CORS configuration.</div>
+        <div class="provider-status" id="mobile-aws-status"><span style="color:var(--text-3)">&#9679; Not connected</span></div>
+        <button class="btn btn-primary w-full" id="btn-connect-mobile">Connect Backend</button>
+      </div>
+      <div class="provider-card">
+        <div class="provider-logo">FPM</div>
+        <div class="provider-name">Flutter Performance Metrics</div>
+        <div class="provider-desc">Integrate Firebase Performance Monitoring to correlate backend latency with Flutter app frame rendering times.</div>
+        <div class="provider-status"><span style="color:var(--text-3)">&#9679; Coming soon</span></div>
+        <button class="btn btn-outline w-full" disabled>Coming Soon</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="view-scan" style="display:none">
+    <div class="card" style="text-align:center;padding:3rem 2rem">
+      <div class="pulse-ring mb-3"></div>
+      <div class="text-lg font-semibold mb-1" id="scan-label">Monitoring mobile backend...</div>
+      <div class="text-sm text-muted mb-3" id="scan-sub">Analyzing API latency, Lambda errors and CORS configuration</div>
+      <div class="scan-progress-bar" style="max-width:360px;margin:0 auto">
+        <div class="scan-progress-fill" id="scan-fill" style="width:0%"></div>
+      </div>
+    </div>
+  </div>
+
+  <div id="view-risks" style="display:none">
+    <!-- Stats -->
+    <div class="grid-3 mb-3">
+      <div class="stat-card"><div class="stat-value blue" id="stat-total">0</div><div class="stat-label">Total Risks</div><div class="stat-change">Last scan: <span id="last-scan-time">--</span></div></div>
+      <div class="stat-card"><div class="stat-value high" id="stat-high">0</div><div class="stat-label">High Priority</div><div class="stat-change">User experience impact</div></div>
+      <div class="stat-card"><div class="stat-value medium" id="stat-medium">0</div><div class="stat-label">Medium Priority</div><div class="stat-change"><span class="stat-value low" id="stat-low" style="font-size:1.25rem">0</span> Low</div></div>
+    </div>
+
+    <!-- Live metrics snapshot (populated from API) -->
+    <div class="grid-3 mb-3">
+      <div class="card card-sm">
+        <div class="text-xs text-dimmer font-semibold mb-1" style="text-transform:uppercase;letter-spacing:.07em">Avg API Latency</div>
+        <div class="stat-value" id="metric-latency">--</div>
+        <div class="text-xs text-muted mt-1">Threshold: 1000ms</div>
+      </div>
+      <div class="card card-sm">
+        <div class="text-xs text-dimmer font-semibold mb-1" style="text-transform:uppercase;letter-spacing:.07em">5XX Error Rate</div>
+        <div class="stat-value" id="metric-5xx">--</div>
+        <div class="text-xs text-muted mt-1">Threshold: 5/hr</div>
+      </div>
+      <div class="card card-sm">
+        <div class="text-xs text-dimmer font-semibold mb-1" style="text-transform:uppercase;letter-spacing:.07em">4XX Error Rate</div>
+        <div class="stat-value" id="metric-4xx">--</div>
+        <div class="text-xs text-muted mt-1">Threshold: 50/hr</div>
+      </div>
+    </div>
+
+    <div class="card" style="padding:0;overflow:hidden">
+      <div style="padding:1.25rem 1.5rem;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:.75rem">
+        <div><div class="card-title">Mobile Backend Risk Findings</div><div class="card-subtitle">Latency &middot; CORS &middot; Lambda errors &middot; Error rates</div></div>
+        <div class="flex gap-1">
+          <div class="filter-tabs">
+            <button class="filter-tab active" onclick="filterRisks('All',this)">All</button>
+            <button class="filter-tab" onclick="filterRisks('High',this)">High</button>
+            <button class="filter-tab" onclick="filterRisks('Medium',this)">Medium</button>
+            <button class="filter-tab" onclick="filterRisks('Low',this)">Low</button>
+          </div>
+          <button class="btn btn-outline btn-sm" onclick="startScan()">Rescan</button>
+        </div>
+      </div>
+      <div style="padding:1.25rem;display:flex;flex-direction:column;gap:.875rem" id="risk-list"></div>
+    </div>
+
+    <div class="disconnect-panel mt-3">
+      <div><div class="disconnect-panel-title">Disconnect Mobile Backend</div><div class="disconnect-panel-text">Remove scanner access by deleting the CloudSentinel-Scanner stack. The Flutter app will be unaffected.</div></div>
+      <button class="btn btn-danger" onclick="performDisconnect()">Disconnect</button>
+    </div>
+  </div>
+</div>
+
+<div class="modal-overlay" id="modal-mobile">
+  <div class="modal">
+    <div class="modal-header">
+      <div><div class="modal-title">Connect Mobile Backend</div><div class="modal-subtitle">Enter your backend API URL and AWS account details</div></div>
+      <span class="modal-close" onclick="closeModal('modal-mobile')">&#10005;</span>
+    </div>
+    <div class="modal-body">
+      <div class="info-box">
+        <span class="info-icon">[i]</span>
+        <div>CloudSentinel reads API Gateway configuration and CloudWatch metrics (latency, 4XX, 5XX, Lambda errors). No mobile app changes are required.</div>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Mobile API Base URL</label>
+        <input class="form-input" id="mobile-api-url" placeholder="https://xxxxxxx.execute-api.us-east-1.amazonaws.com/prod">
+        <span class="form-hint">This is the API your Flutter app calls</span>
+      </div>
+      <div class="form-group">
+        <label class="form-label">AWS Account ID</label>
+        <input class="form-input" id="mobile-account-id" placeholder="123456789012" maxlength="12">
+      </div>
+      <div class="form-group">
+        <label class="form-label">Latency Alert Threshold (ms)</label>
+        <input class="form-input" id="mobile-threshold" type="number" placeholder="1000" min="100" max="10000">
+        <span class="form-hint">Risks are flagged when average latency exceeds this value</span>
+      </div>
+      <label class="checkbox-group">
+        <input type="checkbox" id="mobile-consent">
+        <span class="form-hint">I authorize CloudSentinel to read CloudWatch metrics for my mobile backend API for performance and security analysis.</span>
+      </label>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-outline" onclick="closeModal('modal-mobile')">Cancel</button>
+      <button class="btn btn-primary" onclick="confirmMobileConnect()">Connect &amp; Monitor</button>
+    </div>
+  </div>
+</div>
+
+<button id="chatbot-fab" title="Ask AI about mobile backend risks">AI</button>
+<div id="chatbot-panel">
+  <div class="chatbot-header">
+    <div class="chatbot-header-icon">AI</div>
+    <div class="chatbot-header-info"><div class="chatbot-header-title">CloudSentinel AI</div><div class="chatbot-header-sub">Online</div></div>
+    <span class="chatbot-close" id="chatbot-close">&#10005;</span>
+  </div>
+  <div class="chatbot-messages" id="chatbot-messages"></div>
+  <div class="chatbot-input-area">
+    <input class="chatbot-input" id="chatbot-input" placeholder="e.g. Why is my API so slow?" type="text">
+    <button class="chatbot-send" id="chatbot-send">&#10148;</button>
+  </div>
+</div>
+<div id="toast-container"></div>
+
+<script src="js/auth.js"></script>
+<script src="js/app.js"></script>
+<script src="js/session.js"></script>
+<script src="js/mobile.js"></script>
+</body>
+</html>

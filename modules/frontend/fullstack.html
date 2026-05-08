@@ -1,0 +1,155 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="description" content="Full-Stack Application Intelligence — API security and performance — CloudSentinel">
+  <title>Full-Stack Intelligence — CloudSentinel</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="css/styles.css">
+  <script src="js/theme.js"></script>
+  <script src="js/env.js"></script>
+</head>
+<body>
+
+<nav class="navbar">
+  <div class="navbar-brand"><div class="logo-icon">CS</div>CloudSentinel</div>
+  <div class="navbar-divider"></div>
+  <div class="navbar-breadcrumb">
+    <a href="dashboard.html">Dashboard</a><span class="sep">&#8250;</span>
+    <span class="current">Full-Stack Intelligence</span>
+  </div>
+  <div class="navbar-actions">
+    <div class="user-menu" id="user-menu">
+      <div class="user-avatar" id="nav-user-avatar">--</div>
+      <span class="user-name" id="nav-user-name"></span>
+      <span style="color:var(--text-3);font-size:.7rem">&#9660;</span>
+      <div class="user-dropdown" id="user-dropdown">
+        <div style="padding:.625rem .875rem .5rem;border-bottom:1px solid var(--border);margin-bottom:.375rem;">
+          <div style="font-size:.875rem;font-weight:600;color:var(--text)" id="dd-user-name"></div>
+          <div style="font-size:.75rem;color:var(--text-2)" id="dd-user-email"></div>
+        </div>
+        <a href="dashboard.html" class="user-dropdown-item">Dashboard</a>
+        <div class="user-dropdown-divider"></div>
+        <div class="user-dropdown-item danger" id="logout-btn">Sign Out</div>
+      </div>
+    </div>
+  </div>
+</nav>
+
+<div class="page-content">
+  <div class="page-header">
+    <div class="page-header-left">
+      <div class="page-title">Full-Stack Application Intelligence</div>
+      <div class="page-subtitle">Analyze API endpoints for missing authentication, rate limiting, and performance issues</div>
+    </div>
+    <div class="page-header-actions" id="header-actions"></div>
+  </div>
+
+  <div id="view-connect">
+    <div class="info-box mb-3">
+      <span class="info-icon">[lock]</span>
+      <div>Connect your API Gateway to discover unauthenticated endpoints, missing throttling, and high error rates using CloudWatch metric analysis.</div>
+    </div>
+    <div class="provider-card" style="max-width:480px" id="apigw-card">
+      <div class="provider-logo">API</div>
+      <div class="provider-name">AWS API Gateway</div>
+      <div class="provider-desc">Scan REST API endpoints for security and performance issues. Uses the same AWS connection as the Cloud Infrastructure module if already configured.</div>
+      <div class="provider-status" id="apigw-status"><span style="color:var(--text-3)">&#9679; Not connected</span></div>
+      <button class="btn btn-primary w-full" id="btn-connect-apigw">Connect API Gateway</button>
+    </div>
+  </div>
+
+  <div id="view-scan" style="display:none">
+    <div class="card" style="text-align:center;padding:3rem 2rem">
+      <div class="pulse-ring mb-3"></div>
+      <div class="text-lg font-semibold mb-1" id="scan-label">Discovering API endpoints...</div>
+      <div class="text-sm text-muted mb-3" id="scan-sub">Checking authentication, throttling, and CloudWatch metrics</div>
+      <div class="scan-progress-bar" style="max-width:360px;margin:0 auto">
+        <div class="scan-progress-fill" id="scan-fill" style="width:0%"></div>
+      </div>
+    </div>
+  </div>
+
+  <div id="view-risks" style="display:none">
+    <div class="grid-3 mb-3">
+      <div class="stat-card"><div class="stat-value blue" id="stat-total">0</div><div class="stat-label">Total Risks</div><div class="stat-change">Last scan: <span id="last-scan-time">--</span></div></div>
+      <div class="stat-card"><div class="stat-value high" id="stat-high">0</div><div class="stat-label">High Priority</div></div>
+      <div class="stat-card"><div class="stat-value medium" id="stat-medium">0</div><div class="stat-label">Medium Priority</div><div class="stat-change"><span class="stat-value low" id="stat-low" style="font-size:1.25rem">0</span> Low</div></div>
+    </div>
+    <div class="card" style="padding:0;overflow:hidden">
+      <div style="padding:1.25rem 1.5rem;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:.75rem">
+        <div><div class="card-title">API Security &amp; Performance Findings</div><div class="card-subtitle">Authentication gaps &middot; Rate limiting &middot; Error rates &middot; Latency</div></div>
+        <div class="flex gap-1">
+          <div class="filter-tabs">
+            <button class="filter-tab active" onclick="filterRisks('All',this)">All</button>
+            <button class="filter-tab" onclick="filterRisks('High',this)">High</button>
+            <button class="filter-tab" onclick="filterRisks('Medium',this)">Medium</button>
+            <button class="filter-tab" onclick="filterRisks('Low',this)">Low</button>
+          </div>
+          <button class="btn btn-outline btn-sm" onclick="startScan()">Rescan</button>
+        </div>
+      </div>
+      <div style="padding:1.25rem;display:flex;flex-direction:column;gap:.875rem" id="risk-list"></div>
+    </div>
+    <div class="disconnect-panel mt-3">
+      <div><div class="disconnect-panel-title">Disconnect API Gateway</div><div class="disconnect-panel-text">Remove scanner access. The CloudFormation stack (if used) must be deleted separately from your AWS console.</div></div>
+      <button class="btn btn-danger" onclick="performDisconnect()">Disconnect</button>
+    </div>
+  </div>
+</div>
+
+<div class="modal-overlay" id="modal-apigw">
+  <div class="modal">
+    <div class="modal-header">
+      <div><div class="modal-title">Connect API Gateway</div><div class="modal-subtitle">Enter your API Gateway endpoint to begin scanning</div></div>
+      <span class="modal-close" onclick="closeModal('modal-apigw')">&#10005;</span>
+    </div>
+    <div class="modal-body">
+      <div class="info-box">
+        <span class="info-icon">[i]</span>
+        <div>CloudSentinel reads your API Gateway configuration and CloudWatch metrics using the IAM scan role. If you've connected AWS in the Cloud module, access is already configured.</div>
+      </div>
+      <div class="form-group">
+        <label class="form-label">API Gateway Invoke URL</label>
+        <input class="form-input" id="api-url-input" placeholder="https://xxxxxx.execute-api.us-east-1.amazonaws.com/prod">
+        <span class="form-hint">Found in API Gateway &rarr; your API &rarr; Stages &rarr; Invoke URL</span>
+      </div>
+      <div class="form-group">
+        <label class="form-label">AWS Region</label>
+        <input class="form-input" id="api-region" placeholder="us-east-1">
+      </div>
+      <label class="checkbox-group">
+        <input type="checkbox" id="apigw-consent">
+        <span class="form-hint">I authorize CloudSentinel to read my API Gateway configuration and CloudWatch metrics for security analysis.</span>
+      </label>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-outline" onclick="closeModal('modal-apigw')">Cancel</button>
+      <button class="btn btn-primary" onclick="confirmApigwConnect()">Connect &amp; Scan</button>
+    </div>
+  </div>
+</div>
+
+<button id="chatbot-fab" title="Ask AI about API risks">AI</button>
+<div id="chatbot-panel">
+  <div class="chatbot-header">
+    <div class="chatbot-header-icon">AI</div>
+    <div class="chatbot-header-info"><div class="chatbot-header-title">CloudSentinel AI</div><div class="chatbot-header-sub">Online</div></div>
+    <span class="chatbot-close" id="chatbot-close">&#10005;</span>
+  </div>
+  <div class="chatbot-messages" id="chatbot-messages"></div>
+  <div class="chatbot-input-area">
+    <input class="chatbot-input" id="chatbot-input" placeholder="e.g. How do I add authentication to an API?" type="text">
+    <button class="chatbot-send" id="chatbot-send">&#10148;</button>
+  </div>
+</div>
+<div id="toast-container"></div>
+
+<script src="js/auth.js"></script>
+<script src="js/app.js"></script>
+<script src="js/session.js"></script>
+<script src="js/fullstack.js"></script>
+</body>
+</html>
