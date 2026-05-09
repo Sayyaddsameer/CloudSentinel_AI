@@ -1,0 +1,170 @@
+/**
+ * dashboard.js — Dashboard module logic
+ *
+ * Fetches live risk data for all modules from the production API,
+ * renders module cards with connection status and risk trends,
+ * and populates the recent activity feed from local scan history.
+ *
+ * Depends on: js/env.js, js/auth.js, js/app.js, js/session.js
+ */
+
+const MODULE_KEYS = ['cloud-infra', 'devops', 'fullstack', 'data-eng', 'mobile'];
+
+const BADGE_IDS = {
+  'cloud-infra': 'badge-cloud',
+  'devops':      'badge-devops',
+  'fullstack':   'badge-fullstack',
+  'data-eng':    'badge-data',
+  'mobile':      'badge-mobile',
+};
+
+const COUNT_IDS = {
+  'cloud-infra': 'risk-count-cloud',
+  'devops':      'risk-count-devops',
+  'fullstack':   'risk-count-fullstack',
+  'data-eng':    'risk-count-data',
+  'mobile':      'risk-count-mobile',
+};
+
+const TREND_IDS = {
+  'cloud-infra': 'trend-cloud',
+  'devops':      'trend-devops',
+  'fullstack':   'trend-fullstack',
+  'data-eng':    'trend-data',
+  'mobile':      'trend-mobile',
+};
+
+const MOD_NAMES = {
+  'cloud-infra': 'Cloud Infrastructure',
+  'devops':      'DevOps',
+  'fullstack':   'Full-Stack',
+  'data-eng':    'Data Engineering',
+  'mobile':      'Mobile Backend',
+};
+
+const MOD_ICONS = {
+  'cloud-infra': '[cloud]',
+  'devops':      '[devops]',
+  'fullstack':   '[api]',
+  'data-eng':    '[data]',
+  'mobile':      '[mobile]',
+};
+
+/* ── Init ─────────────────────────────────────────────────── */
+function initDashboard() {
+  const user = requireAuth();
+  if (!user) return;
+
+  const set = (id, v) => { const e = document.getElementById(id); if (e) e.textContent = v; };
+  set('nav-user-avatar', user.initials);
+  set('nav-user-name',   user.name);
+  set('dd-user-name',    user.name);
+  set('dd-user-email',   user.email);
+  set('welcome-avatar',  user.initials);
+
+  document.getElementById('logout-btn')?.addEventListener('click', logout);
+
+  /* User dropdown */
+  const menu = document.getElementById('user-menu');
+  const dd   = document.getElementById('user-dropdown');
+  menu?.addEventListener('click', e => { e.stopPropagation(); dd.classList.toggle('open'); });
+  document.addEventListener('click', () => dd?.classList.remove('open'));
+
+  /* Theme toggle (dashboard page does not use initPage so inject manually) */
+  const navActions = document.querySelector('.navbar-actions');
+  if (navActions && !document.getElementById('theme-toggle')) {
+    const btn        = document.createElement('button');
+    btn.id           = 'theme-toggle';
+    btn.className    = 'theme-toggle-btn';
+    const th         = document.documentElement.getAttribute('data-theme') || 'dark';
+    btn.textContent  = th === 'dark' ? 'Light' : 'Dark';
+    btn.addEventListener('click', toggleTheme);
+    navActions.insertBefore(btn, navActions.firstChild);
+  }
+
+  /* Session timer */
+  if (typeof initSessionTimer === 'function') initSessionTimer();
+
+  /* Welcome greeting */
+  const hour  = new Date().getHours();
+  const greet = hour < 12 ? 'Good morning' : hour < 18 ? 'Good afternoon' : 'Good evening';
+  set('welcome-greeting', `${greet}, ${user.name.split(' ')[0]}`);
+
+  /* Module cards */
+  let totalRisks = 0, highCount = 0, connected = 0;
+
+  MODULE_KEYS.forEach(mod => {
+    const conns       = getConnections(mod);
+    const isConnected = Object.keys(conns).length > 0;
+    const badge       = document.getElementById(BADGE_IDS[mod]);
+
+    if (isConnected) {
+      connected++;
+      if (badge) { badge.textContent = 'Connected'; badge.className = 'module-card-badge badge-connected'; }
+
+      /* Load cached risk counts from history for offline-first display */
+      const latestHistory = getModuleHistory(mod, 1)[0];
+      if (latestHistory) {
+        totalRisks += latestHistory.total;
+        highCount  += latestHistory.high;
+        const el = document.getElementById(COUNT_IDS[mod]);
+        if (el) el.textContent = `${latestHistory.total} risk${latestHistory.total !== 1 ? 's' : ''}`;
+      } else {
+        const el = document.getElementById(COUNT_IDS[mod]);
+        if (el) el.textContent = 'No scan yet';
+      }
+
+      /* Risk trend */
+      const trend   = getRiskTrend(mod);
+      const trendEl = document.getElementById(TREND_IDS[mod]);
+      if (trendEl && trend) {
+        const { diff, direction } = trend;
+        const labels = { up: `+${diff} since last`, down: `-${Math.abs(diff)} since last`, same: 'No change' };
+        trendEl.className   = `risk-trend ${direction}`;
+        trendEl.textContent = labels[direction];
+      }
+    } else {
+      const el = document.getElementById(COUNT_IDS[mod]);
+      if (el) el.textContent = 'Connect to scan';
+    }
+  });
+
+  set('ws-total',     connected ? totalRisks : '--');
+  set('ws-high',      connected ? highCount  : '--');
+  set('ws-connected', `${connected}/${MODULE_KEYS.length}`);
+
+  /* Recent activity feed */
+  renderActivityFeed();
+}
+
+/* ── Activity feed ────────────────────────────────────────── */
+function renderActivityFeed() {
+  const feed = document.getElementById('activity-feed');
+  if (!feed) return;
+  const history = getAllHistory(10);
+  if (!history.length) return; /* keep empty state */
+
+  feed.innerHTML = history.map(h => {
+    const d       = new Date(h.timestamp);
+    const time    = d.toLocaleString('en-IN', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' });
+    const dotClass = h.high > 0 ? 'high' : h.medium > 0 ? 'medium' : 'scan';
+    const modSlug  = h.module.replace('-', '');
+    return `
+      <div class="activity-item">
+        <div class="activity-dot ${dotClass}">${MOD_ICONS[h.module] || '[scan]'}</div>
+        <div class="activity-content">
+          <div class="activity-title">${MOD_NAMES[h.module] || h.module} &mdash; ${h.total} risk${h.total !== 1 ? 's' : ''} detected</div>
+          <div class="activity-meta">
+            ${time} &middot;
+            <span style="color:var(--high)">${h.high} High</span> &middot;
+            <span style="color:var(--medium)">${h.medium} Medium</span> &middot;
+            <span style="color:var(--low)">${h.low} Low</span>
+          </div>
+        </div>
+        <a href="${modSlug}.html" class="btn btn-ghost btn-sm">View</a>
+      </div>`;
+  }).join('');
+}
+
+/* ── Start ────────────────────────────────────────────────── */
+document.addEventListener('DOMContentLoaded', initDashboard);
