@@ -1,13 +1,13 @@
-# CloudSentinel — Deployment Guide
+# CloudSentinel AI -- Deployment Guide
 
-There are two ways to deploy CloudSentinel. Pick whichever matches your setup.
-Path A uses Terraform and is the one we recommend for team or production deployments.
-Path B is a Python script that does the same thing without needing Terraform installed.
+Two deployment paths are supported. Path A uses Terraform and is recommended
+for team or production deployments. Path B is a Python script that does the
+same thing without requiring Terraform.
 
 | Path | Best For | Prerequisites |
-|---|---|---|
-| A — Terraform | Team deployments, repeatable infrastructure | Terraform >= 1.6, AWS CLI |
-| B — Console Script | Personal use, no Terraform installed | Python >= 3.9, AWS CLI |
+|------|----------|---------------|
+| A -- Terraform | Team or production deployments | Terraform >= 1.6, AWS CLI, Python 3.11 |
+| B -- Console Script | Personal or demo deployments | Python >= 3.9, AWS CLI |
 
 ---
 
@@ -16,248 +16,203 @@ Path B is a Python script that does the same thing without needing Terraform ins
 ### AWS CLI and Credentials
 
 ```bash
-# Verify AWS CLI is installed
-aws --version
-
-# Configure credentials (one-time)
-aws configure
-# Provide: Access Key ID, Secret Access Key, Default Region, Output format
+aws --version           # verify installed
+aws configure           # set Access Key, Secret, Region, Output
 ```
 
-Your IAM user or role needs permissions to create Lambda, DynamoDB, S3, IAM, Cognito,
-API Gateway, SNS, EventBridge, and AWS Config resources. If you are using the deployer
-account for the first time, AdministratorAccess is the quickest option for a dev environment.
+Your IAM user/role needs: Lambda, DynamoDB, S3, IAM, Cognito, API Gateway, SNS,
+EventBridge, STS, Secrets Manager, and CloudFormation permissions.
+For a dev environment, AdministratorAccess is the quickest option.
 
 ### Amazon Bedrock Model Access
 
-Before deploying, make sure you have access to the Claude model in Bedrock.
-It does not work automatically even if you have an AWS account.
+The AI explanation feature requires manual model activation:
 
 1. Open the [AWS Console](https://console.aws.amazon.com/bedrock/)
-2. Go to **Bedrock > Model access**
-3. Click **Manage model access**, find **Anthropic Claude 3 Haiku**, enable it
-4. Wait a minute or two until status shows **Access granted**
+2. Go to **Bedrock > Model access > Manage model access**
+3. Enable **Anthropic Claude 3 Haiku**
+4. Wait until status shows **Access granted**
+
+If Bedrock access is not yet granted, the platform falls back to the built-in
+rule-based chatbot. All other features work normally.
 
 ---
 
-## Path A — Terraform Deployment
-
-### Prerequisites
-
-```bash
-# Verify Terraform is installed
-terraform version
-# Must be >= 1.6.0
-
-# Install if missing: https://developer.hashicorp.com/terraform/install
-```
-
-### Step 1 — Configure Variables
+## Path A -- Terraform
 
 ```bash
 cd infrastructure/terraform
 cp terraform.tfvars.example terraform.tfvars
-```
+# Edit terraform.tfvars -- fill in alert_email and environment at minimum
 
-Open `terraform.tfvars` and fill in every value.
-Required values:
-
-| Variable | Description |
-|---|---|
-| `alert_email` | Email address for risk alert notifications |
-| `bedrock_model_id` | Bedrock model ID (default is Claude 3 Haiku) |
-| `environment` | `dev`, `staging`, or `prod` |
-
-Optional values (leave as empty string `""` to disable the feature):
-
-| Variable | Description |
-|---|---|
-| `github_token` | Required only for Amplify frontend deployment |
-| `gcp_secret_name` | Required only for GCP scanning |
-| `target_role_arn` | Required only for cross-account scanning |
-| `app_url` | Frontend URL included in alert emails |
-
-### Step 2 — Deploy (Windows)
-
-```powershell
-# From the repository root
-.\deploy_terraform.ps1
-```
-
-### Step 2 — Deploy (Linux / macOS)
-
-```bash
-# From the repository root
-bash deploy_terraform.sh
-```
-
-### Step 3 — Confirm Email Subscription
-
-After deployment, AWS will send a confirmation email to your `alert_email` address.
-Click the confirmation link before notifications can be delivered.
-
-### Step 4 — Update Frontend Configuration
-
-After `terraform apply` completes, the output will display:
-
-```
-api_invoke_url       = "https://XXXX.execute-api.us-east-1.amazonaws.com/dev"
-cognito_client_id    = "XXXXXXXXXXXXXXXXXXXXXXXXXXXX"
-cognito_user_pool_id = "us-east-1_XXXXXXXXX"
-dynamodb_table       = "cloudsentinel-risks"
-```
-
-Set these values in each frontend HTML file:
-
-```javascript
-window.ENV_API_URL           = "https://XXXX.execute-api.us-east-1.amazonaws.com/dev";
-window.ENV_COGNITO_POOL_ID   = "us-east-1_XXXXXXXXX";
-window.ENV_COGNITO_CLIENT_ID = "XXXXXXXXXXXXXXXXXXXXXXXXXXXX";
-window.ENV_REGION            = "us-east-1";
-```
-
-### Teardown
-
-When you want to remove everything:
-
-```powershell
 # Windows
-.\deploy_terraform.ps1 -Destroy
+..\deploy_terraform.ps1
 
 # Linux / macOS
-bash deploy_terraform.sh --destroy
+bash ../deploy_terraform.sh
 ```
 
-This destroys all AWS resources created by Terraform. DynamoDB data is deleted.
-Make sure you have exported anything you need before running this.
+**Required variables:**
+
+| Variable | Description |
+|----------|-------------|
+| `alert_email` | Email for SNS risk alert notifications |
+| `environment` | `dev`, `staging`, or `prod` |
+
+**Optional variables:**
+
+| Variable | Description |
+|----------|-------------|
+| `bedrock_model_id` | Bedrock model ID (default: Claude 3 Haiku) |
+| `gcp_secret_name` | Secrets Manager name for GCP service account key |
+| `target_role_arn` | Cross-account IAM role ARN for scanning |
+| `app_url` | Frontend URL included in alert emails |
+
+**Teardown:**
+```bash
+..\deploy_terraform.ps1 -Destroy   # Windows
+bash ../deploy_terraform.sh --destroy  # Linux
+```
 
 ---
 
-## Path B — Console Script (No Terraform)
-
-### Prerequisites
+## Path B -- Console Script
 
 ```bash
-# Verify Python is installed
-python --version
-# Must be >= 3.9
-
-# Install boto3 (AWS SDK)
 pip install boto3
-```
-
-### Step 1 — Configure
-
-```bash
-# Copy the example configuration file
 cp deploy.env.example deploy.env
+# Edit deploy.env -- fill in CS_ALERT_EMAIL and CS_REGION
+
+python deploy_console.py --dry-run   # preview without making AWS calls
+python deploy_console.py             # deploy all resources
 ```
 
-Open `deploy.env` and fill in the values. Every `CS_*` variable can
-alternatively be exported as a shell environment variable.
+The script creates in order:
+1. DynamoDB table `CloudSentinelRisks` with `ModuleIndex` GSI
+2. S3 artifacts bucket (private, versioned, encrypted)
+3. Lambda execution IAM role
+4. Cognito User Pool and App Client
+5. SNS topic and email subscription
+6. All Lambda functions (9 total)
+7. API Gateway with Cognito JWT authorizer on all protected routes
+8. EventBridge scheduled rules
+9. CloudFormation template bucket (for cross-account scanner role)
 
-Required:
+---
 
-| Variable | Description |
-|---|---|
-| `CS_ALERT_EMAIL` | Email address for SNS risk alerts |
-| `CS_REGION` | AWS region to deploy into |
+## Post-Deploy: Attach Cognito JWT Authorizer
 
-All other variables have working defaults for a standard deployment.
-
-### Step 2 — Dry Run (Recommended)
-
-Preview all deployment steps without making any AWS API calls:
+If you are using an existing API Gateway that was deployed without JWT auth,
+run this once to secure all endpoints:
 
 ```bash
-python deploy_console.py --dry-run
+python add_jwt_authorizer.py
 ```
 
-### Step 3 — Deploy
+This creates a `COGNITO_USER_POOLS` authorizer and attaches it to all 8
+protected methods. `OPTIONS` routes remain open for CORS preflight.
+
+---
+
+## Post-Deploy: Disconnect Lambda
+
+The `/disconnect` endpoint automates credential revocation when a user
+disconnects a cloud provider or their session expires. Deploy it with:
 
 ```bash
-python deploy_console.py
+python deploy_disconnect.py
 ```
 
-The script will:
-1. Verify your AWS credentials
-2. Create the DynamoDB risks table with both GSIs
-3. Create the S3 artifacts bucket (private, versioned, encrypted)
-4. Create the Lambda IAM execution role
-5. Create the Cognito user pool and app client
-6. Create the SNS alerts topic and email subscription
-7. Package and deploy all five Lambda functions
-8. Create the API Gateway REST API with all routes
-9. Create EventBridge rules for scheduled AI explanation and scan notifications
-10. Print the final output summary
+This creates the `cloudsentinel-disconnect-handler` Lambda and wires it to
+`POST /disconnect` with Cognito JWT authorization.
 
-### Step 4 — Confirm Email and Update Frontend
+---
 
-Same as Path A, Steps 3 and 4 above. The console script prints the required
-values at the end of the deployment run.
+## Frontend Deployment
+
+After any backend change, update the frontend config in `modules/frontend/js/env.js`:
+
+```javascript
+window.ENV_COGNITO_POOL_ID   = "us-east-1_XXXXXXXXX";
+window.ENV_COGNITO_CLIENT_ID = "XXXXXXXXXXXXXXXXXXXXXXXXXXXX";
+window.ENV_API_URL            = "https://XXXX.execute-api.us-east-1.amazonaws.com/dev";
+window.ENV_REGION             = "us-east-1";
+```
+
+Then sync all frontend files to S3:
+
+```bash
+python sync_frontend.py
+```
+
+This uploads all HTML, CSS, and JS files to the S3 static website bucket
+and configures public read access with HTTPS.
+
+**Live URLs after sync:**
+```
+Landing page:  http://cloudsentinel-frontend-<accountid>.s3-website-us-east-1.amazonaws.com/landing.html
+Sign In:       http://cloudsentinel-frontend-<accountid>.s3-website-us-east-1.amazonaws.com/index.html
+```
 
 ---
 
 ## Verifying the Deployment
 
-Once deployed, this is the quickest way to confirm everything is working:
-
 ```bash
-# Replace with your actual API URL from the deployment output
 API_URL="https://XXXX.execute-api.us-east-1.amazonaws.com/dev"
+TOKEN="<id-token-from-cognito-login>"
 
-# The risks endpoint should return an empty list on a fresh deployment
-curl -s "${API_URL}/risks" | python -m json.tool
-# Expected: {"risks": [], "count": 0}
+# GET /risks requires auth -- should return empty list on fresh deployment
+curl -s -H "Authorization: $TOKEN" "$API_URL/risks" | python -m json.tool
 
-# Trigger a cloud scan manually
-curl -s -X POST "${API_URL}/scan-cloud" | python -m json.tool
-# Expected: {"message": "Scan complete", "risksFound": <number>}
+# POST /scan-cloud-infra requires auth and optionally a cross-account role
+curl -s -X POST -H "Authorization: $TOKEN" -H "Content-Type: application/json" \
+  -d '{"targetRoleArn":"arn:aws:iam::123456789:role/CloudSentinel-ScannerRole"}' \
+  "$API_URL/scan-cloud-infra" | python -m json.tool
+
+# Without auth -- should return 401
+curl -s "$API_URL/risks"
+# Expected: {"message":"Unauthorized"}
 ```
+
+---
+
+## API Gateway Routes Reference
+
+| Method | Path | Auth | Lambda |
+|--------|------|------|--------|
+| POST | /scan-cloud-infra | Cognito JWT | cloudsentinel-cloud-scanner |
+| POST | /scan-devops | Cognito JWT | cloudsentinel-devops-analyzer |
+| POST | /scan-fullstack | Cognito JWT | cloudsentinel-fullstack-analyzer |
+| POST | /scan-data-eng | Cognito JWT | cloudsentinel-data-eng-analyzer |
+| POST | /scan-mobile | Cognito JWT | cloudsentinel-mobile-analyzer |
+| GET | /risks | Cognito JWT | cloudsentinel-risk-reader |
+| POST | /chat | Cognito JWT | cloudsentinel-chatbot-handler |
+| POST | /disconnect | Cognito JWT | cloudsentinel-disconnect-handler |
+| OPTIONS | /* | NONE | MOCK (CORS preflight) |
 
 ---
 
 ## Environment Variables Reference
 
-All Lambda environment variables are documented in `.env.example` at the project root.
-No function has hardcoded values — everything is set during deployment.
-If you need to change a threshold or model ID after deploying, update the Lambda
-environment variable in the AWS Console under the function's Configuration tab.
+All Lambda environment variables are documented in `.env.example`.
+No function has hardcoded values.
+
+To change a value after deploying, update the Lambda environment variable
+in the AWS Console under the function's **Configuration > Environment variables** tab.
 
 ---
 
 ## Troubleshooting
 
 | Symptom | Resolution |
-|---|---|
-| `ExpiredTokenException` | Run `aws configure` or refresh your SSO session |
-| `AccessDeniedException` | Ensure your IAM user/role has the required permissions listed above |
-| Bedrock returns `ModelNotReadyException` | Request model access in the Bedrock console |
-| SNS alerts not arriving | Confirm the subscription link sent to your email |
-| Terraform error `duplicate provider` | Ensure you are running `terraform` from `infrastructure/terraform/` |
-| `ResourceConflictException` on Lambda | The function already exists; the script will update it automatically |
-
----
-
-## Architecture Overview
-
-```
-EventBridge (hourly)
-      |
-      v
- ai-explainer Lambda
-      |
-      v
- DynamoDB (cloudsentinel-risks)
-      |
-      +---> module-index GSI
-      |
-      v
- risk-reader Lambda  <-- API Gateway GET /risks
- chatbot-handler     <-- API Gateway POST /chat
- cloud-scanner       <-- API Gateway POST /scan-cloud
- notification-handler <-- EventBridge (ScanCompleted event)
-      |
-      v
-    SNS --> Email
-```
+|---------|-----------|
+| `ExpiredTokenException` | Run `aws configure` or refresh SSO session |
+| `AccessDeniedException` | Ensure IAM has all required service permissions |
+| API returns 401 on all routes | Run `python add_jwt_authorizer.py` to attach Cognito auth |
+| Bedrock `ModelNotReadyException` | Grant model access in the Bedrock console |
+| SNS alerts not arriving | Click the confirmation link sent to your email |
+| `ResourceConflictException` on Lambda | Already exists; the script updates it automatically |
+| Disconnect Lambda missing | Run `python deploy_disconnect.py` |
+| Frontend shows old version | Run `python sync_frontend.py` to re-sync all files to S3 |
+| Session timer resets constantly | Ensure `js/session.js` is the latest version (login-time based) |

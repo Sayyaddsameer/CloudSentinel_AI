@@ -1,175 +1,138 @@
-# Architecture Notes — Cloud Infra + AI Layer
-## Sayyad Sameer
+# Cloud Infrastructure Intelligence -- Architecture
 
-Wrote this out to make the overall system clear for the team. The cloud-infra module sits at the center — I own the shared infrastructure that everyone else connects to.
+## Overview
+
+The Cloud Infrastructure module is the primary scanner module of CloudSentinel AI.
+It connects to an AWS account via a read-only cross-account IAM role deployed
+through CloudFormation, and optionally to GCP via a service account key stored
+in AWS Secrets Manager.
 
 ---
 
-## How the whole system fits together
+## Components
 
-```mermaid
-flowchart TD
-    User([User]) --> Portal[AWS Amplify\nWeb Portal]
-    Portal --> Cognito[Amazon Cognito\nAuth]
-    Cognito --> APIGW[Amazon API Gateway]
+### Lambda Functions
 
-    APIGW --> Scanner[Lambda\ncloud-scanner]
-    APIGW --> AIExp[Lambda\nai-explainer]
-    APIGW --> Chat[Lambda\nchatbot-handler]
-    APIGW --> Reader[Lambda\nrisk-reader]
-    APIGW --> DevOps[Lambda\ndevops-analyzer]
-    APIGW --> FS[Lambda\nfullstack-analyzer]
-    APIGW --> DE[Lambda\ndata-eng-analyzer]
-    APIGW --> Mobile[Lambda\nmobile-analyzer]
+| Function | Handler | Trigger | Purpose |
+|----------|---------|---------|---------|
+| `cloudsentinel-cloud-scanner` | `cloud_scanner.lambda_handler` | API Gateway POST /scan-cloud-infra | Scans AWS/GCP resources for misconfigurations |
+| `cloudsentinel-risk-reader` | `risk_reader.lambda_handler` | API Gateway GET /risks | Reads risk records from DynamoDB |
+| `cloudsentinel-chatbot-handler` | `chatbot_handler.lambda_handler` | API Gateway POST /chat | AI chatbot with Bedrock + rule-based fallback |
+| `cloudsentinel-ai-explainer` | `ai_explainer.lambda_handler` | EventBridge (hourly) | Enriches risks with AI explanations |
+| `cloudsentinel-notification-handler` | `notification_handler.lambda_handler` | EventBridge (ScanCompleted) | Sends SNS email alerts for High risks |
+| `cloudsentinel-disconnect-handler` | `disconnect_handler.lambda_handler` | API Gateway POST /disconnect | Revokes access: deletes CFN stack, GCP secret, DynamoDB risks |
 
-    Scanner --> AWS_S3[S3 API]
-    Scanner --> AWS_EC2[EC2 API]
-    Scanner --> AWS_IAM[IAM API]
+---
 
-    Scanner --> DDB[(DynamoDB\ncloudsentinel-risks)]
-    DevOps --> DDB
-    FS --> DDB
-    DE --> DDB
-    Mobile --> DDB
+## Data Flow
 
-    DDB --> AIExp
-    AIExp --> Bedrock[Amazon Bedrock\nClaude 3 Haiku]
-    Bedrock --> AIExp
-    AIExp --> DDB
-
-    Chat --> DDB
-    Chat --> Bedrock
-
-    Reader --> DDB
-    Reader --> Portal
-
-    style Bedrock fill:#FF9900,color:#000
-    style DDB fill:#4053D6,color:#fff
-    style APIGW fill:#8C4FFF,color:#fff
-    style Cognito fill:#D13212,color:#fff
-    style Portal fill:#1A9C3E,color:#fff
 ```
+1. User connects AWS account
+   Frontend --> CloudFormation one-click URL --> creates CloudSentinel-ScannerRole in user account
 
-The idea is simple — every scan Lambda just reads from AWS APIs and writes to the same DynamoDB table. Then my ai-explainer Lambda goes through all the unprocessed risks and calls Bedrock to add the AI explanation. The frontend reads everything through the risk-reader Lambda.
+2. User clicks "Scan Now"
+   Frontend --> POST /scan-cloud-infra (Cognito JWT required)
+   --> cloud-scanner Lambda
+         --> STS AssumeRole (into user account)
+         --> Boto3 clients: iam, s3, ec2, config
+         --> Scan checks run in parallel
+         --> Each finding: build_risk() --> DynamoDB put_item
 
----
+3. AI Enrichment (async, hourly)
+   EventBridge --> ai-explainer Lambda
+   --> Query DynamoDB for risks with empty aiExplanation
+   --> Bedrock InvokeModel (Claude 3 Haiku)
+   --> Update DynamoDB item with AI explanation
 
-## My module — cloud-scanner and the AI layer
+4. Display results
+   Frontend --> GET /risks?module=cloud-infra (Cognito JWT required)
+   --> risk-reader Lambda
+   --> DynamoDB Query on ModuleIndex GSI
+   --> Deduplicated, sorted by timestamp
 
-```mermaid
-flowchart LR
-    Trigger([POST /scan-cloud]) --> Scanner
+5. User disconnects
+   Frontend --> POST /disconnect (Cognito JWT required)
+   --> disconnect-handler Lambda
+         --> STS AssumeRole --> cloudformation:DeleteStack
+         --> Secrets Manager: delete GCP credentials
+         --> DynamoDB: batch delete all risk records for module
 
-    subgraph cloud-scanner Lambda
-        Scanner[lambda_handler] --> S3[scan_s3_buckets]
-        Scanner --> SG[scan_security_groups]
-        Scanner --> IAM[scan_iam_password_policy]
-        S3 --> Risk[build_risk]
-        SG --> Risk
-        IAM --> Risk
-        Risk --> Save[save to DynamoDB]
-    end
-
-    Save --> DDB[(DynamoDB)]
-
-    DDB --> Trigger2([trigger ai-explainer])
-
-    subgraph ai-explainer Lambda
-        Fetch[fetch OPEN risks\nwith no aiExplanation] --> Prompt[build prompt]
-        Prompt --> BR[Bedrock\nClaude 3 Haiku]
-        BR --> Update[update aiExplanation\nin DynamoDB]
-    end
-
-    style DDB fill:#4053D6,color:#fff
-    style BR fill:#FF9900,color:#000
+6. Session expiry
+   session.js: _doAutoLogout()
+   --> autoDisconnectAll() for every connected module
+   --> Same as step 5, runs for each module
+   --> Redirect to sign-in page
 ```
 
 ---
 
-## Chatbot flow — how it works
+## Scan Checks
 
-```mermaid
-sequenceDiagram
-    participant U as User
-    participant FE as Frontend
-    participant APIGW as API Gateway
-    participant Lambda as chatbot-handler
-    participant DDB as DynamoDB
-    participant BR as Bedrock
+### AWS Checks
 
-    U->>FE: types a question
-    FE->>APIGW: POST /chat { question, module }
-    APIGW->>Lambda: invoke
-    Lambda->>DDB: query risks by module (last 20)
-    DDB-->>Lambda: risk records
-    Lambda->>BR: InvokeModel with question + risk context
-    BR-->>Lambda: AI answer
-    Lambda-->>APIGW: { answer }
-    APIGW-->>FE: response
-    FE-->>U: show in chat bubble
-```
+| Check | Resource | Priority |
+|-------|----------|----------|
+| Missing IAM account password policy | IAM account | High |
+| Short IAM password policy (< 8 chars) | IAM account | Medium |
+| S3 bucket with public access not fully blocked | S3 bucket | High |
+| EC2 security group with SSH (22) open to 0.0.0.0/0 | EC2 security group | High |
+| EC2 security group with RDP (3389) open to 0.0.0.0/0 | EC2 security group | High |
+| AWS Config not enabled | AWS Config | Medium |
 
-I pass the top 20 risks as context to the model so it can answer questions specifically about the user's environment, not generic cloud security stuff.
+### GCP Checks
+
+| Check | Resource | Priority |
+|-------|----------|----------|
+| Firewall rule allowing SSH (22) from 0.0.0.0/0 | GCP Firewall | High |
+| Firewall rule allowing RDP (3389) from 0.0.0.0/0 | GCP Firewall | High |
 
 ---
 
-## DynamoDB structure
+## Risk Record Schema
 
-```mermaid
-flowchart TD
-    PK[resourceId - Partition Key] --> T[(cloudsentinel-risks)]
-    SK[riskTimestamp - Sort Key] --> T
-
-    T --> GSI1[GSI: module-index]
-    T --> GSI2[GSI: priority-index]
-    T --> GSI3[GSI: userId-module-index]
-
-    GSI1 --> Q1[query by module\nfor dashboard tabs]
-    GSI2 --> Q2[query High risks first\nfor summary view]
-    GSI3 --> Q3[notification-handler queries\nby userId and module]
+```json
+{
+  "resourceId":          "cloud-infra-S3 Bucket-my-bucket-<uuid>",
+  "riskTimestamp":       "2026-05-09T20:23:17Z",
+  "module":              "cloud-infra",
+  "cloudProvider":       "AWS",
+  "resource":            "S3 Bucket",
+  "resourceName":        "my-bucket",
+  "riskType":            "S3 Public Access Not Fully Blocked",
+  "riskReason":          "One or more Block Public Access settings are disabled.",
+  "riskPriority":        "High",
+  "remediationSteps":    ["Enable Block Public Access at bucket level", "..."],
+  "alternativeSolutions":["Use bucket policy to restrict access instead"],
+  "aiExplanation":       "This bucket could expose sensitive data to the internet...",
+  "riskCategory":        "Storage",
+  "status":              "OPEN",
+  "region":              "us-east-1"
+}
 ```
-
-Three GSIs now. The userId-module-index is new — notification-handler needs it to pull open High risks for a specific user after a scan finishes.
 
 ---
 
-## Step Functions orchestration (added in v2)
+## Chatbot Intelligence
 
-I added a Step Functions Express workflow to coordinate the scans. Before this, if you triggered a scan on the frontend it went directly to the Lambda. The problem is that all five module Lambdas run one after another on the same invocation, which is slow. With Step Functions, all five run in parallel inside a Parallel state.
+The chatbot has two response modes:
 
-```mermaid
-flowchart TD
-    Trigger([API call]) --> SFN[CloudSentinelScanOrchestrator\nStep Functions Express Workflow]
-    SFN --> Parallel[Parallel State\nall 5 scanners run at once]
-    Parallel --> AIX[ai-explainer\nBedrock call]
-    AIX --> Check{High risks?}
-    Check -->|yes| NH[notification-handler\nSNS email]
-    Check -->|no| Done([complete])
-    NH --> Done
-```
+1. **Bedrock (Claude 3)** -- used when Anthropic model access is granted in the AWS account.
+   Receives the full list of detected risks as context and generates a natural language response.
 
-Scan time went from about 10 minutes down to 2-3 minutes in practice. Each scanner state has a retry block with exponential backoff so transient AWS API throttles don't break the whole run.
+2. **Rule-based fallback** -- used when Bedrock is unavailable.
+   Handles questions about risk priority, remediation, comparison, and platform guidance.
+   Platform-level questions ("What does CloudSentinel do?", "Which module first?") are
+   answered without requiring any scan data.
 
 ---
 
-## SNS email notification flow
+## Security Controls
 
-When a scan finds High-priority risks, the notification-handler Lambda sends an email via SNS. The email has an HTML table listing the risks, a count by priority, and a direct link to the module dashboard.
-
-```mermaid
-sequenceDiagram
-    participant SFN as Step Functions
-    participant NH as notification-handler
-    participant DDB as DynamoDB
-    participant SNS as Amazon SNS
-    participant User as User Email
-
-    SFN->>NH: invoke with scanId and userId
-    NH->>DDB: query userId-module-index for OPEN High risks
-    DDB-->>NH: list of risk records
-    NH->>SNS: Publish HTML email
-    SNS-->>User: email delivered
-    NH->>DDB: mark risks as notified=true
-```
-
-The `notified=true` flag prevents the same risks from triggering another email on the next hourly EventBridge run. Threshold is configurable via Lambda env var — default is High only, can set to Medium or All.
+| Control | Implementation |
+|---------|---------------|
+| API authorization | Cognito JWT required on all endpoints |
+| Cross-account access | Read-only IAM role only (no write permissions) |
+| GCP credentials | Stored in Secrets Manager with KMS encryption |
+| Risk deduplication | resourceId collision detection at write time |
+| Credential revocation | Automated on disconnect via disconnect_handler |
+| Session management | Login-time based timer; auto-logout revokes all credentials |

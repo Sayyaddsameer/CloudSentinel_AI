@@ -1,160 +1,160 @@
-# Architecture — Frontend Portal
-## Bogavalli Akash
+# Frontend Portal -- Architecture
 
-How the portal is structured, how it connects to the backend, and what I added in v2.
+## Overview
+
+The CloudSentinel frontend is a static multi-page application hosted on
+AWS S3 with static website hosting. It uses vanilla HTML, CSS, and JavaScript
+with no frontend framework dependency, keeping bundle size minimal and
+deployment straightforward.
 
 ---
 
-## Overall flow
+## Pages
 
-```mermaid
-flowchart TD
-    User([User]) --> Amplify[AWS Amplify\nStatic hosting]
+| File | Route | Auth Required |
+|------|-------|---------------|
+| `landing.html` | / | No -- public marketing page |
+| `index.html` | /index.html | No -- sign-in page |
+| `signup.html` | /signup.html | No -- account registration |
+| `dashboard.html` | /dashboard.html | Yes |
+| `cloud.html` | /cloud.html | Yes |
+| `devops.html` | /devops.html | Yes |
+| `fullstack.html` | /fullstack.html | Yes |
+| `data.html` | /data.html | Yes |
+| `mobile.html` | /mobile.html | Yes |
+| `history.html` | /history.html | Yes |
+| `terms.html` | /terms.html | No |
+| `privacy.html` | /privacy.html | No |
 
-    subgraph Portal pages
-        Amplify --> Login[index.html\nLogin]
-        Amplify --> Dash[dashboard.html\nMain Hub]
-        Amplify --> Signup[signup.html\nRegister]
-        Amplify --> History[history.html\nRisk History]
-        Amplify --> Modules[cloud/devops/fullstack/data/mobile\nModule pages]
-    end
+---
 
-    Login --> Cognito[Amazon Cognito]
-    Signup --> Cognito
-    Cognito -->|returns JWT tokens| Dash
+## JavaScript Modules
 
-    Dash --> API[API Gateway\nGET /risks?module=...]
-    Dash --> Scan[POST /scan-*]
-    Modules --> ChatAPI[POST /chat]
+| File | Purpose |
+|------|---------|
+| `js/env.js` | Runtime config: API URL, Cognito Pool ID, Client ID, Region |
+| `js/auth.js` | Cognito sign-in, sign-up, sign-out, forgot password, get/clear session |
+| `js/session.js` | Login-time countdown timer, auto-logout, credential revocation |
+| `js/app.js` | Shared utilities: API calls, risk rendering, chatbot, disconnect API |
+| `js/theme.js` | Dark/light mode toggle with localStorage persistence |
+| `js/cloud.js` | Cloud Infrastructure module logic |
+| `js/devops.js` | DevOps Intelligence module logic |
+| `js/fullstack.js` | Full-Stack Intelligence module logic |
+| `js/data.js` | Data Engineering module logic |
+| `js/mobile.js` | Mobile Backend Intelligence module logic |
+| `js/dashboard.js` | Dashboard overview with platform-wide chatbot |
+| `js/chatbot.js` | Chatbot UI: open/close, message rendering, Markdown support |
 
-    API --> Cards[Risk cards rendered in UI]
-    ChatAPI --> Bubble[Chat response bubble]
+---
 
-    style Cognito fill:#D13212,color:#fff
-    style Amplify fill:#1A9C3E,color:#fff
-    style API fill:#8C4FFF,color:#fff
+## Authentication Flow
+
+```
+landing.html  -->  index.html (Sign In)
+                         |
+                   auth.js: cognitoSignIn()
+                         |
+                   Cognito returns IdToken, AccessToken, RefreshToken
+                         |
+                   Stored in localStorage: cs_user = { name, email, token, issuedAt }
+                         |
+                   requireAuth() called on every protected page
+                         |
+                   getToken() sends IdToken as Authorization header
+```
+
+### Forgot Password Flow (3 steps)
+
+```
+1. User enters email -> auth.js: forgotPassword()
+   -> Cognito ForgotPassword API -> sends verification code to email
+
+2. User enters code + new password -> auth.js: confirmForgotPassword()
+   -> Cognito ConfirmForgotPassword API -> password updated
+
+3. Redirect to sign-in
 ```
 
 ---
 
-## Login flow in detail
+## Session Timer
 
-```mermaid
-sequenceDiagram
-    participant U as User
-    participant FE as index.html + auth.js
-    participant Cognito as Amazon Cognito
-    participant LS as localStorage
+The session timer is based on **login time** (stored in `cs_user.issuedAt`),
+NOT on mouse/keyboard activity. This means:
 
-    U->>FE: enters email + password, clicks Sign In
-    FE->>Cognito: POST InitiateAuth\n{ AuthFlow: USER_PASSWORD_AUTH }
-    Cognito-->>FE: AccessToken + IdToken + RefreshToken
+- The timer counts down steadily regardless of user activity
+- Switching tabs or navigating between module pages does NOT reset the timer
+- On expiry: `autoDisconnectAll()` is called before redirect
 
-    FE->>LS: store tokens
-    FE->>FE: redirect to dashboard.html
-
-    Note over FE: On every API call,\nread token from localStorage\nand put in Authorization header
+```
+initSessionTimer()
+  --> _computeRemaining() = timeout - (now - session.issuedAt)
+  --> _startInterval() recalculates every second from issuedAt
+  --> At 5 min: warning toast
+  --> At 1 min: modal with "Extend Session" button
+  --> At 0:   _doAutoLogout()
+                  --> autoDisconnectAll() [calls POST /disconnect for each module]
+                  --> clearSession()
+                  --> redirect to index.html?reason=timeout
 ```
 
 ---
 
-## Dashboard tab state
+## Automated Disconnect (Credential Revocation)
 
-```mermaid
-stateDiagram-v2
-    [*] --> CheckAuth
-    CheckAuth --> LoginPage: no token
-    CheckAuth --> DefaultTab: token found
+When a user clicks **Disconnect** on any module page, or when their session expires:
 
-    DefaultTab --> FetchRisks: load cloud-infra tab
-    FetchRisks --> ShowCards: API returns data
-    FetchRisks --> ShowEmpty: API returns empty
-    FetchRisks --> ShowError: API or network error
-
-    ShowCards --> ClickTab: user switches module
-    ClickTab --> FetchRisks
-
-    ShowCards --> ScanNow: user clicks Scan button
-    ScanNow --> Loading: POST to /scan-*
-    Loading --> FetchRisks: scan done
+```
+performDisconnect() / autoDisconnectAll()
+  --> callDisconnectApi(module, provider)
+        --> POST /disconnect { module, provider, roleArn, stackName }
+        --> disconnect_handler Lambda:
+              AWS: STS AssumeRole --> cloudformation:DeleteStack
+              GCP: secretsmanager:DeleteSecret (ForceDeleteWithoutRecovery)
+              DynamoDB: batch delete all risk records for module
+  --> localStorage cleared: cs_conn_*, cs_scan_*, cs_history_*
 ```
 
 ---
 
-## File structure
+## Chatbot Architecture
 
-```mermaid
-flowchart LR
-    FE[modules/frontend] --> Pages
-    FE --> CSS[css/styles.css]
-    FE --> Scripts[js/]
-    FE --> Config[amplify.yml]
+The chatbot appears as a floating action button (FAB) on all module pages
+and on the main dashboard.
 
-    Pages --> I[index.html - login]
-    Pages --> D[dashboard.html - main hub]
-    Pages --> S[signup.html - registration]
-    Pages --> H[history.html - scan history]
-    Pages --> M[cloud, devops, fullstack, data, mobile html]
+**Module pages** (cloud, devops, fullstack, data, mobile):
+- Initialized by `initChatbot(module)` in `app.js`
+- Chips: "Highest risk right now?", "How do I fix this?", "Compare priorities", "Best security practice?"
+- Sends question + module context to POST /chat
 
-    Scripts --> Auth[auth.js - Cognito and demo mode]
-    Scripts --> App[app.js - shared utilities, risk rendering]
-    Scripts --> Theme[theme.js - light/dark mode, anti-flash]
-    Scripts --> Session[session.js - idle timeout, countdown, modal]
-    Scripts --> ModJS[cloud, devops, fullstack, data, mobile js]
-```
+**Dashboard page**:
+- Initialized by `initDashboardChatbot()` in `dashboard.js`
+- Chips: "What does CloudSentinel do?", "Which module first?", "How to connect AWS?", "What risks detected?"
+- Platform-level Q&A + fallback to risk-specific answers
 
----
-
-## Amplify build pipeline
-
-```mermaid
-flowchart LR
-    Push([git push feature/frontend]) --> GH[GitHub]
-    GH --> Amplify[Amplify auto-build]
-
-    subgraph Build steps
-        Amplify --> P[Provision]
-        P --> B[Build - echo static]
-        B --> Dep[Deploy modules/frontend]
-        Dep --> V[URL live]
-    end
-
-    style GH fill:#24292e,color:#fff
-    style Amplify fill:#1A9C3E,color:#fff
-```
-
-No npm build step needed since it's pure HTML/CSS/JS. Amplify just copies the files.
+**Message rendering** (in `appendBotMessage()`):
+- `**text**` -> bold
+- `` `code` `` -> inline code
+- `\n` -> line break
+- Numbered lists preserved
 
 ---
 
-## Session management and security (v2)
+## Dark / Light Mode
 
-I added a proper session timeout system because leaving the dashboard open indefinitely is a security risk, especially since the module connections give read access to the user's AWS account.
+Landing page: standalone toggle with `localStorage` key `cs_landing_theme`.
+Dashboard and module pages: `theme.js` with `localStorage` key `cs_theme`.
+Default: dark mode.
 
-How the session timer works:
-- session.js starts a 30-minute idle timer on login
-- Any activity (mouse, keyboard, scroll) resets the timer
-- At 5 minutes remaining, a toast notification appears
-- At 60 seconds, a modal pops up with a Stay Logged In button
-- If no action, auto-logout fires and redirects to login with reason=timeout in the URL
-- Users can adjust the timeout from 15 minutes up to 8 hours by clicking the timer pill in the navbar
+---
 
-Login rate limiting:
-- After 3 failed attempts the account locks for 60 seconds
-- 5 attempts locks for 5 minutes, 10 attempts locks for 30 minutes
-- Live countdown shows in a banner during lockout
-- After the second fail an attempt counter warns the user before the threshold
+## Deployment
 
-Password strength meter on signup:
-- Four-level meter based on length, uppercase, number, symbol presence
-- Each requirement shows as a chip that turns green when met
-- Weak passwords are blocked at submission before the API is called
+```bash
+# Sync all frontend files to S3
+python sync_frontend.py
 
-Light and dark mode:
-- theme.js runs in the head before the body renders so there is no flash of the wrong theme on load
-- Toggle button in the navbar persists preference to localStorage
-
-Scan history (history.html):
-- Shows all past scans with trend indicators (more/fewer/same vs previous scan)
-- Filter by module, export as JSON, or clear all
-- Dashboard shows the 10 most recent scans in a Recent Activity feed at the bottom
+# Live URLs
+Landing: http://cloudsentinel-frontend-<accountid>.s3-website-us-east-1.amazonaws.com/landing.html
+Sign In: http://cloudsentinel-frontend-<accountid>.s3-website-us-east-1.amazonaws.com/index.html
+```
