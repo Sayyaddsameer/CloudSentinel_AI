@@ -496,15 +496,14 @@ def create_cfn_template_bucket(s3, account_id: str, cfg: dict, step: Step) -> st
             s3.create_bucket(**kwargs)
             log.info("S3 CFN bucket '%s' created.", cfn_bucket)
         except s3.exceptions.BucketAlreadyOwnedByYou:
-            log.info("S3 CFN bucket '%s' already exists — skipping creation.", cfn_bucket)
+            log.info("S3 CFN bucket '%s' already exists — skipping.", cfn_bucket)
         except Exception as exc:
-            # BucketAlreadyExists raised when another account owns the name
             if "BucketAlreadyExists" in type(exc).__name__:
                 log.warning("Bucket name '%s' already taken globally. Skipping.", cfn_bucket)
                 return
             raise
 
-        # Block all public access
+        # Step 1: Lift the account-level block so a bucket policy can take effect
         s3.put_public_access_block(
             Bucket=cfn_bucket,
             PublicAccessBlockConfiguration={
@@ -515,7 +514,23 @@ def create_cfn_template_bucket(s3, account_id: str, cfg: dict, step: Step) -> st
             },
         )
 
-        # Upload the CloudFormation template
+        # Step 2: Apply a bucket policy granting public s3:GetObject on all objects
+        # This is required so CloudFormation running in ANY external account can
+        # fetch the template URL without authentication errors.
+        public_policy = json.dumps({
+            "Version": "2012-10-17",
+            "Statement": [{
+                "Sid":       "PublicReadCFNTemplate",
+                "Effect":    "Allow",
+                "Principal": "*",
+                "Action":    "s3:GetObject",
+                "Resource":  f"arn:aws:s3:::{cfn_bucket}/*",
+            }],
+        })
+        s3.put_bucket_policy(Bucket=cfn_bucket, Policy=public_policy)
+        log.info("Public-read bucket policy applied to '%s'.", cfn_bucket)
+
+        # Step 3: Upload the CloudFormation template
         if template_src.exists():
             s3.upload_file(
                 str(template_src),
