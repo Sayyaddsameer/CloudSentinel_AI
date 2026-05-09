@@ -209,16 +209,59 @@
     window.location.href = 'index.html';
   }
 
+  /* ── Forgot Password — sends code to email ───────────────── */
+  async function forgotPassword(email) {
+    _assertConfigured();
+    const res = await fetch(COGNITO_URL, {
+      method:  'POST',
+      headers: {
+        'Content-Type': 'application/x-amz-json-1.1',
+        'X-Amz-Target': 'AWSCognitoIdentityProviderService.ForgotPassword',
+      },
+      body: JSON.stringify({ ClientId: CLIENT_ID, Username: email }),
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err.message || err.__type || 'Failed to send reset code.');
+    }
+    return true;
+  }
+
+  /* ── Confirm Forgot Password — verifies code + sets new pw ─ */
+  async function confirmForgotPassword(email, code, newPassword) {
+    _assertConfigured();
+    const res = await fetch(COGNITO_URL, {
+      method:  'POST',
+      headers: {
+        'Content-Type': 'application/x-amz-json-1.1',
+        'X-Amz-Target': 'AWSCognitoIdentityProviderService.ConfirmForgotPassword',
+      },
+      body: JSON.stringify({
+        ClientId:         CLIENT_ID,
+        Username:         email,
+        ConfirmationCode: code,
+        Password:         newPassword,
+      }),
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err.message || err.__type || 'Password reset failed.');
+    }
+    return true;
+  }
+
   /* ── Expose globally ──────────────────────────────────────── */
-  window.setSession     = setSession;
-  window.getSession     = getSession;
-  window.clearSession   = clearSession;
-  window.getUser        = getUser;
-  window.requireAuth    = requireAuth;
-  window.getToken       = getToken;
-  window.login          = login;
-  window.register       = register;
-  window.confirmSignUp  = confirmSignUp;
-  window.refreshSession = refreshSession;
-  window.logout         = logout;
+  window.setSession              = setSession;
+  window.getSession              = getSession;
+  window.clearSession            = clearSession;
+  window.getUser                 = getUser;
+  window.requireAuth             = requireAuth;
+  window.getToken                = getToken;
+  window.login                   = login;
+  window.register                = register;
+  window.confirmSignUp           = confirmSignUp;
+  window.refreshSession          = refreshSession;
+  window.logout                  = logout;
+  window.forgotPassword          = forgotPassword;
+  window.confirmForgotPassword   = confirmForgotPassword;
 })();

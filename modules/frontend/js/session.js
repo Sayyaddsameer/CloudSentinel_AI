@@ -1,4 +1,4 @@
-﻿/**
+/**
  * session.js — Idle session timeout with configurable duration
  * Default: 30 minutes. Resets on any user interaction.
  * Injects countdown pill into navbar automatically.
@@ -24,14 +24,26 @@ function setSessionTimeout(seconds) {
   showToast(`Session timeout set to ${Math.round(seconds/60)} minutes`, 'success');
 }
 
+const LAST_ACTIVITY_KEY   = 'cs_last_activity';
+
+function _savedRemaining() {
+  const timeout  = getSessionTimeout();
+  const lastAct  = parseInt(localStorage.getItem(LAST_ACTIVITY_KEY) || '0', 10);
+  if (!lastAct) return timeout;
+  const elapsed = Math.floor((Date.now() - lastAct) / 1000);
+  return Math.max(0, timeout - elapsed);
+}
+
 function initSessionTimer() {
-  _sessionRemaining = getSessionTimeout();
+  _sessionRemaining = _savedRemaining();
+  if (_sessionRemaining <= 0) { _doAutoLogout(); return; }
   _injectPill();
   _startInterval();
   _registerActivityListeners();
 }
 
 function resetIdleTimer() {
+  localStorage.setItem(LAST_ACTIVITY_KEY, Date.now());
   _sessionRemaining = getSessionTimeout();
   _updatePillDisplay();
   _updatePillColor();
@@ -149,6 +161,7 @@ function _showSessionWarnModal() {
 
 function _doAutoLogout() {
   try { clearSession(); } catch(e) {}
+  localStorage.removeItem(LAST_ACTIVITY_KEY);
   window.location.href = 'index.html?reason=timeout';
 }
 

@@ -1,10 +1,10 @@
-<!DOCTYPE html>
+﻿<!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <meta name="description" content="CloudSentinel risk intelligence dashboard">
-  <title>Dashboard — CloudSentinel</title>
+  <title>Dashboard â€” CloudSentinel</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="css/styles.css">
@@ -204,6 +204,20 @@
 
 </div><!-- /page-content -->
 
+<button id="chatbot-fab" title="Ask CloudSentinel AI about the platform">AI</button>
+<div id="chatbot-panel">
+  <div class="chatbot-header">
+    <div class="chatbot-header-icon">AI</div>
+    <div class="chatbot-header-info"><div class="chatbot-header-title">CloudSentinel AI</div><div class="chatbot-header-sub">Online &middot; Platform Guide</div></div>
+    <span class="chatbot-close" id="chatbot-close">&#10005;</span>
+  </div>
+  <div class="chatbot-messages" id="chatbot-messages"></div>
+  <div class="chatbot-input-area">
+    <input class="chatbot-input" id="chatbot-input" placeholder="Ask about any module or feature..." type="text">
+    <button class="chatbot-send" id="chatbot-send">&#10148;</button>
+  </div>
+</div>
+
 <div id="toast-container"></div>
 
 <script src="js/auth.js"></script>
@@ -212,3 +226,4 @@
 <script src="js/dashboard.js"></script>
 </body>
 </html>
+

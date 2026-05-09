@@ -8,12 +8,11 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="css/styles.css">
-  <script src="js/theme.js"></script><!-- runs before body to prevent flash -->
+  <script src="js/theme.js"></script>
   <script src="js/env.js"></script>
 </head>
 <body>
 
-<!-- Theme toggle -->
 <div style="position:fixed;top:1rem;right:1rem;z-index:100">
   <button class="theme-toggle-btn" onclick="toggleTheme()" id="theme-toggle">Light</button>
 </div>
@@ -31,10 +30,10 @@
 
     <!-- Heading -->
     <div class="flex items-center justify-between mb-1" style="margin-bottom:1.25rem">
-      <h1 class="auth-heading" style="margin-bottom:0">Welcome back</h1>
+      <h1 class="auth-heading" style="margin-bottom:0" id="card-heading">Welcome back</h1>
       <span class="security-pill">Secured</span>
     </div>
-    <p class="auth-sub">Sign in to your risk intelligence dashboard</p>
+    <p class="auth-sub" id="card-sub">Sign in to your risk intelligence dashboard</p>
 
     <!-- Session timeout notice -->
     <div id="timeout-banner" style="display:none" class="info-box warning-box" style="margin-bottom:1rem">
@@ -50,38 +49,110 @@
     <!-- Error -->
     <div class="auth-error" id="auth-error"></div>
 
-    <!-- Form -->
-    <form class="auth-form" id="login-form" novalidate autocomplete="on">
-      <div class="form-group">
-        <label class="form-label" for="email">Email address</label>
-        <input class="form-input" id="email" type="email"
-          placeholder="you@company.com" autocomplete="email" required>
-        <span class="form-error" id="email-err">Please enter a valid email address</span>
-      </div>
-
-      <div class="form-group">
-        <label class="form-label" for="password">Password</label>
-        <div class="input-group">
-          <input class="form-input" id="password" type="password"
-            placeholder="&bull;&bull;&bull;&bull;&bull;&bull;&bull;&bull;" autocomplete="current-password" required>
-          <span class="input-icon" id="toggle-password" title="Show/hide password">show</span>
+    <!-- ── Step 1: Sign In Form ── -->
+    <div id="signin-step">
+      <form class="auth-form" id="login-form" novalidate autocomplete="on">
+        <div class="form-group">
+          <label class="form-label" for="email">Email address</label>
+          <input class="form-input" id="email" type="email"
+            placeholder="you@company.com" autocomplete="email" required>
+          <span class="form-error" id="email-err">Please enter a valid email address</span>
         </div>
+
+        <div class="form-group">
+          <div class="flex items-center justify-between" style="margin-bottom:.4rem">
+            <label class="form-label" for="password" style="margin-bottom:0">Password</label>
+            <button type="button" id="forgot-link"
+              style="background:none;border:none;cursor:pointer;font-size:.83rem;padding:0;color:var(--accent)">
+              Forgot password?
+            </button>
+          </div>
+          <div class="input-group">
+            <input class="form-input" id="password" type="password"
+              placeholder="&#x2022;&#x2022;&#x2022;&#x2022;&#x2022;&#x2022;&#x2022;&#x2022;" autocomplete="current-password" required>
+            <span class="input-icon" id="toggle-password" title="Show/hide password">show</span>
+          </div>
+        </div>
+
+        <!-- Attempt counter hint -->
+        <div id="attempt-hint" style="display:none;font-size:.78rem;color:var(--medium);margin-top:-.5rem">
+          [!] <span id="attempt-count"></span> failed attempt(s). Account locks after 5.
+        </div>
+
+        <button type="submit" class="btn btn-gradient btn-lg w-full auth-submit" id="login-btn">
+          <span id="btn-text">Sign In</span>
+          <span id="btn-icon">&#8594;</span>
+        </button>
+      </form>
+
+      <p class="auth-footer">
+        Don't have an account? <a href="signup.html" class="auth-link">Create account</a>
+        &nbsp;·&nbsp; <a href="landing.html" class="auth-link">Back to home</a>
+      </p>
+    </div>
+
+    <!-- ── Step 2: Forgot Password — enter email ── -->
+    <div id="forgot-step" style="display:none">
+      <div style="text-align:center;margin-bottom:1.5rem">
+        <div style="font-size:2.5rem;margin-bottom:.5rem">&#128273;</div>
+        <h2 class="auth-heading" style="margin-bottom:.5rem">Reset password</h2>
+        <p class="auth-sub">Enter your account email — we'll send a verification code</p>
       </div>
+      <div class="auth-error" id="forgot-error"></div>
+      <form class="auth-form" id="forgot-form" novalidate>
+        <div class="form-group">
+          <label class="form-label" for="forgot-email">Email address</label>
+          <input class="form-input" id="forgot-email" type="email" placeholder="you@company.com" required>
+          <span class="form-error" id="forgot-email-err">Please enter a valid email address</span>
+        </div>
+        <button type="submit" class="btn btn-gradient btn-lg w-full auth-submit" id="forgot-btn">
+          <span id="forgot-btn-text">Send Reset Code</span>
+          <span>&#8594;</span>
+        </button>
+      </form>
+      <p class="auth-footer">
+        <a href="#" class="auth-link" id="back-to-signin">&#8592; Back to Sign In</a>
+      </p>
+    </div>
 
-      <!-- Attempt counter hint -->
-      <div id="attempt-hint" style="display:none;font-size:.78rem;color:var(--medium);margin-top:-.5rem">
-        [!] <span id="attempt-count"></span> failed attempt(s). Account locks after 5.
+    <!-- ── Step 3: Enter code + new password ── -->
+    <div id="reset-step" style="display:none">
+      <div style="text-align:center;margin-bottom:1.5rem">
+        <div style="font-size:2.5rem;margin-bottom:.5rem">&#9993;</div>
+        <h2 class="auth-heading" style="margin-bottom:.5rem">Check your email</h2>
+        <p class="auth-sub">Enter the 6-digit code sent to <strong id="reset-email-display"></strong></p>
       </div>
+      <div class="auth-error" id="reset-error"></div>
+      <form class="auth-form" id="reset-form" novalidate>
+        <div class="form-group">
+          <label class="form-label" for="reset-code">Verification code</label>
+          <input class="form-input" id="reset-code" type="text" inputmode="numeric" maxlength="6"
+            placeholder="123456" autocomplete="one-time-code"
+            style="font-size:1.4rem;letter-spacing:.5rem;text-align:center" required>
+          <span class="form-error" id="reset-code-err">Please enter the 6-digit code</span>
+        </div>
+        <div class="form-group">
+          <label class="form-label" for="new-password">New password</label>
+          <div class="input-group">
+            <input class="form-input" id="new-password" type="password" placeholder="Min. 12 characters" required>
+            <span class="input-icon" id="toggle-new-pw">show</span>
+          </div>
+        </div>
+        <div class="form-group">
+          <label class="form-label" for="confirm-new-password">Confirm new password</label>
+          <input class="form-input" id="confirm-new-password" type="password" placeholder="Repeat new password" required>
+          <span class="form-error" id="confirm-new-err">Passwords do not match</span>
+        </div>
+        <button type="submit" class="btn btn-gradient btn-lg w-full auth-submit" id="reset-btn">
+          <span id="reset-btn-text">Set New Password</span>
+          <span>&#8594;</span>
+        </button>
+      </form>
+      <p class="auth-footer">
+        <a href="#" class="auth-link" id="back-to-forgot">&#8592; Try a different email</a>
+      </p>
+    </div>
 
-      <button type="submit" class="btn btn-gradient btn-lg w-full auth-submit" id="login-btn">
-        <span id="btn-text">Sign In</span>
-        <span id="btn-icon">&#8594;</span>
-      </button>
-    </form>
-
-    <p class="auth-footer">
-      Don't have an account? <a href="signup.html" class="auth-link">Create account</a>
-    </p>
   </div>
 </div>
 
@@ -97,12 +168,31 @@
     document.getElementById('timeout-banner').style.display = 'flex';
   }
 
-  /* ── Password toggle ── */
+  /* ── Utility: show/hide steps ── */
+  function showStep(id) {
+    ['signin-step','forgot-step','reset-step'].forEach(s =>
+      document.getElementById(s).style.display = s === id ? 'block' : 'none'
+    );
+  }
+
+  /* ── Password toggle (sign in) ── */
   document.getElementById('toggle-password').addEventListener('click', function () {
     const pw = document.getElementById('password');
     pw.type = pw.type === 'password' ? 'text' : 'password';
     this.textContent = pw.type === 'password' ? 'show' : 'hide';
   });
+
+  /* ── Password toggle (reset) ── */
+  document.getElementById('toggle-new-pw').addEventListener('click', function () {
+    const pw = document.getElementById('new-password');
+    pw.type = pw.type === 'password' ? 'text' : 'password';
+    this.textContent = pw.type === 'password' ? 'show' : 'hide';
+  });
+
+  /* ── Navigation ── */
+  document.getElementById('forgot-link').addEventListener('click', () => showStep('forgot-step'));
+  document.getElementById('back-to-signin').addEventListener('click', e => { e.preventDefault(); showStep('signin-step'); });
+  document.getElementById('back-to-forgot').addEventListener('click', e => { e.preventDefault(); showStep('forgot-step'); });
 
   /* ── Email validation ── */
   const emailRe = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
@@ -147,10 +237,9 @@
     }, 1000);
   }
 
-  /* ── Submit handler ── */
+  /* ── Sign In submit ── */
   document.getElementById('login-form').addEventListener('submit', async function (e) {
     e.preventDefault();
-
     const email    = document.getElementById('email').value.trim();
     const password = document.getElementById('password').value;
     const errEl    = document.getElementById('auth-error');
@@ -159,12 +248,10 @@
     const btnIcon  = document.getElementById('btn-icon');
     const btn      = document.getElementById('login-btn');
 
-    /* Reset errors */
     errEl.classList.remove('show');
     document.getElementById('email').classList.remove('error');
     emailErr.classList.remove('show');
 
-    /* Validate */
     if (!email || !emailRe.test(email)) {
       document.getElementById('email').classList.add('error');
       emailErr.classList.add('show');
@@ -176,14 +263,9 @@
       return;
     }
 
-    /* Client-side rate limit */
     const rlData = getRlData(email);
-    if (rlData.lockedUntil > Date.now()) {
-      startLockoutCountdown(rlData.lockedUntil);
-      return;
-    }
+    if (rlData.lockedUntil > Date.now()) { startLockoutCountdown(rlData.lockedUntil); return; }
 
-    /* Submit */
     btn.disabled = true;
     btnText.textContent = 'Signing in...';
     btnIcon.textContent = '[...]';
@@ -197,7 +279,6 @@
       btnText.textContent = 'Sign In';
       btnIcon.innerHTML   = '&#8594;';
       btn.disabled = false;
-
       if (d.lockedUntil > Date.now()) {
         startLockoutCountdown(d.lockedUntil);
         document.getElementById('attempt-hint').style.display = 'none';
@@ -211,6 +292,92 @@
       }
     }
   });
+
+  /* ── Forgot Password submit ── */
+  let _resetEmail = '';
+  document.getElementById('forgot-form').addEventListener('submit', async function (e) {
+    e.preventDefault();
+    const email  = document.getElementById('forgot-email').value.trim();
+    const errEl  = document.getElementById('forgot-error');
+    const btn    = document.getElementById('forgot-btn');
+    const btnTxt = document.getElementById('forgot-btn-text');
+
+    errEl.classList.remove('show');
+    if (!email || !emailRe.test(email)) {
+      document.getElementById('forgot-email-err').classList.add('show');
+      return;
+    }
+    document.getElementById('forgot-email-err').classList.remove('show');
+
+    btn.disabled = true;
+    btnTxt.textContent = 'Sending code...';
+    try {
+      await forgotPassword(email);
+      _resetEmail = email;
+      document.getElementById('reset-email-display').textContent = email;
+      showStep('reset-step');
+    } catch (err) {
+      errEl.textContent = err.message || 'Could not send reset code. Check your email address.';
+      errEl.classList.add('show');
+      btn.disabled = false;
+      btnTxt.textContent = 'Send Reset Code';
+    }
+  });
+
+  /* ── Reset Password submit ── */
+  document.getElementById('reset-form').addEventListener('submit', async function (e) {
+    e.preventDefault();
+    const code       = document.getElementById('reset-code').value.trim();
+    const newPw      = document.getElementById('new-password').value;
+    const confirmPw  = document.getElementById('confirm-new-password').value;
+    const errEl      = document.getElementById('reset-error');
+    const btn        = document.getElementById('reset-btn');
+    const btnTxt     = document.getElementById('reset-btn-text');
+
+    errEl.classList.remove('show');
+    let valid = true;
+
+    if (!code || code.length < 6) {
+      document.getElementById('reset-code-err').classList.add('show');
+      valid = false;
+    } else {
+      document.getElementById('reset-code-err').classList.remove('show');
+    }
+    if (newPw.length < 12) {
+      errEl.textContent = 'Password must be at least 12 characters.';
+      errEl.classList.add('show');
+      valid = false;
+    }
+    if (newPw !== confirmPw) {
+      document.getElementById('confirm-new-err').classList.add('show');
+      valid = false;
+    } else {
+      document.getElementById('confirm-new-err').classList.remove('show');
+    }
+    if (!valid) return;
+
+    btn.disabled = true;
+    btnTxt.textContent = 'Resetting...';
+    try {
+      await confirmForgotPassword(_resetEmail, code, newPw);
+      window.location.href = 'index.html?reset=1';
+    } catch (err) {
+      errEl.textContent = err.message || 'Invalid code or password requirements not met.';
+      errEl.classList.add('show');
+      btn.disabled = false;
+      btnTxt.textContent = 'Set New Password';
+    }
+  });
+
+  /* ── Show password reset success ── */
+  if (new URLSearchParams(location.search).get('reset') === '1') {
+    const errEl = document.getElementById('auth-error');
+    errEl.textContent = '✓ Password reset successfully. Please sign in with your new password.';
+    errEl.classList.add('show');
+    errEl.style.background = 'rgba(0,200,100,0.1)';
+    errEl.style.color = 'var(--low)';
+    errEl.style.borderColor = 'var(--low)';
+  }
 </script>
 </body>
 </html>

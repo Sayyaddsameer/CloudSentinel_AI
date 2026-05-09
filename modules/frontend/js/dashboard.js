@@ -168,3 +168,34 @@ function renderActivityFeed() {
 
 /* ── Start ────────────────────────────────────────────────── */
 document.addEventListener('DOMContentLoaded', initDashboard);
+
+/* -- Dashboard Chatbot with platform-level chips -- */
+const DASHBOARD_CHIPS = [
+  'What does CloudSentinel do?',
+  'Which module should I use first?',
+  'How do I connect my AWS account?',
+  'What risks can you detect?',
+];
+
+function initDashboardChatbot() {
+  // Override chips for dashboard context
+  window._dashboardChips = DASHBOARD_CHIPS;
+  const origChips = window.CHAT_CHIPS;
+  window.CHAT_CHIPS = DASHBOARD_CHIPS;
+  initChatbot('cloud-infra');
+  window.CHAT_CHIPS = origChips;
+
+  // Override the greeting for dashboard
+  const msgs = document.getElementById('chatbot-messages');
+  if (msgs && msgs.children.length === 1) {
+    msgs.innerHTML = '';
+    appendBotMessage(
+      "Hi! I'm CloudSentinel AI. I can help you understand the platform and all 5 security modules.<br><br>" +
+      "Use the chips above for quick answers, or ask me anything about Cloud, DevOps, Full-Stack, Data Engineering, or Mobile security scanning!"
+    );
+  }
+}
+
+document.addEventListener('DOMContentLoaded', () => {
+  initDashboardChatbot();
+});

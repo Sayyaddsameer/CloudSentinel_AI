@@ -1,0 +1,466 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="description" content="CloudSentinel AI — Intelligent cloud security scanning for AWS and GCP. Detect misconfigurations, IAM risks, and compliance gaps in real time.">
+  <title>CloudSentinel AI — Cloud Security Intelligence</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --bg: #08090d;
+      --bg2: #0f1117;
+      --bg3: #161820;
+      --border: rgba(255,255,255,0.07);
+      --accent: #6c63ff;
+      --accent2: #a78bfa;
+      --accent3: #38bdf8;
+      --high: #f87171;
+      --medium: #fb923c;
+      --low: #4ade80;
+      --text: #f1f5f9;
+      --text2: #94a3b8;
+      --text3: #64748b;
+      --card: rgba(255,255,255,0.04);
+      --card-hover: rgba(255,255,255,0.07);
+      --glow: 0 0 80px rgba(108,99,255,0.15);
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    html { scroll-behavior: smooth; }
+    body {
+      font-family: 'Inter', -apple-system, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      line-height: 1.6;
+      overflow-x: hidden;
+    }
+
+    /* ── Navbar ── */
+    .nav {
+      position: fixed; top: 0; left: 0; right: 0; z-index: 100;
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 1rem 2.5rem;
+      background: rgba(8,9,13,0.85);
+      backdrop-filter: blur(20px);
+      border-bottom: 1px solid var(--border);
+    }
+    .nav-logo { display: flex; align-items: center; gap: .6rem; text-decoration: none; }
+    .nav-logo-icon {
+      width: 36px; height: 36px; border-radius: 10px;
+      background: linear-gradient(135deg,#6c63ff,#a78bfa);
+      display: flex; align-items: center; justify-content: center;
+      font-weight: 800; font-size: .85rem; color: white; letter-spacing: -.5px;
+    }
+    .nav-logo-name { font-weight: 700; font-size: 1.05rem; color: var(--text); }
+    .nav-actions { display: flex; gap: .75rem; align-items: center; }
+    .btn-nav-outline {
+      padding: .45rem 1.1rem; border-radius: 8px; font-size: .88rem; font-weight: 500;
+      border: 1px solid rgba(255,255,255,0.15); color: var(--text2);
+      text-decoration: none; transition: all .2s;
+    }
+    .btn-nav-outline:hover { border-color: var(--accent); color: var(--text); }
+    .btn-nav-primary {
+      padding: .45rem 1.3rem; border-radius: 8px; font-size: .88rem; font-weight: 600;
+      background: linear-gradient(135deg,#6c63ff,#a78bfa);
+      color: white; text-decoration: none; transition: all .2s;
+      box-shadow: 0 4px 15px rgba(108,99,255,0.3);
+    }
+    .btn-nav-primary:hover { transform: translateY(-1px); box-shadow: 0 6px 20px rgba(108,99,255,0.4); }
+
+    /* ── Hero ── */
+    .hero {
+      min-height: 100vh;
+      display: flex; align-items: center; justify-content: center;
+      padding: 8rem 2rem 5rem;
+      position: relative; text-align: center;
+      overflow: hidden;
+    }
+    .hero-bg-orb {
+      position: absolute; border-radius: 50%;
+      filter: blur(80px); opacity: .3; pointer-events: none;
+    }
+    .orb1 { width: 600px; height: 600px; top: -150px; left: -150px; background: radial-gradient(circle,#6c63ff,transparent); }
+    .orb2 { width: 400px; height: 400px; bottom: -100px; right: -100px; background: radial-gradient(circle,#38bdf8,transparent); }
+    .orb3 { width: 300px; height: 300px; top: 40%; left: 60%; background: radial-gradient(circle,#a78bfa,transparent); opacity: .2; }
+    .hero-content { position: relative; z-index: 1; max-width: 800px; }
+    .hero-badge {
+      display: inline-flex; align-items: center; gap: .5rem;
+      padding: .35rem 1rem; border-radius: 50px;
+      background: rgba(108,99,255,0.12); border: 1px solid rgba(108,99,255,0.3);
+      font-size: .8rem; font-weight: 600; color: var(--accent2);
+      margin-bottom: 2rem; letter-spacing: .05em; text-transform: uppercase;
+    }
+    .hero-badge-dot {
+      width: 6px; height: 6px; border-radius: 50%; background: var(--low);
+      animation: pulse 2s ease-in-out infinite;
+    }
+    @keyframes pulse { 0%,100%{opacity:1;transform:scale(1)} 50%{opacity:.5;transform:scale(1.3)} }
+    .hero-title {
+      font-size: clamp(2.8rem, 6vw, 5rem);
+      font-weight: 900; line-height: 1.1;
+      letter-spacing: -.03em; margin-bottom: 1.5rem;
+    }
+    .hero-title-gradient {
+      background: linear-gradient(135deg, #6c63ff, #a78bfa, #38bdf8);
+      -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+      background-clip: text;
+    }
+    .hero-sub {
+      font-size: 1.2rem; color: var(--text2); max-width: 580px;
+      margin: 0 auto 2.5rem; line-height: 1.7; font-weight: 400;
+    }
+    .hero-quote {
+      font-size: 1rem; color: var(--text3); font-style: italic;
+      margin-bottom: 2.5rem; max-width: 500px; margin-left: auto; margin-right: auto;
+    }
+    .hero-quote::before { content: '"'; font-size: 1.5rem; color: var(--accent); font-style: normal; }
+    .hero-quote::after  { content: '"'; font-size: 1.5rem; color: var(--accent); font-style: normal; }
+    .hero-cta { display: flex; gap: 1rem; justify-content: center; flex-wrap: wrap; margin-bottom: 3rem; }
+    .btn-primary {
+      padding: .85rem 2.2rem; border-radius: 12px; font-size: 1rem; font-weight: 700;
+      background: linear-gradient(135deg,#6c63ff,#a78bfa);
+      color: white; text-decoration: none; border: none; cursor: pointer;
+      transition: all .25s; box-shadow: 0 6px 25px rgba(108,99,255,0.4);
+      display: inline-flex; align-items: center; gap: .5rem;
+    }
+    .btn-primary:hover { transform: translateY(-2px); box-shadow: 0 10px 35px rgba(108,99,255,0.5); }
+    .btn-secondary {
+      padding: .85rem 2.2rem; border-radius: 12px; font-size: 1rem; font-weight: 600;
+      background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.15);
+      color: var(--text); text-decoration: none; cursor: pointer;
+      transition: all .25s; display: inline-flex; align-items: center; gap: .5rem;
+    }
+    .btn-secondary:hover { background: rgba(255,255,255,0.09); border-color: rgba(255,255,255,0.3); }
+    .hero-stats {
+      display: flex; gap: 2.5rem; justify-content: center; flex-wrap: wrap;
+      padding-top: 2rem; border-top: 1px solid var(--border);
+    }
+    .hero-stat { text-align: center; }
+    .hero-stat-num { font-size: 2rem; font-weight: 800; color: var(--accent2); }
+    .hero-stat-label { font-size: .8rem; color: var(--text3); text-transform: uppercase; letter-spacing: .05em; }
+
+    /* ── Sections ── */
+    section { padding: 6rem 2rem; max-width: 1200px; margin: 0 auto; }
+    .section-label {
+      font-size: .78rem; font-weight: 700; letter-spacing: .12em;
+      text-transform: uppercase; color: var(--accent); margin-bottom: .75rem;
+    }
+    .section-title {
+      font-size: clamp(1.8rem, 3.5vw, 2.8rem);
+      font-weight: 800; margin-bottom: 1rem; letter-spacing: -.02em;
+    }
+    .section-sub { font-size: 1.05rem; color: var(--text2); max-width: 600px; }
+
+    /* ── Module Grid ── */
+    .modules-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+      gap: 1.25rem; margin-top: 3.5rem;
+    }
+    .module-card {
+      background: var(--card); border: 1px solid var(--border);
+      border-radius: 16px; padding: 1.75rem;
+      transition: all .25s; position: relative; overflow: hidden;
+    }
+    .module-card::before {
+      content: ''; position: absolute; top: 0; left: 0; right: 0; height: 2px;
+      background: linear-gradient(90deg, transparent, var(--card-accent, #6c63ff), transparent);
+      opacity: 0; transition: opacity .3s;
+    }
+    .module-card:hover { background: var(--card-hover); transform: translateY(-3px); border-color: rgba(255,255,255,0.12); }
+    .module-card:hover::before { opacity: 1; }
+    .module-icon {
+      width: 48px; height: 48px; border-radius: 12px;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 1.4rem; margin-bottom: 1.25rem;
+    }
+    .module-name { font-size: 1.05rem; font-weight: 700; margin-bottom: .5rem; }
+    .module-desc { font-size: .88rem; color: var(--text2); line-height: 1.6; margin-bottom: 1rem; }
+    .module-tags { display: flex; flex-wrap: wrap; gap: .4rem; }
+    .module-tag {
+      font-size: .72rem; padding: .2rem .6rem; border-radius: 50px;
+      background: rgba(255,255,255,0.06); color: var(--text3);
+      border: 1px solid var(--border);
+    }
+
+    /* ── Quote banner ── */
+    .quote-banner {
+      background: linear-gradient(135deg, rgba(108,99,255,0.08), rgba(56,189,248,0.05));
+      border: 1px solid rgba(108,99,255,0.2); border-radius: 20px;
+      padding: 3rem; text-align: center; position: relative; overflow: hidden;
+    }
+    .quote-text {
+      font-size: clamp(1.2rem, 2.5vw, 1.6rem);
+      font-weight: 600; line-height: 1.5; color: var(--text);
+      font-style: italic; margin-bottom: 1rem;
+    }
+    .quote-author { font-size: .88rem; color: var(--text3); }
+
+    /* ── How it works ── */
+    .steps-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 2rem; margin-top: 3rem; }
+    .step-card { text-align: center; padding: 2rem 1rem; }
+    .step-num {
+      width: 56px; height: 56px; border-radius: 50%;
+      background: linear-gradient(135deg,#6c63ff22,#a78bfa22);
+      border: 1px solid rgba(108,99,255,0.3);
+      display: flex; align-items: center; justify-content: center;
+      font-size: 1.3rem; font-weight: 800; color: var(--accent2);
+      margin: 0 auto 1.25rem;
+    }
+    .step-title { font-size: 1rem; font-weight: 700; margin-bottom: .5rem; }
+    .step-desc { font-size: .88rem; color: var(--text2); }
+    .step-arrow {
+      font-size: 1.5rem; color: var(--text3);
+      display: flex; align-items: center; justify-content: center;
+      padding-top: 2rem;
+    }
+
+    /* ── Footer ── */
+    footer {
+      border-top: 1px solid var(--border);
+      padding: 3rem 2rem;
+      text-align: center; color: var(--text3);
+    }
+    .footer-logo { display: flex; align-items: center; gap: .5rem; justify-content: center; margin-bottom: 1rem; }
+    .footer-links { display: flex; gap: 1.5rem; justify-content: center; flex-wrap: wrap; margin-top: 1rem; }
+    .footer-link { color: var(--text3); text-decoration: none; font-size: .85rem; transition: color .2s; }
+    .footer-link:hover { color: var(--accent2); }
+    .footer-copy { font-size: .8rem; margin-top: 1.5rem; }
+
+    /* ── Scroll reveal ── */
+    .reveal { opacity: 0; transform: translateY(30px); transition: all .7s cubic-bezier(.25,.46,.45,.94); }
+    .reveal.visible { opacity: 1; transform: translateY(0); }
+  </style>
+</head>
+<body>
+
+<!-- Navbar -->
+<nav class="nav">
+  <a href="landing.html" class="nav-logo">
+    <div class="nav-logo-icon">CS</div>
+    <span class="nav-logo-name">CloudSentinel</span>
+  </a>
+  <div class="nav-actions">
+    <a href="index.html" class="btn-nav-outline">Sign In</a>
+    <a href="signup.html" class="btn-nav-primary">Get Started Free →</a>
+  </div>
+</nav>
+
+<!-- Hero -->
+<div class="hero">
+  <div class="hero-bg-orb orb1"></div>
+  <div class="hero-bg-orb orb2"></div>
+  <div class="hero-bg-orb orb3"></div>
+
+  <div class="hero-content">
+    <div class="hero-badge">
+      <span class="hero-badge-dot"></span>
+      Real-time Cloud Security Intelligence
+    </div>
+
+    <h1 class="hero-title">
+      Stop Cloud Breaches<br>
+      <span class="hero-title-gradient">Before They Happen</span>
+    </h1>
+
+    <p class="hero-sub">
+      CloudSentinel AI continuously scans your AWS and GCP environments for misconfigurations,
+      IAM vulnerabilities, exposed resources, and compliance gaps — and tells you exactly how to fix them.
+    </p>
+
+    <p class="hero-quote">
+      Security is not a product, but a process — and CloudSentinel makes that process automatic.
+    </p>
+
+    <div class="hero-cta">
+      <a href="signup.html" class="btn-primary">
+        🚀 Start Free Scan
+      </a>
+      <a href="index.html" class="btn-secondary">
+        Sign In →
+      </a>
+    </div>
+
+    <div class="hero-stats">
+      <div class="hero-stat">
+        <div class="hero-stat-num">5</div>
+        <div class="hero-stat-label">Scan Modules</div>
+      </div>
+      <div class="hero-stat">
+        <div class="hero-stat-num">AWS+GCP</div>
+        <div class="hero-stat-label">Multi-Cloud</div>
+      </div>
+      <div class="hero-stat">
+        <div class="hero-stat-num">Real-time</div>
+        <div class="hero-stat-label">Detection</div>
+      </div>
+      <div class="hero-stat">
+        <div class="hero-stat-num">AI</div>
+        <div class="hero-stat-label">Powered</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Modules -->
+<section class="reveal">
+  <div class="section-label">Platform Modules</div>
+  <h2 class="section-title">Five Specialized Security Scanners</h2>
+  <p class="section-sub">Each module is purpose-built to detect risks specific to that part of your infrastructure — not a one-size-fits-all approach.</p>
+
+  <div class="modules-grid">
+    <div class="module-card" style="--card-accent:#6c63ff">
+      <div class="module-icon" style="background:rgba(108,99,255,0.12)">☁️</div>
+      <div class="module-name">Cloud Infrastructure</div>
+      <div class="module-desc">
+        Scans S3 buckets for public access, EC2 security groups for open ports, IAM password policies,
+        and AWS Config findings. Connects to your account via read-only CloudFormation stack.
+      </div>
+      <div class="module-tags">
+        <span class="module-tag">S3 Buckets</span>
+        <span class="module-tag">EC2 Groups</span>
+        <span class="module-tag">IAM</span>
+        <span class="module-tag">AWS Config</span>
+        <span class="module-tag">GCP Firewall</span>
+      </div>
+    </div>
+
+    <div class="module-card" style="--card-accent:#f59e0b">
+      <div class="module-icon" style="background:rgba(245,158,11,0.12)">⚙️</div>
+      <div class="module-name">DevOps Intelligence</div>
+      <div class="module-desc">
+        Analyzes CI/CD pipelines for hardcoded secrets, missing test steps, no rollback strategy,
+        and absent post-deploy monitoring. Supports GitHub Actions webhook integration.
+      </div>
+      <div class="module-tags">
+        <span class="module-tag">GitHub Actions</span>
+        <span class="module-tag">Secrets Detection</span>
+        <span class="module-tag">Pipeline Audit</span>
+        <span class="module-tag">Rollback</span>
+      </div>
+    </div>
+
+    <div class="module-card" style="--card-accent:#38bdf8">
+      <div class="module-icon" style="background:rgba(56,189,248,0.12)">🌐</div>
+      <div class="module-name">Full-Stack Security</div>
+      <div class="module-desc">
+        Detects API Gateway endpoints missing authentication, overly permissive CORS settings,
+        Lambda functions with excessive permissions, and unencrypted data at rest.
+      </div>
+      <div class="module-tags">
+        <span class="module-tag">API Gateway</span>
+        <span class="module-tag">CORS</span>
+        <span class="module-tag">Lambda IAM</span>
+        <span class="module-tag">Encryption</span>
+      </div>
+    </div>
+
+    <div class="module-card" style="--card-accent:#4ade80">
+      <div class="module-icon" style="background:rgba(74,222,128,0.12)">📊</div>
+      <div class="module-name">Data Engineering</div>
+      <div class="module-desc">
+        Monitors S3 data buckets for public access and encryption gaps, DynamoDB table encryption,
+        and repeated AWS Glue ETL job failures that indicate data pipeline instability.
+      </div>
+      <div class="module-tags">
+        <span class="module-tag">S3 Data</span>
+        <span class="module-tag">DynamoDB</span>
+        <span class="module-tag">AWS Glue</span>
+        <span class="module-tag">Encryption</span>
+      </div>
+    </div>
+
+    <div class="module-card" style="--card-accent:#a78bfa">
+      <div class="module-icon" style="background:rgba(167,139,250,0.12)">📱</div>
+      <div class="module-name">Mobile Backend</div>
+      <div class="module-desc">
+        Checks Cognito user pools for weak password policies and disabled MFA, API Gateway routes
+        missing authorization, and Lambda execution roles with overly broad permissions.
+      </div>
+      <div class="module-tags">
+        <span class="module-tag">Cognito MFA</span>
+        <span class="module-tag">Password Policy</span>
+        <span class="module-tag">API Auth</span>
+        <span class="module-tag">IAM Roles</span>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- How it works -->
+<section class="reveal" style="background:var(--bg2);max-width:100%;padding:5rem 2rem">
+  <div style="max-width:1200px;margin:0 auto">
+    <div class="section-label">How it works</div>
+    <h2 class="section-title">From Setup to Security in 3 Steps</h2>
+    <div class="steps-grid">
+      <div class="step-card">
+        <div class="step-num">1</div>
+        <div class="step-title">Connect Your Account</div>
+        <div class="step-desc">Deploy a read-only CloudFormation stack in 60 seconds. No write access ever granted. Revoke anytime.</div>
+      </div>
+      <div class="step-card">
+        <div class="step-num">2</div>
+        <div class="step-title">Run a Scan</div>
+        <div class="step-desc">Click "Scan Now" on any module page. Our Lambda functions scan your resources in real time and store findings.</div>
+      </div>
+      <div class="step-card">
+        <div class="step-num">3</div>
+        <div class="step-title">Fix with AI Guidance</div>
+        <div class="step-desc">Each risk comes with step-by-step remediation. Ask our AI chatbot for prioritization and deeper explanations.</div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- Quote -->
+<section class="reveal">
+  <div class="quote-banner">
+    <div class="quote-text">
+      The question is not whether you will be attacked,<br>but whether you will be ready when it happens.
+    </div>
+    <div class="quote-author">— Cloud Security Principle, CloudSentinel AI</div>
+  </div>
+</section>
+
+<!-- Final CTA -->
+<section class="reveal" style="text-align:center">
+  <h2 class="section-title">Start Securing Your Cloud Today</h2>
+  <p class="section-sub" style="margin: 0 auto 2rem">
+    No credit card. No agents to install. Just connect your account and let CloudSentinel do the work.
+  </p>
+  <div style="display:flex;gap:1rem;justify-content:center;flex-wrap:wrap">
+    <a href="signup.html" class="btn-primary" style="font-size:1.05rem;padding:1rem 2.5rem">
+      🔒 Create Free Account
+    </a>
+    <a href="index.html" class="btn-secondary" style="font-size:1.05rem;padding:1rem 2.5rem">
+      Sign In →
+    </a>
+  </div>
+</section>
+
+<!-- Footer -->
+<footer>
+  <div class="footer-logo">
+    <div class="nav-logo-icon" style="width:28px;height:28px;font-size:.75rem">CS</div>
+    <span style="font-weight:700;font-size:.95rem;color:var(--text)">CloudSentinel AI</span>
+  </div>
+  <p style="font-size:.88rem;color:var(--text3)">Intelligent cloud security intelligence for AWS and GCP</p>
+  <div class="footer-links">
+    <a href="index.html" class="footer-link">Sign In</a>
+    <a href="signup.html" class="footer-link">Sign Up</a>
+    <a href="terms.html" class="footer-link">Terms of Service</a>
+    <a href="privacy.html" class="footer-link">Privacy Policy</a>
+  </div>
+  <div class="footer-copy">&copy; 2026 CloudSentinel AI. All rights reserved.</div>
+</footer>
+
+<script>
+  // Scroll reveal
+  const obs = new IntersectionObserver(entries => {
+    entries.forEach(e => { if (e.isIntersecting) { e.target.classList.add('visible'); obs.unobserve(e.target); } });
+  }, { threshold: 0.1 });
+  document.querySelectorAll('.reveal').forEach(el => obs.observe(el));
+</script>
+</body>
+</html>

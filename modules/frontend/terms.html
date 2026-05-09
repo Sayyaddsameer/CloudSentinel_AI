@@ -1,0 +1,120 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Terms of Service — CloudSentinel AI</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+  <style>
+    :root{--bg:#08090d;--bg2:#0f1117;--border:rgba(255,255,255,0.07);--accent:#6c63ff;--text:#f1f5f9;--text2:#94a3b8;--text3:#64748b}
+    *{box-sizing:border-box;margin:0;padding:0}
+    body{font-family:'Inter',sans-serif;background:var(--bg);color:var(--text);line-height:1.7;padding:0}
+    .nav{position:fixed;top:0;left:0;right:0;z-index:100;display:flex;align-items:center;justify-content:space-between;padding:1rem 2.5rem;background:rgba(8,9,13,0.9);backdrop-filter:blur(20px);border-bottom:1px solid var(--border)}
+    .nav-logo{display:flex;align-items:center;gap:.6rem;text-decoration:none}
+    .nav-logo-icon{width:32px;height:32px;border-radius:8px;background:linear-gradient(135deg,#6c63ff,#a78bfa);display:flex;align-items:center;justify-content:center;font-weight:800;font-size:.8rem;color:white}
+    .nav-logo-name{font-weight:700;font-size:1rem;color:var(--text)}
+    .back-link{color:var(--text2);text-decoration:none;font-size:.88rem;padding:.4rem .9rem;border:1px solid var(--border);border-radius:8px;transition:all .2s}
+    .back-link:hover{color:var(--text);border-color:rgba(255,255,255,0.2)}
+    .page{max-width:780px;margin:0 auto;padding:8rem 2rem 5rem}
+    .page-header{margin-bottom:3rem;padding-bottom:2rem;border-bottom:1px solid var(--border)}
+    .page-title{font-size:2.2rem;font-weight:800;letter-spacing:-.02em;margin-bottom:.5rem}
+    .page-meta{font-size:.88rem;color:var(--text3)}
+    .page-meta span{color:var(--accent);font-weight:600}
+    h2{font-size:1.15rem;font-weight:700;margin:2.5rem 0 .75rem;color:var(--text)}
+    h2::before{content:counter(section) ". ";counter-increment:section;color:var(--accent)}
+    .content{counter-reset:section}
+    p{color:var(--text2);margin-bottom:.75rem;font-size:.95rem}
+    ul{color:var(--text2);font-size:.95rem;padding-left:1.5rem;margin-bottom:.75rem}
+    li{margin-bottom:.35rem}
+    .highlight{background:rgba(108,99,255,0.08);border:1px solid rgba(108,99,255,0.2);border-radius:10px;padding:1.25rem 1.5rem;margin:1.5rem 0}
+    .highlight p{margin:0;font-size:.9rem}
+    footer{text-align:center;padding:2rem;color:var(--text3);font-size:.82rem;border-top:1px solid var(--border)}
+    footer a{color:var(--accent);text-decoration:none}
+  </style>
+</head>
+<body>
+<nav class="nav">
+  <a href="landing.html" class="nav-logo">
+    <div class="nav-logo-icon">CS</div>
+    <span class="nav-logo-name">CloudSentinel</span>
+  </a>
+  <a href="javascript:history.back()" class="back-link">← Back</a>
+</nav>
+
+<div class="page">
+  <div class="page-header">
+    <div class="page-title">Terms of Service</div>
+    <div class="page-meta">Last updated: <span>May 2026</span> &nbsp;·&nbsp; Effective immediately upon account creation</div>
+  </div>
+
+  <div class="highlight">
+    <p><strong>Summary:</strong> CloudSentinel AI provides read-only cloud security scanning. We never modify your infrastructure, never store credentials in plain text, and you can revoke our access at any time by deleting the CloudFormation stack.</p>
+  </div>
+
+  <div class="content">
+    <h2>Acceptance of Terms</h2>
+    <p>By creating a CloudSentinel account or using the platform in any way, you agree to be bound by these Terms of Service. If you do not agree, please do not use the platform.</p>
+
+    <h2>Description of Service</h2>
+    <p>CloudSentinel AI is a cloud security intelligence platform that:</p>
+    <ul>
+      <li>Performs read-only scans of your AWS and/or GCP cloud environments</li>
+      <li>Detects security misconfigurations, IAM policy issues, and compliance gaps</li>
+      <li>Provides AI-generated remediation recommendations</li>
+      <li>Stores scan results (risk records) in AWS DynamoDB within our infrastructure</li>
+    </ul>
+
+    <h2>Read-Only Access Guarantee</h2>
+    <p>CloudSentinel operates with a strict read-only access model:</p>
+    <ul>
+      <li>We deploy an IAM role in your AWS account via CloudFormation with <strong>read-only permissions only</strong></li>
+      <li>We will never create, modify, or delete any resource in your account</li>
+      <li>GCP service account keys are stored encrypted in AWS Secrets Manager and never logged</li>
+      <li>You can revoke all access instantly by deleting the <code>CloudSentinel-Scanner</code> CloudFormation stack</li>
+    </ul>
+
+    <h2>User Accounts and Security</h2>
+    <p>You are responsible for:</p>
+    <ul>
+      <li>Maintaining the confidentiality of your account credentials</li>
+      <li>All activity that occurs under your account</li>
+      <li>Notifying us immediately of any unauthorized access</li>
+    </ul>
+    <p>We use Amazon Cognito for authentication. Passwords are never stored by CloudSentinel — they are managed exclusively by Cognito.</p>
+
+    <h2>Data Retention</h2>
+    <p>Scan results (risk records) are stored in DynamoDB and are associated with your account. Risk history is preserved even after you disconnect a cloud provider. You may request deletion of your data by contacting us.</p>
+    <p>We do not store the contents of your cloud resources — only metadata about detected risk conditions (resource names, risk types, and remediation descriptions).</p>
+
+    <h2>Prohibited Uses</h2>
+    <p>You may not use CloudSentinel to:</p>
+    <ul>
+      <li>Scan cloud accounts that you do not own or have explicit written permission to scan</li>
+      <li>Attempt to bypass or circumvent security controls of the platform</li>
+      <li>Reverse engineer, decompile, or create derivative works of the service</li>
+      <li>Use the service for any illegal purpose or in violation of any applicable laws</li>
+    </ul>
+
+    <h2>Limitation of Liability</h2>
+    <p>CloudSentinel AI is provided "as is" without warranties of any kind. We do not guarantee that our scans will detect every security issue in your environment. Security recommendations are provided for informational purposes — implementing them is your responsibility.</p>
+    <p>To the maximum extent permitted by law, CloudSentinel shall not be liable for any indirect, incidental, special, or consequential damages arising from your use of the service.</p>
+
+    <h2>Modifications to Terms</h2>
+    <p>We may update these terms from time to time. Continued use of the platform after updates constitutes acceptance of the new terms. We will notify users of significant changes via email.</p>
+
+    <h2>Governing Law</h2>
+    <p>These terms are governed by the laws of India. Any disputes shall be resolved through binding arbitration in accordance with applicable law.</p>
+
+    <h2>Contact</h2>
+    <p>For any questions about these Terms of Service, please contact us at <strong>sayyadsameerM3@gmail.com</strong>.</p>
+  </div>
+</div>
+
+<footer>
+  <a href="landing.html">CloudSentinel AI</a> &nbsp;·&nbsp;
+  <a href="privacy.html">Privacy Policy</a> &nbsp;·&nbsp;
+  &copy; 2026 All rights reserved.
+</footer>
+</body>
+</html>

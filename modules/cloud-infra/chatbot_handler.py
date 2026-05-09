@@ -126,14 +126,62 @@ def rule_based_response(question: str, risks: list) -> str:
     """Fallback rule-based response when Bedrock is unavailable."""
     q = question.lower()
 
+    # ── Platform-level guidance (no risk data needed) ───────────
+    if any(kw in q for kw in ["what is", "what does", "what can", "cloudsentinel", "platform", "about"]):
+        return (
+            "**CloudSentinel AI** is a cloud security intelligence platform that scans your AWS and GCP "
+            "environments for misconfigurations, IAM vulnerabilities, and compliance gaps.\n\n"
+            "It has **5 specialized modules:**\n"
+            "1. **Cloud Infrastructure** — S3, EC2 security groups, IAM, AWS Config\n"
+            "2. **DevOps** — CI/CD pipelines, secrets in code, missing test steps\n"
+            "3. **Full-Stack** — API Gateway auth, CORS, Lambda permissions\n"
+            "4. **Data Engineering** — DynamoDB encryption, S3 data buckets, Glue jobs\n"
+            "5. **Mobile Backend** — Cognito MFA, API route auth, IAM execution roles\n\n"
+            "Each scan stores results in DynamoDB and shows actionable remediation steps on the dashboard."
+        )
+
+    if any(kw in q for kw in ["module", "start", "first", "begin", "which"]):
+        return (
+            "**Start with the Cloud Infrastructure module** — it's the foundation.\n\n"
+            "1. Go to **Cloud Infrastructure** → Connect your AWS account (takes 60 seconds via CloudFormation)\n"
+            "2. Click **Rescan Now** to detect misconfigurations in S3, EC2, and IAM\n"
+            "3. Then explore **DevOps**, **Full-Stack**, **Data Engineering**, and **Mobile Backend** for specialized scans\n\n"
+            "Each module page has its own **Scan** button and **AI chatbot** for module-specific questions."
+        )
+
+    if any(kw in q for kw in ["connect", "aws", "account", "cloudformation", "setup"]):
+        return (
+            "**Connecting your AWS account is easy and read-only:**\n\n"
+            "1. Go to the **Cloud Infrastructure** page\n"
+            "2. Click **Manage Connections** → **Connect AWS**\n"
+            "3. Choose CloudFormation (recommended) — one-click stack deployment\n"
+            "4. The stack creates a read-only IAM role — CloudSentinel can **never modify** your resources\n"
+            "5. Click **Confirm** and run your first scan!\n\n"
+            "For GCP: Upload a Viewer-role service account JSON key. It's stored encrypted in AWS Secrets Manager."
+        )
+
+    if any(kw in q for kw in ["detect", "find", "risk", "scan", "check", "what risk"]):
+        return (
+            "CloudSentinel detects **security risks across your entire cloud stack:**\n\n"
+            "**Cloud Infrastructure:**\n"
+            "• S3 buckets with public access enabled\n"
+            "• EC2 security groups with port 22/3389 open to 0.0.0.0/0\n"
+            "• Missing IAM account password policy\n\n"
+            "**DevOps:** Hardcoded secrets, missing tests, no rollback strategy\n\n"
+            "**Full-Stack:** Unauthenticated API routes, permissive CORS, unencrypted Lambdas\n\n"
+            "**Data Engineering:** Unencrypted DynamoDB tables, public data buckets, Glue failures\n\n"
+            "**Mobile:** Cognito without MFA, weak password policies, over-permissioned Lambda roles"
+        )
+
     high = [r for r in risks if r.get("riskPriority") == "High"]
     medium = [r for r in risks if r.get("riskPriority") == "Medium"]
     total = len(risks)
 
     if not risks:
         return (
-            "No risks have been detected yet. Run a scan from the module page first, "
-            "then ask me about the results!"
+            "No risks have been detected yet. Run a scan from any module page first, "
+            "then ask me about the results!\n\n"
+            "**Quick start:** Go to Cloud Infrastructure → Connect AWS → Rescan Now"
         )
 
     if any(kw in q for kw in ["highest", "top", "worst", "critical", "priority", "most"]):
