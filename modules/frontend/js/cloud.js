@@ -317,14 +317,49 @@ async function confirmGcpConnect() {
 
 async function performDisconnect() {
   closeModal('modal-disconnect');
+
+  const conn = getConnections(MODULE);
+  const hasAws = !!conn?.aws;
+  const hasGcp = !!conn?.gcp;
+  const provider = (hasAws && hasGcp) ? 'all' : hasAws ? 'aws' : hasGcp ? 'gcp' : 'all';
+
+  showToast('Revoking access and cleaning up...', 'info', 4000);
+
+  /* Call backend: delete CFN stack + GCP secret + DynamoDB risks */
+  const result = await callDisconnectApi(MODULE, provider);
+
+  /* Clear local state regardless of API result */
   localStorage.removeItem(`cs_conn_${MODULE}`);
   localStorage.removeItem(`cs_scan_${MODULE}`);
   allRisks = [];
-  const REGION = window.ENV_REGION || 'us-east-1';
-  showToast(
-    `Access removed. Run: aws cloudformation delete-stack --stack-name CloudSentinel-Scanner --region ${REGION}`,
-    'info', 8000
-  );
+
+  if (result) {
+    const awsStatus = result.aws;
+    const gcpStatus = result.gcp;
+
+    if (awsStatus === 'delete_initiated') {
+      showToast('AWS CloudFormation stack deletion initiated. The IAM role will be removed within minutes.', 'success', 8000);
+    } else if (awsStatus === 'already_deleted') {
+      showToast('AWS access already removed.', 'success');
+    } else if (awsStatus === 'instructions') {
+      const REGION = window.ENV_REGION || 'us-east-1';
+      showToast(
+        `Could not auto-delete stack. Run: aws cloudformation delete-stack --stack-name CloudSentinel-Scanner --region ${REGION}`,
+        'warning', 12000
+      );
+    }
+
+    if (gcpStatus === 'deleted') {
+      showToast('GCP credentials removed from secure storage.', 'success', 4000);
+    }
+
+    if (result.risks_purged > 0) {
+      showToast(`${result.risks_purged} risk records purged.`, 'info', 4000);
+    }
+  } else {
+    showToast('Access removed locally. Backend cleanup may have failed - check your AWS account.', 'warning', 6000);
+  }
+
   await sleep(400);
   showConnectView();
 }

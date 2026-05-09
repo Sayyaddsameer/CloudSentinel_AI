@@ -129,11 +129,13 @@ async function confirmApigwConnect() {
 }
 
 /* ── Disconnect ───────────────────────────────────────────── */
-function performDisconnect() {
+async function performDisconnect() {
+  showToast('Disconnecting and purging risk data...', 'info', 3000);
+  await callDisconnectApi(MODULE, 'all');
   localStorage.removeItem(`cs_conn_${MODULE}`);
   localStorage.removeItem(`cs_scan_${MODULE}`);
   allRisks = [];
-  showToast('Disconnected from API Gateway', 'info');
+  showToast('Disconnected. Risk data purged.', 'success');
   showConnectView();
 }
 

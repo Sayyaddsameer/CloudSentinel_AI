@@ -419,6 +419,51 @@ function getConnections(module) { try { return JSON.parse(localStorage.getItem(`
 function setConnection(module, provider, data) { const c = getConnections(module); c[provider] = data; localStorage.setItem(`cs_conn_${module}`, JSON.stringify(c)); }
 function removeConnection(module, provider) { const c = getConnections(module); delete c[provider]; localStorage.setItem(`cs_conn_${module}`, JSON.stringify(c)); }
 
+/**
+ * callDisconnectApi — calls the /disconnect Lambda to:
+ *   - Delete the CloudFormation scanner stack (AWS cross-account)
+ *   - Delete the GCP secret from Secrets Manager
+ *   - Purge DynamoDB risk records for the module
+ *
+ * @param {string} module   - e.g. "cloud-infra", "devops", or "all"
+ * @param {string} provider - "aws", "gcp", or "all"
+ * @returns {Promise<{aws,gcp,risks_purged}>}
+ */
+async function callDisconnectApi(module, provider = 'all') {
+  if (!API_BASE) return null;
+  const conn     = getConnections(module);
+  const roleArn  = conn?.aws?.roleArn  || '';
+  const stackName = conn?.aws?.stackName || 'CloudSentinel-Scanner';
+  try {
+    const res = await fetch(`${API_BASE}/disconnect`, {
+      method:  'POST',
+      headers: { Authorization: getToken() || '', 'Content-Type': 'application/json' },
+      body:    JSON.stringify({ module, provider, roleArn, stackName }),
+    });
+    if (!res.ok) throw new Error(`Disconnect API error ${res.status}`);
+    return await res.json();
+  } catch (e) {
+    console.warn('Disconnect API call failed (non-blocking):', e.message);
+    return null;
+  }
+}
+
+/**
+ * autoDisconnectAll — called on session expiry to revoke all connected modules.
+ * Non-blocking: failures are silently logged.
+ */
+async function autoDisconnectAll() {
+  const modules = ['cloud-infra', 'devops', 'fullstack', 'data-eng', 'mobile'];
+  for (const m of modules) {
+    const conn = getConnections(m);
+    if (Object.keys(conn).length === 0) continue;
+    await callDisconnectApi(m, 'all').catch(() => {});
+    localStorage.removeItem(`cs_conn_${m}`);
+    localStorage.removeItem(`cs_scan_${m}`);
+    localStorage.removeItem(`cs_history_${m}`);
+  }
+}
+
 /* ── SNS alert stub (implemented server-side in notification Lambda) */
 async function triggerSnsAlert(module, highRisks) {
   if (!API_BASE) return;

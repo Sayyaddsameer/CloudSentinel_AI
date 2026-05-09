@@ -190,12 +190,14 @@ async function confirmGithubConnect() {
 }
 
 /* ── Disconnect ───────────────────────────────────────────── */
-function performDisconnect() {
+async function performDisconnect() {
+  showToast('Disconnecting and purging risk data...', 'info', 3000);
+  await callDisconnectApi(MODULE, 'all');
   localStorage.removeItem(`cs_conn_${MODULE}`);
   localStorage.removeItem(`cs_scan_${MODULE}`);
   sessionStorage.removeItem('cs_gh_token');
   allRisks = [];
-  showToast('GitHub disconnected', 'info');
+  showToast('GitHub disconnected. Risk data purged.', 'success');
   showConnectView();
 }
 

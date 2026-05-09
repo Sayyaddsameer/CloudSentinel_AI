@@ -194,7 +194,11 @@ function _showSessionWarnModal() {
     </div>`);
 }
 
-function _doAutoLogout() {
+async function _doAutoLogout() {
+  /* Revoke all cloud connections before clearing session */
+  if (typeof autoDisconnectAll === 'function') {
+    try { await autoDisconnectAll(); } catch(e) {}
+  }
   try { clearSession(); } catch(e) {}
   localStorage.removeItem(LAST_ACTIVITY_KEY);
   window.location.href = 'index.html?reason=timeout';

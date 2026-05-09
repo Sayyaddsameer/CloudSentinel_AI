@@ -119,11 +119,13 @@ async function confirmMobileConnect() {
   startScan();
 }
 
-function performDisconnect() {
+async function performDisconnect() {
+  showToast('Disconnecting and purging risk data...', 'info', 3000);
+  await callDisconnectApi(MODULE, 'all');
   localStorage.removeItem(`cs_conn_${MODULE}`);
   localStorage.removeItem(`cs_scan_${MODULE}`);
   allRisks = [];
-  showToast('Mobile backend disconnected', 'info');
+  showToast('Mobile backend disconnected. Risk data purged.', 'success');
   showConnectView();
 }
 
