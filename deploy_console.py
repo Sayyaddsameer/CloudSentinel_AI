@@ -41,6 +41,15 @@ ROOT = Path(__file__).parent.resolve()
 MODULES_DIR = ROOT / "modules" / "cloud-infra"
 IAM_POLICY   = ROOT / "infrastructure" / "iam" / "lambda_policy.json"
 
+# Per-module source directories
+MODULE_DIRS = {
+    "cloud-infra": ROOT / "modules" / "cloud-infra",
+    "devops":      ROOT / "modules" / "devops",
+    "fullstack":   ROOT / "modules" / "fullstack",
+    "data-eng":    ROOT / "modules" / "data-eng",
+    "mobile":      ROOT / "modules" / "mobile",
+}
+
 # ---------------------------------------------------------------------------
 # Configuration loader
 # ---------------------------------------------------------------------------
@@ -92,6 +101,7 @@ def load_config() -> dict:
         "chatbot_context_risks":  os.environ.get("CS_CHATBOT_CONTEXT_RISKS", "20"),
         "gcp_secret_name":        os.environ.get("CS_GCP_SECRET_NAME", ""),
         "target_role_arn":        os.environ.get("CS_TARGET_ROLE_ARN", ""),
+        "webhook_secret_arn":     os.environ.get("CS_WEBHOOK_SECRET_ARN", ""),
     }
     return cfg
 
@@ -326,18 +336,32 @@ def _upsert_lambda(lmb, function_name: str, zip_bytes: bytes, handler: str,
     return lmb.get_function(FunctionName=function_name)["Configuration"]["FunctionArn"]
 
 
+def _zip_module(module_dir: Path, zip_path: Path) -> bytes:
+    """Zip all .py files in a module directory and return the raw bytes."""
+    with zipfile.ZipFile(zip_path, "w", zipfile.ZIP_DEFLATED) as zf:
+        for py_file in module_dir.glob("*.py"):
+            zf.write(py_file, py_file.name)
+    data = zip_path.read_bytes()
+    zip_path.unlink(missing_ok=True)
+    return data
+
+
 def create_lambdas(lmb, cfg: dict, table_name: str, role_arn: str,
                    sns_topic_arn: str, step: Step) -> dict:
     project = cfg["project"]
     tags    = {"Project": project, "Environment": cfg["environment"], "ManagedBy": "deploy_console.py"}
 
-    zip_path = MODULES_DIR / "_deploy_package.zip"
-    _zip_lambda(MODULES_DIR / "cloud_scanner.py", zip_path)
-    zip_bytes = zip_path.read_bytes()
+    # Pre-build zip bytes per module directory (each module has its own source)
+    cloud_zip    = _zip_module(MODULE_DIRS["cloud-infra"], MODULE_DIRS["cloud-infra"] / "_pkg.zip")
+    devops_zip   = _zip_module(MODULE_DIRS["devops"],      MODULE_DIRS["devops"]      / "_pkg.zip")
+    fullstack_zip= _zip_module(MODULE_DIRS["fullstack"],   MODULE_DIRS["fullstack"]   / "_pkg.zip")
+    dataeng_zip  = _zip_module(MODULE_DIRS["data-eng"],    MODULE_DIRS["data-eng"]    / "_pkg.zip")
+    mobile_zip   = _zip_module(MODULE_DIRS["mobile"],      MODULE_DIRS["mobile"]      / "_pkg.zip")
 
     lambdas_def = [
+        # ── Cloud-infra core Lambdas ──────────────────────────────────────
         {
-            "name":    f"{project}-cloud-scanner",
+            "name": f"{project}-cloud-scanner", "zip": cloud_zip,
             "handler": "cloud_scanner.lambda_handler",
             "timeout": 300, "memory": 256,
             "env": {
@@ -347,7 +371,7 @@ def create_lambdas(lmb, cfg: dict, table_name: str, role_arn: str,
             },
         },
         {
-            "name":    f"{project}-ai-explainer",
+            "name": f"{project}-ai-explainer", "zip": cloud_zip,
             "handler": "ai_explainer.lambda_handler",
             "timeout": 300, "memory": 256,
             "env": {
@@ -358,27 +382,27 @@ def create_lambdas(lmb, cfg: dict, table_name: str, role_arn: str,
             },
         },
         {
-            "name":    f"{project}-chatbot-handler",
+            "name": f"{project}-chatbot-handler", "zip": cloud_zip,
             "handler": "chatbot_handler.lambda_handler",
             "timeout": 60, "memory": 256,
             "env": {
-                "DYNAMODB_TABLE":      table_name,
-                "BEDROCK_MODEL_ID":    cfg["bedrock_model_id"],
-                "MAX_TOKENS":          cfg["max_tokens"],
-                "CHATBOT_CONTEXT_RISKS": cfg["chatbot_context_risks"],
+                "DYNAMODB_TABLE":         table_name,
+                "BEDROCK_MODEL_ID":       cfg["bedrock_model_id"],
+                "MAX_TOKENS":             cfg["max_tokens"],
+                "CHATBOT_CONTEXT_RISKS":  cfg["chatbot_context_risks"],
             },
         },
         {
-            "name":    f"{project}-risk-reader",
+            "name": f"{project}-risk-reader", "zip": cloud_zip,
             "handler": "risk_reader.lambda_handler",
             "timeout": 30, "memory": 128,
             "env": {
-                "DYNAMODB_TABLE":  table_name,
+                "DYNAMODB_TABLE":   table_name,
                 "RISKS_PAGE_LIMIT": cfg["risks_page_limit"],
             },
         },
         {
-            "name":    f"{project}-notification-handler",
+            "name": f"{project}-notification-handler", "zip": cloud_zip,
             "handler": "notification_handler.lambda_handler",
             "timeout": 30, "memory": 256,
             "env": {
@@ -388,11 +412,44 @@ def create_lambdas(lmb, cfg: dict, table_name: str, role_arn: str,
                 "APP_URL":                cfg["app_url"],
             },
         },
+        # ── Module-specific analyzer Lambdas ─────────────────────────────
+        {
+            "name": f"{project}-devops-analyzer", "zip": devops_zip,
+            "handler": "devops_analyzer.lambda_handler",
+            "timeout": 120, "memory": 256,
+            "env": {
+                "DYNAMODB_TABLE":    table_name,
+                "WEBHOOK_SECRET_ARN": cfg.get("webhook_secret_arn", ""),
+            },
+        },
+        {
+            "name": f"{project}-fullstack-analyzer", "zip": fullstack_zip,
+            "handler": "fullstack_analyzer.lambda_handler",
+            "timeout": 120, "memory": 256,
+            "env": {"DYNAMODB_TABLE": table_name},
+        },
+        {
+            "name": f"{project}-data-eng-analyzer", "zip": dataeng_zip,
+            "handler": "data_eng_analyzer.lambda_handler",
+            "timeout": 120, "memory": 256,
+            "env": {
+                "DYNAMODB_TABLE":     table_name,
+                "GLUE_FAIL_THRESHOLD": "2",
+                "GLUE_RUNS_WINDOW":    "5",
+            },
+        },
+        {
+            "name": f"{project}-mobile-analyzer", "zip": mobile_zip,
+            "handler": "mobile_analyzer.lambda_handler",
+            "timeout": 120, "memory": 256,
+            "env": {"DYNAMODB_TABLE": table_name},
+        },
     ]
 
     arns = {}
     for ld in lambdas_def:
-        def _deploy(ld=ld):
+        zip_bytes = ld["zip"]
+        def _deploy(ld=ld, zip_bytes=zip_bytes):
             return _upsert_lambda(
                 lmb, ld["name"], zip_bytes, ld["handler"],
                 role_arn, ld["timeout"], ld["memory"], ld["env"], tags,
@@ -400,7 +457,6 @@ def create_lambdas(lmb, cfg: dict, table_name: str, role_arn: str,
         arn = step.run(f"Deploy Lambda: {ld['name']}", _deploy)
         arns[ld["name"]] = arn or f"arn:aws:lambda:{cfg['region']}:000000000000:function:{ld['name']}"
 
-    zip_path.unlink(missing_ok=True)
     return arns
 
 
@@ -440,9 +496,13 @@ def create_api_gateway(apigw, lmb, account_id: str, cfg: dict,
         root_id   = apigw.get_resources(restApiId=api_id)["items"][0]["id"]
 
         routes = [
-            ("risks",      "GET",  f"{project}-risk-reader"),
-            ("chat",       "POST", f"{project}-chatbot-handler"),
+            ("risks",            "GET",  f"{project}-risk-reader"),
+            ("chat",             "POST", f"{project}-chatbot-handler"),
             ("scan-cloud-infra", "POST", f"{project}-cloud-scanner"),
+            ("scan-devops",      "POST", f"{project}-devops-analyzer"),
+            ("scan-fullstack",   "POST", f"{project}-fullstack-analyzer"),
+            ("scan-data-eng",    "POST", f"{project}-data-eng-analyzer"),
+            ("scan-mobile",      "POST", f"{project}-mobile-analyzer"),
         ]
 
         for path_part, method, fn_name in routes:
