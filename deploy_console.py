@@ -522,10 +522,25 @@ def create_api_gateway(apigw, lmb, account_id: str, cfg: dict,
                 type="AWS_PROXY",
                 uri=f"arn:aws:apigateway:{region}:lambda:path/2015-03-31/functions/{fn_arn}/invocations",
             )
+            stmt_id = f"AllowAPIGW-{api_id}-{path_part}-{method}"
+            # Remove any stale statement for this route (different API ID) first
+            try:
+                policy = lmb.get_policy(FunctionName=fn_name)["Policy"]
+                import json as _json
+                stmts = _json.loads(policy).get("Statement", [])
+                for s in stmts:
+                    sid = s.get("Sid", "")
+                    if sid.startswith(f"AllowAPIGW-") and f"-{path_part}-{method}" in sid and sid != stmt_id:
+                        try:
+                            lmb.remove_permission(FunctionName=fn_name, StatementId=sid)
+                        except Exception:
+                            pass
+            except lmb.exceptions.ResourceNotFoundException:
+                pass
             try:
                 lmb.add_permission(
                     FunctionName=fn_name,
-                    StatementId=f"AllowAPIGW-{path_part}-{method}",
+                    StatementId=stmt_id,
                     Action="lambda:InvokeFunction",
                     Principal="apigateway.amazonaws.com",
                     SourceArn=f"arn:aws:execute-api:{region}:{account_id}:{api_id}/*/*",
