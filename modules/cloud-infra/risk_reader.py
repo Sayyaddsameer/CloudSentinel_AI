@@ -18,20 +18,57 @@ CORS_HEADERS = {
     "Access-Control-Allow-Origin": "*",
 }
 
+# Resources that are intentionally configured in a way that would otherwise
+# be flagged — suppress these to avoid false positives on the dashboard.
+IGNORED_RESOURCE_NAMES = {
+    # This bucket is intentionally public so CloudFormation in external
+    # accounts can download the scanner-role.yaml template.
+    "cloudsentinel-cf-templates-871070087236",
+}
+
+
+def deduplicate(items: list) -> list:
+    """Keep only the most recent entry per (resourceId, riskType) pair.
+    This prevents repeated scans from inflating the risk count.
+    """
+    seen: dict = {}
+    for item in items:
+        key = (item.get("resourceId", ""), item.get("riskType", ""))
+        existing = seen.get(key)
+        if existing is None or item.get("riskTimestamp", "") > existing.get("riskTimestamp", ""):
+            seen[key] = item
+    return list(seen.values())
+
+
+def filter_ignored(items: list) -> list:
+    """Remove known false-positive / intentionally configured resources."""
+    return [
+        item for item in items
+        if item.get("resourceName", "") not in IGNORED_RESOURCE_NAMES
+    ]
+
 
 def query_by_module(table, module):
     response = table.query(
         IndexName="module-index",
         KeyConditionExpression=Key("module").eq(module),
         ScanIndexForward=False,
-        Limit=PAGE_LIMIT,
+        Limit=PAGE_LIMIT * 10,   # fetch more so dedup has enough to work with
     )
     return response.get("Items", [])
 
 
 def scan_all(table):
-    response = table.scan(Limit=PAGE_LIMIT)
-    return response.get("Items", [])
+    items = []
+    response = table.scan()
+    items.extend(response.get("Items", []))
+    # Handle pagination for large tables
+    while "LastEvaluatedKey" in response:
+        response = table.scan(ExclusiveStartKey=response["LastEvaluatedKey"])
+        items.extend(response.get("Items", []))
+        if len(items) >= PAGE_LIMIT * 20:
+            break
+    return items
 
 
 def lambda_handler(event, context):
@@ -54,13 +91,21 @@ def lambda_handler(event, context):
             "body": json.dumps({"error": "Failed to read risks from database"}),
         }
 
+    # Deduplicate and remove false positives
+    items = deduplicate(items)
+    items = filter_ignored(items)
+
     if priority_filter:
         items = [i for i in items if i.get("riskPriority", "").lower() == priority_filter.lower()]
 
-    # Sort: High first, then Medium, then Low
+    # Sort: High first, then Medium, then Low; secondary sort by timestamp (newest first)
     priority_order = {"High": 0, "Medium": 1, "Low": 2}
-    items.sort(key=lambda x: priority_order.get(x.get("riskPriority", "Low"), 2))
+    items.sort(key=lambda x: (
+        priority_order.get(x.get("riskPriority", "Low"), 2),
+        x.get("riskTimestamp", ""),
+    ))
 
+    logger.info(f"Returning {len(items)} deduplicated risks")
     return {
         "statusCode": 200,
         "headers": CORS_HEADERS,
