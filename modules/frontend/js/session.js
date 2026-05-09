@@ -1,5 +1,5 @@
 /**
- * session.js — Session countdown timer
+ * session.js -- Session countdown timer
  *
  * Timer is based on LOGIN TIME (session.issuedAt), NOT idle time.
  * This means the timer counts down steadily and NEVER resets just
@@ -34,7 +34,7 @@ function setSessionTimeout(seconds) {
   showToast(`Session timeout set to ${Math.round(seconds/60)} minutes`, 'success');
 }
 
-/** Compute remaining seconds based on login timestamp — never jumps back to 30:00 */
+/** Compute remaining seconds based on login timestamp -- never jumps back to 30:00 */
 function _computeRemaining() {
   const timeout = getSessionTimeout();
   try {
@@ -62,10 +62,10 @@ function initSessionTimer() {
 }
 
 /** resetIdleTimer: only updates last-activity for IDLE detection.
- *  Does NOT reset the display timer — that stays based on login time. */
+ *  Does NOT reset the display timer -- that stays based on login time. */
 function resetIdleTimer() {
   localStorage.setItem(LAST_ACTIVITY_KEY, Date.now());
-  /* No longer resets _sessionRemaining — prevents "30:00 on every mouse move" */
+  /* No longer resets _sessionRemaining -- prevents "30:00 on every mouse move" */
 }
 
 function extendSession() {
@@ -83,7 +83,7 @@ function extendSession() {
   _updatePillDisplay();
   _updatePillColor();
   _startInterval(); /* restart the interval */
-  showToast('Session extended — timer reset to full.', 'success');
+  showToast('Session extended -- timer reset to full.', 'success');
 }
 
 /* ── Internals ────────────────────────────────────────────── */
@@ -136,8 +136,8 @@ function _injectPill() {
   const pill = document.createElement('div');
   pill.id          = 'session-pill';
   pill.className   = 'session-pill';
-  pill.title       = 'Session time remaining — click to adjust';
-  pill.innerHTML   = `<span style="color:var(--text-3);font-size:.85rem">⏱</span><span id="session-timer" class="session-label">—</span>`;
+  pill.title       = 'Session time remaining -- click to adjust';
+  pill.innerHTML   = `<span style="color:var(--text-3);font-size:.85rem">[TIMER]</span><span id="session-timer" class="session-label">--</span>`;
   pill.addEventListener('click', () => openSessionSettings());
 
   navActions.insertBefore(pill, navActions.firstChild);
@@ -176,7 +176,7 @@ function _showSessionWarnModal() {
       <div class="modal" style="max-width:400px">
         <div class="modal-header">
           <div>
-            <div class="modal-title" style="color:var(--medium)">⏱ Session Expiring</div>
+            <div class="modal-title" style="color:var(--medium)">[TIMER] Session Expiring</div>
             <div class="modal-subtitle">You'll be signed out in 60 seconds</div>
           </div>
         </div>
@@ -219,7 +219,7 @@ function openSessionSettings() {
       <div class="modal" style="max-width:420px">
         <div class="modal-header">
           <div>
-            <div class="modal-title">⏱ Session Duration</div>
+            <div class="modal-title">[TIMER] Session Duration</div>
             <div class="modal-subtitle">How long until automatic sign-out from login time</div>
           </div>
           <span class="modal-close" onclick="document.getElementById('session-settings-modal').remove()">x</span>
@@ -230,11 +230,11 @@ function openSessionSettings() {
               <button onclick="setSessionTimeout(${o.val}); document.getElementById('session-settings-modal').remove();"
                 class="btn ${current===o.val ? 'btn-gradient' : 'btn-outline'}"
                 style="justify-content:start;gap:.5rem">
-                ${current===o.val ? '✓' : ''} ${o.label}
+                ${current===o.val ? 'OK' : ''} ${o.label}
               </button>`).join('')}
           </div>
           <div class="info-box mt-2">
-            <span class="info-icon">ℹ️</span>
+            <span class="info-icon">[i]</span>
             <div>Timer counts down from your login time and won't reset on mouse movement.</div>
           </div>
         </div>

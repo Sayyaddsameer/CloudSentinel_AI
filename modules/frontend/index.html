@@ -4,7 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <meta name="description" content="Secure sign-in to CloudSentinel AI risk intelligence platform">
-  <title>Sign In — CloudSentinel</title>
+  <title>Sign In -- CloudSentinel</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="css/styles.css">
@@ -81,22 +81,22 @@
 
         <button type="submit" class="btn btn-gradient btn-lg w-full auth-submit" id="login-btn">
           <span id="btn-text">Sign In</span>
-          <span id="btn-icon">&#8594;</span>
+          <span id="btn-icon">-></span>
         </button>
       </form>
 
       <p class="auth-footer">
         Don't have an account? <a href="signup.html" class="auth-link">Create account</a>
-        &nbsp;·&nbsp; <a href="landing.html" class="auth-link">Back to home</a>
+        &nbsp;-&nbsp; <a href="landing.html" class="auth-link">Back to home</a>
       </p>
     </div>
 
-    <!-- ── Step 2: Forgot Password — enter email ── -->
+    <!-- ── Step 2: Forgot Password -- enter email ── -->
     <div id="forgot-step" style="display:none">
       <div style="text-align:center;margin-bottom:1.5rem">
-        <div style="font-size:2.5rem;margin-bottom:.5rem">&#128273;</div>
+        <div style="font-size:2.5rem;margin-bottom:.5rem">[KEY]</div>
         <h2 class="auth-heading" style="margin-bottom:.5rem">Reset password</h2>
-        <p class="auth-sub">Enter your account email — we'll send a verification code</p>
+        <p class="auth-sub">Enter your account email -- we'll send a verification code</p>
       </div>
       <div class="auth-error" id="forgot-error"></div>
       <form class="auth-form" id="forgot-form" novalidate>
@@ -107,18 +107,18 @@
         </div>
         <button type="submit" class="btn btn-gradient btn-lg w-full auth-submit" id="forgot-btn">
           <span id="forgot-btn-text">Send Reset Code</span>
-          <span>&#8594;</span>
+          <span>-></span>
         </button>
       </form>
       <p class="auth-footer">
-        <a href="#" class="auth-link" id="back-to-signin">&#8592; Back to Sign In</a>
+        <a href="#" class="auth-link" id="back-to-signin"><- Back to Sign In</a>
       </p>
     </div>
 
     <!-- ── Step 3: Enter code + new password ── -->
     <div id="reset-step" style="display:none">
       <div style="text-align:center;margin-bottom:1.5rem">
-        <div style="font-size:2.5rem;margin-bottom:.5rem">&#9993;</div>
+        <div style="font-size:2.5rem;margin-bottom:.5rem">[MAIL]</div>
         <h2 class="auth-heading" style="margin-bottom:.5rem">Check your email</h2>
         <p class="auth-sub">Enter the 6-digit code sent to <strong id="reset-email-display"></strong></p>
       </div>
@@ -145,11 +145,11 @@
         </div>
         <button type="submit" class="btn btn-gradient btn-lg w-full auth-submit" id="reset-btn">
           <span id="reset-btn-text">Set New Password</span>
-          <span>&#8594;</span>
+          <span>-></span>
         </button>
       </form>
       <p class="auth-footer">
-        <a href="#" class="auth-link" id="back-to-forgot">&#8592; Try a different email</a>
+        <a href="#" class="auth-link" id="back-to-forgot"><- Try a different email</a>
       </p>
     </div>
 
@@ -277,7 +277,7 @@
     } catch (err) {
       const d = recordFail(email);
       btnText.textContent = 'Sign In';
-      btnIcon.innerHTML   = '&#8594;';
+      btnIcon.innerHTML   = '->';
       btn.disabled = false;
       if (d.lockedUntil > Date.now()) {
         startLockoutCountdown(d.lockedUntil);
@@ -372,7 +372,7 @@
   /* ── Show password reset success ── */
   if (new URLSearchParams(location.search).get('reset') === '1') {
     const errEl = document.getElementById('auth-error');
-    errEl.textContent = '✓ Password reset successfully. Please sign in with your new password.';
+    errEl.textContent = 'OK Password reset successfully. Please sign in with your new password.';
     errEl.classList.add('show');
     errEl.style.background = 'rgba(0,200,100,0.1)';
     errEl.style.color = 'var(--low)';

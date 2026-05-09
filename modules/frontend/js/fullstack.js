@@ -1,5 +1,5 @@
 /**
- * fullstack.js — Full-Stack Application Intelligence module
+ * fullstack.js -- Full-Stack Application Intelligence module
  *
  * Depends on: js/env.js, js/auth.js, js/app.js, js/session.js
  */
@@ -119,7 +119,7 @@ async function confirmApigwConnect() {
   setConnection(MODULE, 'apigw', { url, connectedAt: new Date().toISOString() });
 
   const statusEl = document.getElementById('apigw-status');
-  if (statusEl) statusEl.innerHTML = `<span style="color:var(--low)">● Connected</span>`;
+  if (statusEl) statusEl.innerHTML = `<span style="color:var(--low)">- Connected</span>`;
 
   showToast('API Gateway connected! Starting scan…', 'success');
   await sleep(400);

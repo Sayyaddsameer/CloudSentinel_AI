@@ -16,7 +16,7 @@ GCP_SECRET_NAME = os.environ.get("GCP_SECRET_NAME", "")
 
 
 # ---------------------------------------------------------------------------
-# STS helper — if TARGET_ROLE_ARN is set, all clients use assumed-role creds
+# STS helper -- if TARGET_ROLE_ARN is set, all clients use assumed-role creds
 # ---------------------------------------------------------------------------
 
 def get_aws_clients(role_arn=None):
@@ -48,7 +48,7 @@ def get_aws_clients(role_arn=None):
 
 
 # ---------------------------------------------------------------------------
-# Risk record builder — shared schema
+# Risk record builder -- shared schema
 # ---------------------------------------------------------------------------
 
 def build_risk(module, resource, resource_name, risk_type, risk_reason, priority,
@@ -79,13 +79,13 @@ def build_risk(module, resource, resource_name, risk_type, risk_reason, priority
 def save_risk(table, risk):
     try:
         table.put_item(Item=risk)
-        logger.info(f"Saved: [{risk['riskPriority']}] {risk['riskType']} — {risk['resourceName']}")
+        logger.info(f"Saved: [{risk['riskPriority']}] {risk['riskType']} -- {risk['resourceName']}")
     except ClientError as e:
         logger.error(f"DynamoDB put_item failed: {e}")
 
 
 # ---------------------------------------------------------------------------
-# AWS — S3
+# AWS -- S3
 # ---------------------------------------------------------------------------
 
 def scan_s3_buckets(clients, table):
@@ -170,7 +170,7 @@ def scan_s3_buckets(clients, table):
 
 
 # ---------------------------------------------------------------------------
-# AWS — EC2 Security Groups
+# AWS -- EC2 Security Groups
 # ---------------------------------------------------------------------------
 
 def scan_security_groups(clients, table):
@@ -217,7 +217,7 @@ def scan_security_groups(clients, table):
 
 
 # ---------------------------------------------------------------------------
-# AWS — IAM Password Policy
+# AWS -- IAM Password Policy
 # ---------------------------------------------------------------------------
 
 def scan_iam_password_policy(clients, table):
@@ -264,7 +264,7 @@ def scan_iam_password_policy(clients, table):
 
 
 # ---------------------------------------------------------------------------
-# AWS Config — pull non-compliant managed rule evaluations
+# AWS Config -- pull non-compliant managed rule evaluations
 # ---------------------------------------------------------------------------
 
 MANAGED_CONFIG_RULES = [
@@ -303,21 +303,21 @@ def scan_aws_config_findings(clients, table):
                     found.append(r)
                     save_risk(table, r)
         except ClientError as e:
-            # Rule may not be enabled in this account — skip silently
+            # Rule may not be enabled in this account -- skip silently
             logger.info(f"Config rule '{rule_name}' not available: {e}")
 
     return found
 
 
 # ---------------------------------------------------------------------------
-# GCP — GCS buckets + Firewall rules
+# GCP -- GCS buckets + Firewall rules
 # Credentials from AWS Secrets Manager (service account JSON key)
 # ---------------------------------------------------------------------------
 
 def scan_gcp_resources(table):
     found = []
     if not GCP_SECRET_NAME:
-        logger.info("GCP_SECRET_NAME not configured — skipping GCP scan")
+        logger.info("GCP_SECRET_NAME not configured -- skipping GCP scan")
         return found
 
     try:
@@ -343,7 +343,7 @@ def scan_gcp_resources(table):
         scopes=["https://www.googleapis.com/auth/cloud-platform"],
     )
 
-    # GCS bucket scan — check for public ACLs
+    # GCS bucket scan -- check for public ACLs
     try:
         gcs_client = gcs_lib.Client(credentials=credentials, project=project_id)
         for bucket in gcs_client.list_buckets():
@@ -375,7 +375,7 @@ def scan_gcp_resources(table):
     except Exception as e:
         logger.warning(f"GCS bucket list failed: {e}")
 
-    # GCP Firewall rules — check for wide-open ingress
+    # GCP Firewall rules -- check for wide-open ingress
     try:
         compute = googleapiclient.discovery.build("compute", "v1", credentials=credentials)
         rules = compute.firewalls().list(project=project_id).execute().get("items", [])
@@ -436,7 +436,7 @@ def lambda_handler(event, context):
     all_risks += scan_aws_config_findings(clients, table)
     all_risks += scan_gcp_resources(table)
 
-    logger.info(f"Scan complete — {len(all_risks)} risk(s) found")
+    logger.info(f"Scan complete -- {len(all_risks)} risk(s) found")
     return {
         "statusCode": 200,
         "headers": {

@@ -25,7 +25,7 @@ logger = logging.getLogger()
 logger.setLevel(logging.INFO)
 
 # ---------------------------------------------------------------------------
-# Configuration — sourced entirely from Lambda environment variables
+# Configuration -- sourced entirely from Lambda environment variables
 # ---------------------------------------------------------------------------
 
 DYNAMODB_TABLE         = os.environ["DYNAMODB_TABLE"]
@@ -64,11 +64,11 @@ def lambda_handler(event, context):
     scan_id    = event.get("scanId", "")
 
     if not user_email:
-        logger.warning("Missing userEmail in event — skipping notification. event=%s", json.dumps(event))
+        logger.warning("Missing userEmail in event -- skipping notification. event=%s", json.dumps(event))
         return {"statusCode": 200, "body": "Skipped: missing userEmail"}
 
     if not SNS_TOPIC_ARN:
-        logger.error("SNS_TOPIC_ARN environment variable is not set — cannot send notification")
+        logger.error("SNS_TOPIC_ARN environment variable is not set -- cannot send notification")
         return {"statusCode": 500, "body": "Configuration error: SNS_TOPIC_ARN is not set"}
 
     # Query open risks for this module using the existing module-index GSI,
@@ -279,7 +279,7 @@ def _build_html_email(module, risks, high, medium, low, scan_id):
     <tr><td style="padding:18px 32px;background:#0d1225;
       border-top:1px solid #1e2840;text-align:center">
       <p style="font-size:12px;color:#4a5577;margin:0">
-        CloudSentinel — Scan reference: {scan_ref}
+        CloudSentinel -- Scan reference: {scan_ref}
       </p>
       <p style="font-size:11px;color:#4a5577;margin:4px 0 0">
         To adjust alert settings, sign in to your dashboard.

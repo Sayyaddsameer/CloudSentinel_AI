@@ -1,5 +1,5 @@
 """
-deploy_console.py — CloudSentinel console-based deployer (no Terraform required).
+deploy_console.py -- CloudSentinel console-based deployer (no Terraform required).
 
 Usage:
     python deploy_console.py
@@ -172,7 +172,7 @@ def create_dynamodb_table(ddb, cfg: dict, step: Step) -> str:
             waiter.wait(TableName=table_name)
             log.info("DynamoDB table '%s' is active.", table_name)
         except ddb.meta.client.exceptions.ResourceInUseException:
-            log.info("DynamoDB table '%s' already exists — skipping.", table_name)
+            log.info("DynamoDB table '%s' already exists -- skipping.", table_name)
 
     step.run(f"Create DynamoDB table: {table_name}", _create)
     return table_name
@@ -189,7 +189,7 @@ def create_s3_bucket(s3, account_id: str, cfg: dict, step: Step) -> str:
                 kwargs["CreateBucketConfiguration"] = {"LocationConstraint": region}
             s3.create_bucket(**kwargs)
         except s3.exceptions.BucketAlreadyOwnedByYou:
-            log.info("S3 bucket '%s' already exists — skipping creation.", bucket_name)
+            log.info("S3 bucket '%s' already exists -- skipping creation.", bucket_name)
 
         s3.put_public_access_block(
             Bucket=bucket_name,
@@ -242,7 +242,7 @@ def create_iam_role(iam, cfg: dict, step: Step) -> str:
             role_arn = resp["Role"]["Arn"]
         except iam.exceptions.EntityAlreadyExistsException:
             role_arn = iam.get_role(RoleName=role_name)["Role"]["Arn"]
-            log.info("IAM role '%s' already exists — skipping creation.", role_name)
+            log.info("IAM role '%s' already exists -- skipping creation.", role_name)
 
         iam.attach_role_policy(
             RoleName=role_name,
@@ -505,6 +505,31 @@ def create_api_gateway(apigw, lmb, account_id: str, cfg: dict,
             ("scan-mobile",      "POST", f"{project}-mobile-analyzer"),
         ]
 
+        # ── Create Cognito authorizer ───────────────────────────────
+        cognito_pool_id  = cfg.get("cognito_pool_id", "")
+        cognito_authorizer_id = None
+        if cognito_pool_id:
+            pool_arn = f"arn:aws:cognito-idp:{region}:{account_id}:userpool/{cognito_pool_id}"
+            existing_auths = apigw.get_authorizers(restApiId=api_id)["items"]
+            for ea in existing_auths:
+                if ea["name"] == "CloudSentinelCognito":
+                    cognito_authorizer_id = ea["id"]
+                    break
+            if not cognito_authorizer_id:
+                auth_resp = apigw.create_authorizer(
+                    restApiId=api_id,
+                    name="CloudSentinelCognito",
+                    type="COGNITO_USER_POOLS",
+                    providerARNs=[pool_arn],
+                    identitySource="method.request.header.Authorization",
+                    authorizerResultTtlInSeconds=300,
+                )
+                cognito_authorizer_id = auth_resp["id"]
+                log.info("Created Cognito authorizer: %s", cognito_authorizer_id)
+
+        auth_type = "COGNITO_USER_POOLS" if cognito_authorizer_id else "NONE"
+        auth_kwargs = ({"authorizerId": cognito_authorizer_id} if cognito_authorizer_id else {})
+
         for path_part, method, fn_name in routes:
             resource = apigw.create_resource(
                 restApiId=api_id, parentId=root_id, pathPart=path_part
@@ -514,7 +539,8 @@ def create_api_gateway(apigw, lmb, account_id: str, cfg: dict,
 
             apigw.put_method(
                 restApiId=api_id, resourceId=resource_id,
-                httpMethod=method, authorizationType="NONE",
+                httpMethod=method, authorizationType=auth_type,
+                **auth_kwargs,
             )
             apigw.put_integration(
                 restApiId=api_id, resourceId=resource_id,
@@ -609,7 +635,7 @@ def create_cfn_template_bucket(s3, account_id: str, cfg: dict, step: Step) -> st
             s3.create_bucket(**kwargs)
             log.info("S3 CFN bucket '%s' created.", cfn_bucket)
         except s3.exceptions.BucketAlreadyOwnedByYou:
-            log.info("S3 CFN bucket '%s' already exists — skipping.", cfn_bucket)
+            log.info("S3 CFN bucket '%s' already exists -- skipping.", cfn_bucket)
         except Exception as exc:
             if "BucketAlreadyExists" in type(exc).__name__:
                 log.warning("Bucket name '%s' already taken globally. Skipping.", cfn_bucket)
@@ -653,7 +679,7 @@ def create_cfn_template_bucket(s3, account_id: str, cfg: dict, step: Step) -> st
             )
             log.info("scanner-role.yaml uploaded to s3://%s/scanner-role.yaml", cfn_bucket)
         else:
-            log.warning("scanner_role.yaml not found at %s — skipping upload.", template_src)
+            log.warning("scanner_role.yaml not found at %s -- skipping upload.", template_src)
 
     step.run(f"Create CFN template bucket and upload scanner-role.yaml: {cfn_bucket}", _create)
     return f"https://{cfn_bucket}.s3.amazonaws.com/scanner-role.yaml"
@@ -799,7 +825,7 @@ def main() -> None:
     env_js_path = ROOT / "modules" / "frontend" / "js" / "env.js"
     env_js_content = f"""\
 /**
- * env.js — Runtime environment configuration for CloudSentinel
+ * env.js -- Runtime environment configuration for CloudSentinel
  *
  * Auto-generated by deploy_console.py on {__import__('datetime').datetime.utcnow().strftime('%Y-%m-%d %H:%M UTC')}
  * Re-run deploy_console.py to regenerate this file after infrastructure changes.

@@ -20,7 +20,7 @@ CORS_HEADERS = {
     "Access-Control-Allow-Origin": "*",
 }
 
-# Resources that are intentionally public — exclude from chatbot context
+# Resources that are intentionally public -- exclude from chatbot context
 IGNORED_RESOURCE_NAMES = {"cloudsentinel-cf-templates-871070087236"}
 
 
@@ -40,7 +40,7 @@ def fetch_all_risks(table):
     # Filter ignored resources
     items = [i for i in items if i.get("resourceName", "") not in IGNORED_RESOURCE_NAMES]
 
-    # Deduplicate — keep newest per (resourceId, riskType)
+    # Deduplicate -- keep newest per (resourceId, riskType)
     seen = {}
     for item in items:
         key = (item.get("resourceId", ""), item.get("riskType", ""))
@@ -132,18 +132,18 @@ def rule_based_response(question: str, risks: list) -> str:
             "**CloudSentinel AI** is a cloud security intelligence platform that scans your AWS and GCP "
             "environments for misconfigurations, IAM vulnerabilities, and compliance gaps.\n\n"
             "It has **5 specialized modules:**\n"
-            "1. **Cloud Infrastructure** — S3, EC2 security groups, IAM, AWS Config\n"
-            "2. **DevOps** — CI/CD pipelines, secrets in code, missing test steps\n"
-            "3. **Full-Stack** — API Gateway auth, CORS, Lambda permissions\n"
-            "4. **Data Engineering** — DynamoDB encryption, S3 data buckets, Glue jobs\n"
-            "5. **Mobile Backend** — Cognito MFA, API route auth, IAM execution roles\n\n"
+            "1. **Cloud Infrastructure** -- S3, EC2 security groups, IAM, AWS Config\n"
+            "2. **DevOps** -- CI/CD pipelines, secrets in code, missing test steps\n"
+            "3. **Full-Stack** -- API Gateway auth, CORS, Lambda permissions\n"
+            "4. **Data Engineering** -- DynamoDB encryption, S3 data buckets, Glue jobs\n"
+            "5. **Mobile Backend** -- Cognito MFA, API route auth, IAM execution roles\n\n"
             "Each scan stores results in DynamoDB and shows actionable remediation steps on the dashboard."
         )
 
     if any(kw in q for kw in ["module", "start", "first", "begin", "which"]):
         return (
-            "**Start with the Cloud Infrastructure module** — it's the foundation.\n\n"
-            "1. Go to **Cloud Infrastructure** → Connect your AWS account (takes 60 seconds via CloudFormation)\n"
+            "**Start with the Cloud Infrastructure module** -- it's the foundation.\n\n"
+            "1. Go to **Cloud Infrastructure** -> Connect your AWS account (takes 60 seconds via CloudFormation)\n"
             "2. Click **Rescan Now** to detect misconfigurations in S3, EC2, and IAM\n"
             "3. Then explore **DevOps**, **Full-Stack**, **Data Engineering**, and **Mobile Backend** for specialized scans\n\n"
             "Each module page has its own **Scan** button and **AI chatbot** for module-specific questions."
@@ -153,23 +153,23 @@ def rule_based_response(question: str, risks: list) -> str:
         return (
             "**Connecting your AWS account is easy and read-only:**\n\n"
             "1. Go to the **Cloud Infrastructure** page\n"
-            "2. Click **Manage Connections** → **Connect AWS**\n"
-            "3. Choose CloudFormation (recommended) — one-click stack deployment\n"
-            "4. The stack creates a read-only IAM role — CloudSentinel can **never modify** your resources\n"
+            "2. Click **Manage Connections** -> **Connect AWS**\n"
+            "3. Choose CloudFormation (recommended) -- one-click stack deployment\n"
+            "4. The stack creates a read-only IAM role -- CloudSentinel can **never modify** your resources\n"
             "5. Click **Confirm** and run your first scan!\n\n"
             "For GCP: Upload a Viewer-role service account JSON key. It's stored encrypted in AWS Secrets Manager."
         )
 
-    # NOTE: deliberately excluding 'risk' and 'scan' here — those are handled
+    # NOTE: deliberately excluding 'risk' and 'scan' here -- those are handled
     # by the risk-data branch below so "Highest risk right now?" doesn't get caught here
     if any(kw in q for kw in ["what risks", "can you detect", "what can it find", "what does it find",
                                "what does cloudsentinel check", "what vulnerabilit"]):
         return (
             "CloudSentinel detects **security risks across your entire cloud stack:**\n\n"
             "**Cloud Infrastructure:**\n"
-            "• S3 buckets with public access enabled\n"
-            "• EC2 security groups with port 22/3389 open to 0.0.0.0/0\n"
-            "• Missing IAM account password policy\n\n"
+            "- S3 buckets with public access enabled\n"
+            "- EC2 security groups with port 22/3389 open to 0.0.0.0/0\n"
+            "- Missing IAM account password policy\n\n"
             "**DevOps:** Hardcoded secrets, missing tests, no rollback strategy\n\n"
             "**Full-Stack:** Unauthenticated API routes, permissive CORS, unencrypted Lambdas\n\n"
             "**Data Engineering:** Unencrypted DynamoDB tables, public data buckets, Glue failures\n\n"
@@ -184,7 +184,7 @@ def rule_based_response(question: str, risks: list) -> str:
         return (
             "No risks have been detected yet. Run a scan from any module page first, "
             "then ask me about the results!\n\n"
-            "**Quick start:** Go to Cloud Infrastructure → Connect AWS → Rescan Now"
+            "**Quick start:** Go to Cloud Infrastructure -> Connect AWS -> Rescan Now"
         )
 
     if any(kw in q for kw in ["highest", "top", "worst", "critical", "priority", "most"]):
@@ -193,7 +193,7 @@ def rule_based_response(question: str, risks: list) -> str:
             others = f" (+{len(high)-1} more High risks)" if len(high) > 1 else ""
             return (
                 f"Your highest risk right now is:\n\n"
-                f"🔴 **{top.get('riskType')}** on `{top.get('resourceName')}`\n"
+                f"[HIGH] **{top.get('riskType')}** on `{top.get('resourceName')}`\n"
                 f"{top.get('riskReason', '')}\n\n"
                 f"**Remediation:** {'; '.join(top.get('remediationSteps', ['See AWS documentation.']))}"
                 f"{others}"
@@ -214,25 +214,25 @@ def rule_based_response(question: str, risks: list) -> str:
     if any(kw in q for kw in ["compare", "breakdown", "summary", "overview", "count", "how many"]):
         return (
             f"Here's your current risk breakdown:\n\n"
-            f"🔴 High: {len(high)}\n"
-            f"🟡 Medium: {len(medium)}\n"
-            f"🟢 Low: {total - len(high) - len(medium)}\n"
-            f"📊 Total: {total}\n\n"
-            f"Top concern: {high[0].get('riskType', 'N/A') if high else 'None — great job!'}"
+            f"[HIGH] High: {len(high)}\n"
+            f"[MED] Medium: {len(medium)}\n"
+            f"[LOW] Low: {total - len(high) - len(medium)}\n"
+            f" Total: {total}\n\n"
+            f"Top concern: {high[0].get('riskType', 'N/A') if high else 'None -- great job!'}"
         )
 
     if any(kw in q for kw in ["best", "practice", "recommend", "should", "advice"]):
         return (
             "Based on your current scan results, here are the top security best practices to apply:\n\n"
-            "1. **Restrict SSH (port 22)** — Never allow 0.0.0.0/0 on security groups. Use SSM Session Manager instead.\n"
-            "2. **Set an IAM Password Policy** — Require 14+ chars, uppercase, numbers, and 90-day expiry.\n"
-            "3. **Enable S3 Block Public Access** — Enable all 4 settings on every bucket.\n"
-            "4. **Add API authorization** — Use Cognito or IAM auth on all API Gateway endpoints.\n"
-            "5. **Enable MFA** — Enforce MFA for all IAM users and Cognito user pools."
+            "1. **Restrict SSH (port 22)** -- Never allow 0.0.0.0/0 on security groups. Use SSM Session Manager instead.\n"
+            "2. **Set an IAM Password Policy** -- Require 14+ chars, uppercase, numbers, and 90-day expiry.\n"
+            "3. **Enable S3 Block Public Access** -- Enable all 4 settings on every bucket.\n"
+            "4. **Add API authorization** -- Use Cognito or IAM auth on all API Gateway endpoints.\n"
+            "5. **Enable MFA** -- Enforce MFA for all IAM users and Cognito user pools."
         )
 
     # Default: summarize all risks
-    lines = [f"🔴 {r.get('riskType')} on `{r.get('resourceName')}`" for r in high[:5]]
+    lines = [f"[HIGH] {r.get('riskType')} on `{r.get('resourceName')}`" for r in high[:5]]
     summary = "\n".join(lines)
     return (
         f"You have **{total} unique risks** detected ({len(high)} High, {len(medium)} Medium).\n\n"
@@ -273,7 +273,7 @@ def lambda_handler(event, context):
     answer, used_ai = call_bedrock(bedrock, prompt)
 
     if not used_ai:
-        logger.info("Bedrock unavailable — using rule-based fallback")
+        logger.info("Bedrock unavailable -- using rule-based fallback")
         answer = rule_based_response(question, risks)
 
     return {

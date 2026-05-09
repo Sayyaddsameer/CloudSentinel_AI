@@ -1,11 +1,11 @@
 /**
- * auth.js — Amazon Cognito authentication
+ * auth.js -- Amazon Cognito authentication
  *
  * Requires window.ENV_COGNITO_POOL_ID, window.ENV_COGNITO_CLIENT_ID,
  * and window.ENV_API_URL to be set by js/env.js before this script loads.
  *
  * All auth flows use the Cognito USER_PASSWORD_AUTH flow directly
- * from the browser (public client — no client secret).
+ * from the browser (public client -- no client secret).
  */
 
 (function () {
@@ -137,7 +137,7 @@
       throw new Error(msg);
     }
 
-    /* User must confirm email — return email so the UI can show the code step. */
+    /* User must confirm email -- return email so the UI can show the code step. */
     const body = await res.json();
     return { pending: true, email };
   }
@@ -209,7 +209,7 @@
     window.location.href = 'index.html';
   }
 
-  /* ── Forgot Password — sends code to email ───────────────── */
+  /* ── Forgot Password -- sends code to email ───────────────── */
   async function forgotPassword(email) {
     _assertConfigured();
     const res = await fetch(COGNITO_URL, {
@@ -227,7 +227,7 @@
     return true;
   }
 
-  /* ── Confirm Forgot Password — verifies code + sets new pw ─ */
+  /* ── Confirm Forgot Password -- verifies code + sets new pw ─ */
   async function confirmForgotPassword(email, code, newPassword) {
     _assertConfigured();
     const res = await fetch(COGNITO_URL, {

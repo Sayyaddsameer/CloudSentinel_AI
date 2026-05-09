@@ -4,7 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <meta name="description" content="Create your CloudSentinel account">
-  <title>Create Account — CloudSentinel</title>
+  <title>Create Account -- CloudSentinel</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="css/styles.css">
@@ -85,7 +85,7 @@
 
       <button type="submit" class="btn btn-gradient btn-lg w-full auth-submit" id="signup-btn">
         <span id="btn-text">Create Account</span>
-        <span>&#8594;</span>
+        <span>-></span>
       </button>
     </form>
 
@@ -96,7 +96,7 @@
     <!-- Step 2: Verify email code (hidden until registration succeeds) -->
     <div id="verify-step" style="display:none">
       <div style="text-align:center;margin-bottom:1.5rem">
-        <div style="font-size:2.5rem;margin-bottom:.5rem">&#9993;</div>
+        <div style="font-size:2.5rem;margin-bottom:.5rem">[MAIL]</div>
         <h2 class="auth-heading" style="margin-bottom:.5rem">Check your email</h2>
         <p class="auth-sub">We sent a 6-digit code to <strong id="verify-email-display"></strong></p>
       </div>
@@ -115,7 +115,7 @@
 
         <button type="submit" class="btn btn-gradient btn-lg w-full auth-submit" id="verify-btn">
           <span id="verify-btn-text">Confirm Account</span>
-          <span>&#8594;</span>
+          <span>-></span>
         </button>
       </form>
 
@@ -171,9 +171,9 @@
     if (!strength) { fill.className = 'pw-strength-fill'; label.textContent = ''; return; }
     fill.className = `pw-strength-fill ${strength}`;
     const labels = {
-      weak:   'Weak — add length and complexity',
-      fair:   'Fair — add symbols or uppercase',
-      good:   'Good — one more improvement needed',
+      weak:   'Weak -- add length and complexity',
+      fair:   'Fair -- add symbols or uppercase',
+      good:   'Good -- one more improvement needed',
       strong: 'Strong',
     };
     label.className   = `pw-strength-label ${strength}`;

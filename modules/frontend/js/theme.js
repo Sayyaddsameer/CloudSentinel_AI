@@ -1,5 +1,5 @@
 ﻿/**
- * theme.js — Light / Dark mode
+ * theme.js -- Light / Dark mode
  * Load this in <head> with a <script> tag so it runs before body paint.
  * Prevents flash-of-wrong-theme.
  */
@@ -27,5 +27,5 @@ function toggleTheme() {
   setTheme(current === 'dark' ? 'light' : 'dark');
 }
 
-/* Apply immediately — must run before DOM renders */
+/* Apply immediately -- must run before DOM renders */
 (function() { setTheme(getTheme()); })();

@@ -1,4 +1,4 @@
-/** mobile.js — Mobile Backend (Flutter) module */
+/** mobile.js -- Mobile Backend (Flutter) module */
 const MODULE = 'mobile';
 let allRisks = [];
 
@@ -110,7 +110,7 @@ async function confirmMobileConnect() {
 
   closeModal('modal-mobile');
   setConnection(MODULE, 'aws-mobile', { apiUrl, accountId, connectedAt: new Date().toISOString() });
-  document.getElementById('mobile-aws-status').innerHTML = `<span style="color:var(--low)">● Connected</span>`;
+  document.getElementById('mobile-aws-status').innerHTML = `<span style="color:var(--low)">- Connected</span>`;
   document.getElementById('mobile-aws-card').classList.add('connected');
   showToast('Mobile backend connected! Starting monitoring…', 'success');
   await sleep(400);

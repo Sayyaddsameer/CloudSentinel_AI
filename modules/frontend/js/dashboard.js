@@ -1,5 +1,5 @@
 /**
- * dashboard.js — Dashboard module logic
+ * dashboard.js -- Dashboard module logic
  *
  * Fetches live risk data for all modules from the production API,
  * renders module cards with connection status and risk trends,
@@ -153,7 +153,7 @@ function renderActivityFeed() {
       <div class="activity-item">
         <div class="activity-dot ${dotClass}">${MOD_ICONS[h.module] || '[scan]'}</div>
         <div class="activity-content">
-          <div class="activity-title">${MOD_NAMES[h.module] || h.module} &mdash; ${h.total} risk${h.total !== 1 ? 's' : ''} detected</div>
+          <div class="activity-title">${MOD_NAMES[h.module] || h.module} -- ${h.total} risk${h.total !== 1 ? 's' : ''} detected</div>
           <div class="activity-meta">
             ${time} &middot;
             <span style="color:var(--high)">${h.high} High</span> &middot;

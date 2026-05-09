@@ -18,7 +18,7 @@ MAX_RISKS   = int(os.environ.get("MAX_RISKS_PER_RUN", "50"))
 
 
 # ---------------------------------------------------------------------------
-# Bedrock — generate a developer-friendly explanation for a risk
+# Bedrock -- generate a developer-friendly explanation for a risk
 # ---------------------------------------------------------------------------
 
 def build_bedrock_prompt(risk):
@@ -55,7 +55,7 @@ def call_bedrock(bedrock_client, prompt):
 
 
 # ---------------------------------------------------------------------------
-# Comprehend — classify risk into a category using key phrase extraction
+# Comprehend -- classify risk into a category using key phrase extraction
 # Detected key phrases are mapped to: SECURITY | PERFORMANCE | RELIABILITY | COMPLIANCE
 # ---------------------------------------------------------------------------
 
@@ -91,7 +91,7 @@ def classify_risk_with_comprehend(comprehend_client, risk_text):
 
 
 # ---------------------------------------------------------------------------
-# DynamoDB — fetch unprocessed risks and write back
+# DynamoDB -- fetch unprocessed risks and write back
 # ---------------------------------------------------------------------------
 
 def fetch_open_risks(table):
@@ -149,7 +149,7 @@ def lambda_handler(event, context):
         category    = classify_risk_with_comprehend(comp, risk_text)
 
         update_risk(table, risk, explanation, category)
-        logger.info(f"Updated {risk['resourceId']} — category: {category}")
+        logger.info(f"Updated {risk['resourceId']} -- category: {category}")
         processed += 1
 
     return {

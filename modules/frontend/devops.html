@@ -3,8 +3,8 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <meta name="description" content="DevOps Intelligence — CloudSentinel CI/CD pipeline risk analysis">
-  <title>DevOps Intelligence — CloudSentinel</title>
+  <meta name="description" content="DevOps Intelligence -- CloudSentinel CI/CD pipeline risk analysis">
+  <title>DevOps Intelligence -- CloudSentinel</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="css/styles.css">
@@ -130,7 +130,7 @@
   <div class="modal">
     <div class="modal-header">
       <div><div class="modal-title">Connect GitHub</div><div class="modal-subtitle">Grant read-only access to analyze pipeline configs</div></div>
-      <span class="modal-close" onclick="closeModal('modal-github')">&#10005;</span>
+      <span class="modal-close" onclick="closeModal('modal-github')">X</span>
     </div>
     <div class="modal-body">
       <div class="info-box">
@@ -147,7 +147,7 @@
           <input class="form-input" id="github-token" type="password" placeholder="ghp_xxxxxxxxxxxxxxxxxxxx">
           <span class="input-icon" id="toggle-gh-token">show</span>
         </div>
-        <span class="form-hint">Generate at github.com/settings/tokens — needs <code>repo</code> scope (read-only)</span>
+        <span class="form-hint">Generate at github.com/settings/tokens -- needs <code>repo</code> scope (read-only)</span>
       </div>
       <label class="checkbox-group">
         <input type="checkbox" id="github-consent">
@@ -166,12 +166,12 @@
   <div class="chatbot-header">
     <div class="chatbot-header-icon">AI</div>
     <div class="chatbot-header-info"><div class="chatbot-header-title">CloudSentinel AI</div><div class="chatbot-header-sub">Online</div></div>
-    <span class="chatbot-close" id="chatbot-close">&#10005;</span>
+    <span class="chatbot-close" id="chatbot-close">X</span>
   </div>
   <div class="chatbot-messages" id="chatbot-messages"></div>
   <div class="chatbot-input-area">
     <input class="chatbot-input" id="chatbot-input" placeholder="e.g. How do I remove hardcoded secrets?" type="text">
-    <button class="chatbot-send" id="chatbot-send">&#10148;</button>
+    <button class="chatbot-send" id="chatbot-send">-></button>
   </div>
 </div>
 <div id="toast-container"></div>

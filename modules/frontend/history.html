@@ -3,8 +3,8 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <meta name="description" content="Risk History — CloudSentinel">
-  <title>Risk History — CloudSentinel</title>
+  <meta name="description" content="Risk History -- CloudSentinel">
+  <title>Risk History -- CloudSentinel</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="css/styles.css">
@@ -144,7 +144,7 @@
         const diff = h.total - prev.total;
         if (diff > 0)      trend = `<span class="risk-trend up">&#8593; ${diff} more than prev</span>`;
         else if (diff < 0) trend = `<span class="risk-trend down">&#8595; ${Math.abs(diff)} fewer than prev</span>`;
-        else               trend = `<span class="risk-trend same">&#8594; same as prev</span>`;
+        else               trend = `<span class="risk-trend same">-> same as prev</span>`;
       }
       return `
         <div class="history-item" style="animation-delay:${i*0.04}s;margin-bottom:.625rem">

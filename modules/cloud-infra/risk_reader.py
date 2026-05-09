@@ -19,7 +19,7 @@ CORS_HEADERS = {
 }
 
 # Resources that are intentionally configured in a way that would otherwise
-# be flagged — suppress these to avoid false positives on the dashboard.
+# be flagged -- suppress these to avoid false positives on the dashboard.
 IGNORED_RESOURCE_NAMES = {
     # This bucket is intentionally public so CloudFormation in external
     # accounts can download the scanner-role.yaml template.

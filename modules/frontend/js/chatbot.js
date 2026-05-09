@@ -1,4 +1,4 @@
-﻿// chatbot.js — AI assistant chat interface
+﻿// chatbot.js -- AI assistant chat interface
 // Bogavalli Akash
 
 const CHAT_ENDPOINT = `${window.ENV_API_URL || ""}/chat`;

@@ -1,5 +1,5 @@
 /**
- * cloud.js — Cloud Infrastructure module logic
+ * cloud.js -- Cloud Infrastructure module logic
  */
 
 const MODULE = 'cloud-infra';
@@ -85,12 +85,12 @@ function updateProviderCard(provider, connected) {
   if (!statusEl || !cardEl || !btnEl) return;
 
   if (connected) {
-    statusEl.innerHTML = `<span style="color:var(--low)">● Connected</span>`;
+    statusEl.innerHTML = `<span style="color:var(--low)">- Connected</span>`;
     cardEl.classList.add('connected');
     btnEl.textContent = 'Reconnect';
     btnEl.className = 'btn btn-outline w-full';
   } else {
-    statusEl.innerHTML = `<span style="color:var(--text-3)">● Not connected</span>`;
+    statusEl.innerHTML = `<span style="color:var(--text-3)">- Not connected</span>`;
     cardEl.classList.remove('connected');
   }
 }
@@ -221,7 +221,7 @@ function awsStep2() {
   document.getElementById('aws-step-2').style.display='';
   setWizardStep(2);
 
-  /* Build CloudFormation URL — values injected from env.js at deploy time */
+  /* Build CloudFormation URL -- values injected from env.js at deploy time */
   const TEMPLATE_URL = window.ENV_CFN_TEMPLATE_URL || '';
   const LAMBDA_ROLE  = window.ENV_LAMBDA_ROLE_ARN  || '';
   const REGION       = window.ENV_REGION            || 'us-east-1';
@@ -308,7 +308,7 @@ async function confirmGcpConnect() {
 
   const conns = getConnections(MODULE);
   if (Object.keys(conns).length === 1) {
-    /* First connection — go to scan */
+    /* First connection -- go to scan */
     await sleep(400);
     showRisksView(conns);
     startScan();

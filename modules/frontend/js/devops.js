@@ -1,8 +1,8 @@
 /**
- * devops.js — DevOps Intelligence module
+ * devops.js -- DevOps Intelligence module
  *
  * Validates GitHub Personal Access Token against the GitHub API before
- * storing the connection. No DEMO_MODE — all flows require real credentials.
+ * storing the connection. No DEMO_MODE -- all flows require real credentials.
  *
  * Depends on: js/env.js, js/auth.js, js/app.js, js/session.js
  */
@@ -47,7 +47,7 @@ function showRisksView(conns) {
     <button class="btn btn-gradient btn-sm" onclick="startScan()">Re-analyze</button>`;
   const org = conns.github?.org || 'GitHub';
   const el  = document.getElementById('connected-repo-name');
-  if (el) el.textContent = `${org} — Workflows Connected`;
+  if (el) el.textContent = `${org} -- Workflows Connected`;
   loadRisks();
 }
 
@@ -125,7 +125,7 @@ async function validateGithubToken(token) {
   });
 
   if (res.status === 401) {
-    throw new Error('Invalid token — GitHub returned 401 Unauthorized. Check your token and try again.');
+    throw new Error('Invalid token -- GitHub returned 401 Unauthorized. Check your token and try again.');
   }
   if (res.status === 403) {
     throw new Error('Token is valid but lacks required permissions. Ensure it has the "repo" scope (read-only).');
@@ -156,12 +156,12 @@ async function confirmGithubConnect() {
 
     /* Warn if repo scope is missing */
     if (scopes && !scopes.split(',').map(s => s.trim()).includes('repo')) {
-      showToast('Warning: token may lack "repo" scope — some workflow files may be inaccessible.', 'warning', 6000);
+      showToast('Warning: token may lack "repo" scope -- some workflow files may be inaccessible.', 'warning', 6000);
     }
 
     closeModal('modal-github');
 
-    /* Store connection — token stored only in localStorage (never sent to server) */
+    /* Store connection -- token stored only in localStorage (never sent to server) */
     setConnection(MODULE, 'github', {
       org,
       githubLogin: login,
@@ -174,7 +174,7 @@ async function confirmGithubConnect() {
 
     const statusEl = document.getElementById('github-status');
     const cardEl   = document.getElementById('github-card');
-    if (statusEl) statusEl.innerHTML = `<span style="color:var(--low)">● Connected as ${escHtml(login)}</span>`;
+    if (statusEl) statusEl.innerHTML = `<span style="color:var(--low)">- Connected as ${escHtml(login)}</span>`;
     if (cardEl)   cardEl.classList.add('connected');
 
     showToast(`GitHub connected as ${name}! Analyzing pipelines…`, 'success');

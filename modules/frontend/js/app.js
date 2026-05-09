@@ -1,5 +1,5 @@
 /**
- * app.js — Shared utilities: navigation, toasts, chatbot, API calls,
+ * app.js -- Shared utilities: navigation, toasts, chatbot, API calls,
  *           scan history, risk card renderer, auto-refresh
  *
  * Depends on: js/env.js, js/auth.js, js/session.js (loaded before this file)
@@ -75,7 +75,7 @@ function showToast(msg, type = 'info', duration = 4000) {
   }, duration);
 }
 
-/* ── Rate limiter (client-side — defence in depth only) ───── */
+/* ── Rate limiter (client-side -- defence in depth only) ───── */
 function checkRateLimit(email) {
   const key  = `cs_rl_${btoa(email).slice(0, 12)}`;
   const data = JSON.parse(localStorage.getItem(key) || '{"fails":0,"lockedUntil":0}');
@@ -368,7 +368,7 @@ function renderRiskCards(risks, containerId, filterPriority = 'All') {
       <div class="risk-card-header">
         <div>
           <div class="risk-card-title">${escHtml(r.riskType)}</div>
-          <div class="risk-card-resource"><span class="text-muted">Resource:</span> ${escHtml(r.resource)} &mdash; <strong>${escHtml(r.resourceName)}</strong></div>
+          <div class="risk-card-resource"><span class="text-muted">Resource:</span> ${escHtml(r.resource)} -- <strong>${escHtml(r.resourceName)}</strong></div>
         </div>
         <span class="badge badge-${r.riskPriority.toLowerCase()} badge-dot">${r.riskPriority}</span>
       </div>

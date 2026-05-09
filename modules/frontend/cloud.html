@@ -3,8 +3,8 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <meta name="description" content="Cloud Infrastructure risk analysis — CloudSentinel">
-  <title>Cloud Infrastructure — CloudSentinel</title>
+  <meta name="description" content="Cloud Infrastructure risk analysis -- CloudSentinel">
+  <title>Cloud Infrastructure -- CloudSentinel</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="css/styles.css">
@@ -174,7 +174,7 @@
         <div class="modal-title">Connect AWS Account</div>
         <div class="modal-subtitle">CloudSentinel needs read-only access to scan your AWS account</div>
       </div>
-      <span class="modal-close" onclick="closeModal('modal-aws')">&#10005;</span>
+      <span class="modal-close" onclick="closeModal('modal-aws')">X</span>
     </div>
 
     <!-- Wizard steps -->
@@ -211,7 +211,7 @@
       </div>
       <div class="modal-footer">
         <button class="btn btn-outline" onclick="closeModal('modal-aws')">Cancel</button>
-        <button class="btn btn-primary" id="btn-next-1" onclick="awsStep2()">Next &#8594;</button>
+        <button class="btn btn-primary" id="btn-next-1" onclick="awsStep2()">Next -></button>
       </div>
     </div>
 
@@ -222,7 +222,7 @@
           <div>Click the button below to open CloudFormation in your AWS Console. The stack will create a read-only IAM role with an External ID for security.</div>
         </div>
         <a id="cfn-link" href="#" target="_blank" class="btn btn-primary w-full" style="text-decoration:none;justify-content:center;margin-bottom:.75rem">
-          Open CloudFormation Console &#8594;
+          Open CloudFormation Console ->
         </a>
         <div style="font-size:.8rem;font-weight:600;color:var(--text-3);margin-bottom:.5rem">Or deploy via AWS CLI:</div>
         <div class="code-block" id="cfn-cli-cmd">Generating command…</div>
@@ -246,8 +246,8 @@
         <span class="form-hint">Found in the top right of your AWS Console</span>
       </div>
       <div class="modal-footer">
-        <button class="btn btn-outline" onclick="awsStep1()">&#8592; Back</button>
-        <button class="btn btn-primary" onclick="awsStep3()">I've deployed the stack &#8594;</button>
+        <button class="btn btn-outline" onclick="awsStep1()"><- Back</button>
+        <button class="btn btn-primary" onclick="awsStep3()">I've deployed the stack -></button>
       </div>
     </div>
 
@@ -261,7 +261,7 @@
         <span class="form-hint">I confirm that the <strong>CloudSentinel-Scanner</strong> CloudFormation stack has been deployed in my AWS account and I consent to CloudSentinel performing read-only scans.</span>
       </label>
       <div class="modal-footer">
-        <button class="btn btn-outline" onclick="awsStep2()">&#8592; Back</button>
+        <button class="btn btn-outline" onclick="awsStep2()"><- Back</button>
         <button class="btn btn-gradient" id="btn-confirm-aws" onclick="confirmAwsConnect()" disabled>Start First Scan</button>
       </div>
     </div>
@@ -276,7 +276,7 @@
         <div class="modal-title">Connect GCP Project</div>
         <div class="modal-subtitle">Upload a service account key with Viewer permissions</div>
       </div>
-      <span class="modal-close" onclick="closeModal('modal-gcp')">&#10005;</span>
+      <span class="modal-close" onclick="closeModal('modal-gcp')">X</span>
     </div>
     <div class="modal-body">
       <div class="info-box">
@@ -285,9 +285,9 @@
       </div>
       <div style="font-size:.8rem;font-weight:600;color:var(--text-3);margin-bottom:.5rem">Steps to generate the key:</div>
       <div class="remediation-steps">
-        <div class="remediation-step"><span class="step-num">1</span><span>GCP Console &rarr; IAM &amp; Admin &rarr; Service Accounts &rarr; Create Service Account</span></div>
+        <div class="remediation-step"><span class="step-num">1</span><span>GCP Console -> IAM &amp; Admin -> Service Accounts -> Create Service Account</span></div>
         <div class="remediation-step"><span class="step-num">2</span><span>Assign the <strong>Viewer</strong> role (roles/viewer)</span></div>
-        <div class="remediation-step"><span class="step-num">3</span><span>Keys tab &rarr; Add Key &rarr; Create new key &rarr; JSON &rarr; Download</span></div>
+        <div class="remediation-step"><span class="step-num">3</span><span>Keys tab -> Add Key -> Create new key -> JSON -> Download</span></div>
         <div class="remediation-step"><span class="step-num">4</span><span>Upload the JSON file below</span></div>
       </div>
       <div class="form-group mt-2">
@@ -319,7 +319,7 @@
         <div class="modal-title" style="color:var(--high)">Remove Access</div>
         <div class="modal-subtitle">This will revoke CloudSentinel's scanner access</div>
       </div>
-      <span class="modal-close" onclick="closeModal('modal-disconnect')">&#10005;</span>
+      <span class="modal-close" onclick="closeModal('modal-disconnect')">X</span>
     </div>
     <div class="modal-body">
       <div class="info-box danger-box">
@@ -352,12 +352,12 @@ aws cloudformation delete-stack \
   <div class="chatbot-header">
     <div class="chatbot-header-icon">AI</div>
     <div class="chatbot-header-info"><div class="chatbot-header-title">CloudSentinel AI</div><div class="chatbot-header-sub">Online</div></div>
-    <span class="chatbot-close" id="chatbot-close">&#10005;</span>
+    <span class="chatbot-close" id="chatbot-close">X</span>
   </div>
   <div class="chatbot-messages" id="chatbot-messages"></div>
   <div class="chatbot-input-area">
     <input class="chatbot-input" id="chatbot-input" placeholder="Ask about your risks..." type="text">
-    <button class="chatbot-send" id="chatbot-send">&#10148;</button>
+    <button class="chatbot-send" id="chatbot-send">-></button>
   </div>
 </div>
 

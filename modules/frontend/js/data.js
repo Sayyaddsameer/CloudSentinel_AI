@@ -1,5 +1,5 @@
 /**
- * data.js — Data Engineering module
+ * data.js -- Data Engineering module
  *
  * Depends on: js/env.js, js/auth.js, js/app.js, js/session.js
  */
@@ -130,7 +130,7 @@ async function confirmDataConnect() {
 
   const statusEl = document.getElementById('aws-data-status');
   const cardEl   = document.getElementById('aws-data-card');
-  if (statusEl) statusEl.innerHTML = `<span style="color:var(--low)">● Connected</span>`;
+  if (statusEl) statusEl.innerHTML = `<span style="color:var(--low)">- Connected</span>`;
   if (cardEl)   cardEl.classList.add('connected');
 
   showToast('AWS data environment connected! Starting scan…', 'success');
