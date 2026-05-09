@@ -276,7 +276,12 @@ function initChatbot(module) {
     chips.innerHTML = CHAT_CHIPS.map(c => `<button class="chatbot-chip">${c}</button>`).join('');
     panel.insertBefore(chips, msgs);
     chips.querySelectorAll('.chatbot-chip').forEach(btn => {
-      btn.addEventListener('click', () => { if (input) { input.value = btn.textContent; input.focus(); } });
+      btn.addEventListener('click', () => {
+        if (input) {
+          input.value = btn.textContent;
+          sendChat();   // auto-send immediately on chip click
+        }
+      });
     });
   }
 
@@ -322,7 +327,14 @@ function appendUserMessage(text) {
 function appendBotMessage(text) {
   const msgs = document.getElementById('chatbot-messages');
   if (!msgs) return;
-  msgs.insertAdjacentHTML('beforeend', `<div class="chat-msg bot"><div class="chat-avatar">CS</div><div class="chat-bubble">${text}</div></div>`);
+  // Render basic markdown: **bold**, `code`, line breaks, numbered lists
+  const html = text
+    .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')  // escape HTML first
+    .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')                    // **bold**
+    .replace(/`([^`]+)`/g, '<code style="background:rgba(255,255,255,0.1);padding:1px 4px;border-radius:3px">$1</code>') // `code`
+    .replace(/^(\d+\.\s)/gm, '<span style="color:var(--accent)">$1</span>')  // numbered list
+    .replace(/\n/g, '<br>');                                              // newlines
+  msgs.insertAdjacentHTML('beforeend', `<div class="chat-msg bot"><div class="chat-avatar">CS</div><div class="chat-bubble" style="white-space:normal;line-height:1.6">${html}</div></div>`);
   msgs.scrollTop = msgs.scrollHeight;
 }
 

@@ -209,8 +209,9 @@ def lambda_handler(event, context):
     ddb   = boto3.resource("dynamodb", region_name=REGION)
     table = ddb.Table(TABLE_NAME)
 
-    # Fetch risks: module-specific if a module is selected, otherwise all risks
-    if module and module != "cloud-infra":
+    # Fetch risks: always scoped to the current module so chatbot context
+    # matches exactly what the user sees on the dashboard page
+    if module:
         risks = fetch_module_risks(table, module)
     else:
         risks = fetch_all_risks(table)
