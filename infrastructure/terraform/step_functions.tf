@@ -36,10 +36,10 @@ resource "aws_iam_role_policy" "sfn_lambda_invoke" {
         Action = ["lambda:InvokeFunction"]
         Resource = [
           aws_lambda_function.cloud_scanner.arn,
-          aws_lambda_function.devops_scanner.arn,
-          aws_lambda_function.fullstack_scanner.arn,
-          aws_lambda_function.data_scanner.arn,
-          aws_lambda_function.mobile_scanner.arn,
+          aws_lambda_function.devops_analyzer.arn,
+          aws_lambda_function.fullstack_analyzer.arn,
+          aws_lambda_function.data_eng_analyzer.arn,
+          aws_lambda_function.mobile_analyzer.arn,
           aws_lambda_function.ai_explainer.arn,
           aws_lambda_function.notification_handler.arn,
         ]
@@ -151,7 +151,7 @@ resource "aws_sfn_state_machine" "scan_orchestrator" {
                 Type     = "Task"
                 Resource = "arn:aws:states:::lambda:invoke"
                 Parameters = {
-                  FunctionName = aws_lambda_function.devops_scanner.arn
+                  FunctionName = aws_lambda_function.devops_analyzer.arn
                   "Payload.$"  = "$"
                 }
                 Retry = [{
@@ -179,7 +179,7 @@ resource "aws_sfn_state_machine" "scan_orchestrator" {
                 Type     = "Task"
                 Resource = "arn:aws:states:::lambda:invoke"
                 Parameters = {
-                  FunctionName = aws_lambda_function.fullstack_scanner.arn
+                  FunctionName = aws_lambda_function.fullstack_analyzer.arn
                   "Payload.$"  = "$"
                 }
                 Retry = [{ ErrorEquals = ["Lambda.ServiceException"], IntervalSeconds = 2, MaxAttempts = 3, BackoffRate = 2.0 }]
@@ -202,7 +202,7 @@ resource "aws_sfn_state_machine" "scan_orchestrator" {
                 Type     = "Task"
                 Resource = "arn:aws:states:::lambda:invoke"
                 Parameters = {
-                  FunctionName = aws_lambda_function.data_scanner.arn
+                  FunctionName = aws_lambda_function.data_eng_analyzer.arn
                   "Payload.$"  = "$"
                 }
                 Retry = [{ ErrorEquals = ["Lambda.ServiceException"], IntervalSeconds = 2, MaxAttempts = 3, BackoffRate = 2.0 }]
@@ -225,7 +225,7 @@ resource "aws_sfn_state_machine" "scan_orchestrator" {
                 Type     = "Task"
                 Resource = "arn:aws:states:::lambda:invoke"
                 Parameters = {
-                  FunctionName = aws_lambda_function.mobile_scanner.arn
+                  FunctionName = aws_lambda_function.mobile_analyzer.arn
                   "Payload.$"  = "$"
                 }
                 Retry = [{ ErrorEquals = ["Lambda.ServiceException"], IntervalSeconds = 2, MaxAttempts = 3, BackoffRate = 2.0 }]
