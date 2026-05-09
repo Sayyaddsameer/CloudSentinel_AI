@@ -26,6 +26,31 @@
       --card-hover: rgba(255,255,255,0.07);
       --glow: 0 0 80px rgba(108,99,255,0.15);
     }
+    /* ── Light mode overrides ── */
+    [data-theme="light"] {
+      --bg: #f8fafc;
+      --bg2: #f1f5f9;
+      --bg3: #e2e8f0;
+      --border: rgba(0,0,0,0.08);
+      --text: #0f172a;
+      --text2: #475569;
+      --text3: #94a3b8;
+      --card: rgba(0,0,0,0.03);
+      --card-hover: rgba(0,0,0,0.06);
+    }
+    [data-theme="light"] .nav { background: rgba(248,250,252,0.9); }
+    [data-theme="light"] .hero-bg-orb { opacity: .15; }
+    [data-theme="light"] .module-tag { background: rgba(0,0,0,0.05); }
+    [data-theme="light"] .quote-banner { background: linear-gradient(135deg,rgba(108,99,255,0.06),rgba(56,189,248,0.04)); }
+    [data-theme="light"] footer { background: var(--bg2); }
+    /* ── Theme toggle button ── */
+    .theme-btn {
+      padding: .4rem .9rem; border-radius: 8px; font-size: .82rem; font-weight: 600;
+      border: 1px solid var(--border); color: var(--text2);
+      background: var(--card); cursor: pointer; transition: all .2s;
+      display: flex; align-items: center; gap: .35rem;
+    }
+    .theme-btn:hover { border-color: var(--accent); color: var(--text); }
     * { box-sizing: border-box; margin: 0; padding: 0; }
     html { scroll-behavior: smooth; }
     body {
@@ -242,6 +267,7 @@
     <span class="nav-logo-name">CloudSentinel</span>
   </a>
   <div class="nav-actions">
+    <button class="theme-btn" id="landing-theme-btn" onclick="landingToggleTheme()">🌙 Dark</button>
     <a href="index.html" class="btn-nav-outline">Sign In</a>
     <a href="signup.html" class="btn-nav-primary">Get Started Free →</a>
   </div>
@@ -456,7 +482,24 @@
 </footer>
 
 <script>
-  // Scroll reveal
+  // ── Theme persistence ──
+  (function() {
+    const saved = localStorage.getItem('cs_landing_theme') || 'dark';
+    document.documentElement.setAttribute('data-theme', saved);
+    const btn = document.getElementById('landing-theme-btn');
+    if (btn) btn.textContent = saved === 'dark' ? '☀️ Light' : '🌙 Dark';
+  })();
+
+  function landingToggleTheme() {
+    const current = document.documentElement.getAttribute('data-theme') || 'dark';
+    const next = current === 'dark' ? 'light' : 'dark';
+    document.documentElement.setAttribute('data-theme', next);
+    localStorage.setItem('cs_landing_theme', next);
+    const btn = document.getElementById('landing-theme-btn');
+    if (btn) btn.textContent = next === 'dark' ? '☀️ Light' : '🌙 Dark';
+  }
+
+  // ── Scroll reveal ──
   const obs = new IntersectionObserver(entries => {
     entries.forEach(e => { if (e.isIntersecting) { e.target.classList.add('visible'); obs.unobserve(e.target); } });
   }, { threshold: 0.1 });

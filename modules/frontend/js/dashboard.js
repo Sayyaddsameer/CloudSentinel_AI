@@ -169,7 +169,7 @@ function renderActivityFeed() {
 /* ── Start ────────────────────────────────────────────────── */
 document.addEventListener('DOMContentLoaded', initDashboard);
 
-/* -- Dashboard Chatbot with platform-level chips -- */
+/* ── Dashboard Chatbot with platform-level chips ─────────── */
 const DASHBOARD_CHIPS = [
   'What does CloudSentinel do?',
   'Which module should I use first?',
@@ -178,24 +178,42 @@ const DASHBOARD_CHIPS = [
 ];
 
 function initDashboardChatbot() {
-  // Override chips for dashboard context
-  window._dashboardChips = DASHBOARD_CHIPS;
-  const origChips = window.CHAT_CHIPS;
-  window.CHAT_CHIPS = DASHBOARD_CHIPS;
-  initChatbot('cloud-infra');
-  window.CHAT_CHIPS = origChips;
+  const fab   = document.getElementById('chatbot-fab');
+  const panel = document.getElementById('chatbot-panel');
+  const close = document.getElementById('chatbot-close');
+  const input = document.getElementById('chatbot-input');
+  const send  = document.getElementById('chatbot-send');
+  if (!fab || !panel) return;
 
-  // Override the greeting for dashboard
+  /* Wire up open/close */
+  fab.addEventListener('click',   () => { panel.classList.add('open');    fab.style.display = 'none'; input?.focus(); });
+  close?.addEventListener('click',() => { panel.classList.remove('open'); fab.style.display = 'flex'; });
+  send?.addEventListener('click', () => sendChat());
+  input?.addEventListener('keydown', e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendChat(); } });
+
+  /* Inject dashboard-specific chips */
   const msgs = document.getElementById('chatbot-messages');
-  if (msgs && msgs.children.length === 1) {
-    msgs.innerHTML = '';
-    appendBotMessage(
-      "Hi! I'm CloudSentinel AI. I can help you understand the platform and all 5 security modules.<br><br>" +
-      "Use the chips above for quick answers, or ask me anything about Cloud, DevOps, Full-Stack, Data Engineering, or Mobile security scanning!"
-    );
+  if (msgs && !panel.querySelector('.chatbot-chips')) {
+    const chips = document.createElement('div');
+    chips.className = 'chatbot-chips';
+    chips.innerHTML = DASHBOARD_CHIPS.map(c => `<button class="chatbot-chip">${c}</button>`).join('');
+    panel.insertBefore(chips, msgs);
+    chips.querySelectorAll('.chatbot-chip').forEach(btn => {
+      btn.addEventListener('click', () => {
+        if (input) { input.value = btn.textContent; sendChat(); }
+      });
+    });
   }
+
+  /* Set chatModule for sendChat() */
+  window.chatModule = 'cloud-infra';
+
+  /* Welcome greeting using \n not <br> so appendBotMessage renders correctly */
+  appendBotMessage(
+    "Hi! I\u2019m CloudSentinel AI. I can help you understand the platform and all 5 security modules.\n\n" +
+    "Use the chips above for quick answers, or ask me anything about Cloud, DevOps, Full-Stack, Data Engineering, or Mobile security!"
+  );
 }
 
-document.addEventListener('DOMContentLoaded', () => {
-  initDashboardChatbot();
-});
+document.addEventListener('DOMContentLoaded', initDashboardChatbot);
+

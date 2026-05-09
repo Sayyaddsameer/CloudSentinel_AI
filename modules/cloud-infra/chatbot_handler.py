@@ -160,7 +160,10 @@ def rule_based_response(question: str, risks: list) -> str:
             "For GCP: Upload a Viewer-role service account JSON key. It's stored encrypted in AWS Secrets Manager."
         )
 
-    if any(kw in q for kw in ["detect", "find", "risk", "scan", "check", "what risk"]):
+    # NOTE: deliberately excluding 'risk' and 'scan' here — those are handled
+    # by the risk-data branch below so "Highest risk right now?" doesn't get caught here
+    if any(kw in q for kw in ["what risks", "can you detect", "what can it find", "what does it find",
+                               "what does cloudsentinel check", "what vulnerabilit"]):
         return (
             "CloudSentinel detects **security risks across your entire cloud stack:**\n\n"
             "**Cloud Infrastructure:**\n"

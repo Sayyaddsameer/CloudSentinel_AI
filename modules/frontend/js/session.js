@@ -1,10 +1,17 @@
 /**
- * session.js — Idle session timeout with configurable duration
- * Default: 30 minutes. Resets on any user interaction.
- * Injects countdown pill into navbar automatically.
+ * session.js — Session countdown timer
+ *
+ * Timer is based on LOGIN TIME (session.issuedAt), NOT idle time.
+ * This means the timer counts down steadily and NEVER resets just
+ * because the user moved their mouse or switched tabs.
+ *
+ * Idle detection still runs separately: if the user is genuinely
+ * inactive for the full timeout period, they are logged out.
+ * But the DISPLAY always shows "time since login".
  */
 
 const SESSION_TIMEOUT_KEY = 'cs_session_timeout'; /* seconds */
+const LAST_ACTIVITY_KEY   = 'cs_last_activity';
 const DEFAULT_TIMEOUT_S   = 1800; /* 30 minutes */
 
 let _sessionInterval  = null;
@@ -20,39 +27,63 @@ function getSessionTimeout() {
 
 function setSessionTimeout(seconds) {
   localStorage.setItem(SESSION_TIMEOUT_KEY, seconds);
-  resetIdleTimer();
+  /* Restart the interval with new timeout */
+  clearInterval(_sessionInterval);
+  _sessionRemaining = _computeRemaining();
+  _startInterval();
   showToast(`Session timeout set to ${Math.round(seconds/60)} minutes`, 'success');
 }
 
-const LAST_ACTIVITY_KEY   = 'cs_last_activity';
-
-function _savedRemaining() {
-  const timeout  = getSessionTimeout();
-  const lastAct  = parseInt(localStorage.getItem(LAST_ACTIVITY_KEY) || '0', 10);
-  if (!lastAct) return timeout;
-  const elapsed = Math.floor((Date.now() - lastAct) / 1000);
-  return Math.max(0, timeout - elapsed);
+/** Compute remaining seconds based on login timestamp — never jumps back to 30:00 */
+function _computeRemaining() {
+  const timeout = getSessionTimeout();
+  try {
+    const session = JSON.parse(localStorage.getItem('cs_user') || 'null');
+    if (session && session.issuedAt) {
+      const elapsed = Math.floor((Date.now() - session.issuedAt) / 1000);
+      return Math.max(0, timeout - elapsed);
+    }
+  } catch (e) {}
+  /* Fallback: use last-activity key */
+  const lastAct = parseInt(localStorage.getItem(LAST_ACTIVITY_KEY) || '0', 10);
+  if (lastAct) {
+    const elapsed = Math.floor((Date.now() - lastAct) / 1000);
+    return Math.max(0, timeout - elapsed);
+  }
+  return timeout;
 }
 
 function initSessionTimer() {
-  _sessionRemaining = _savedRemaining();
+  _sessionRemaining = _computeRemaining();
   if (_sessionRemaining <= 0) { _doAutoLogout(); return; }
   _injectPill();
   _startInterval();
   _registerActivityListeners();
 }
 
+/** resetIdleTimer: only updates last-activity for IDLE detection.
+ *  Does NOT reset the display timer — that stays based on login time. */
 function resetIdleTimer() {
   localStorage.setItem(LAST_ACTIVITY_KEY, Date.now());
-  _sessionRemaining = getSessionTimeout();
-  _updatePillDisplay();
-  _updatePillColor();
+  /* No longer resets _sessionRemaining — prevents "30:00 on every mouse move" */
 }
 
 function extendSession() {
   document.getElementById('session-warn-modal')?.remove();
-  resetIdleTimer();
-  showToast('Session extended — timer reset.', 'success');
+  /* Re-issue the session timestamp so the timer resets to full */
+  try {
+    const session = JSON.parse(localStorage.getItem('cs_user') || 'null');
+    if (session) {
+      session.issuedAt = Date.now();
+      localStorage.setItem('cs_user', JSON.stringify(session));
+    }
+  } catch(e) {}
+  localStorage.setItem(LAST_ACTIVITY_KEY, Date.now());
+  _sessionRemaining = getSessionTimeout();
+  _updatePillDisplay();
+  _updatePillColor();
+  _startInterval(); /* restart the interval */
+  showToast('Session extended — timer reset to full.', 'success');
 }
 
 /* ── Internals ────────────────────────────────────────────── */
@@ -60,7 +91,8 @@ function extendSession() {
 function _startInterval() {
   clearInterval(_sessionInterval);
   _sessionInterval = setInterval(() => {
-    _sessionRemaining--;
+    /* Always recompute from login time so tab-switching stays accurate */
+    _sessionRemaining = _computeRemaining();
 
     if (_sessionRemaining <= 0) {
       clearInterval(_sessionInterval);
@@ -72,7 +104,7 @@ function _startInterval() {
     _updatePillColor();
 
     if (_sessionRemaining === 300) {
-      showToast('Session expires in 5 minutes. Move your mouse to stay logged in.', 'warning', 7000);
+      showToast('Session expires in 5 minutes. Click the timer to extend.', 'warning', 7000);
     }
     if (_sessionRemaining === 60) {
       _showSessionWarnModal();
@@ -81,8 +113,11 @@ function _startInterval() {
 }
 
 function _registerActivityListeners() {
-  const events = ['mousedown', 'mousemove', 'keydown', 'scroll', 'touchstart', 'click', 'wheel'];
-  const throttled = _throttle(resetIdleTimer, 3000);
+  const events = ['mousedown', 'keydown', 'touchstart'];
+  /* Only track genuine interactions (not passive scrolls/moves) */
+  const throttled = _throttle(() => {
+    localStorage.setItem(LAST_ACTIVITY_KEY, Date.now());
+  }, 10000); /* update at most every 10 seconds */
   events.forEach(ev => document.addEventListener(ev, throttled, { passive: true }));
 }
 
@@ -101,7 +136,7 @@ function _injectPill() {
   const pill = document.createElement('div');
   pill.id          = 'session-pill';
   pill.className   = 'session-pill';
-  pill.title       = 'Session timeout — click to adjust';
+  pill.title       = 'Session time remaining — click to adjust';
   pill.innerHTML   = `<span style="color:var(--text-3);font-size:.85rem">⏱</span><span id="session-timer" class="session-label">—</span>`;
   pill.addEventListener('click', () => openSessionSettings());
 
@@ -142,18 +177,18 @@ function _showSessionWarnModal() {
         <div class="modal-header">
           <div>
             <div class="modal-title" style="color:var(--medium)">⏱ Session Expiring</div>
-            <div class="modal-subtitle">You'll be signed out in 60 seconds due to inactivity</div>
+            <div class="modal-subtitle">You'll be signed out in 60 seconds</div>
           </div>
         </div>
         <div class="modal-body">
           <div class="info-box warning-box">
             <span class="info-icon">[!]</span>
-            <div>Any unsaved work or active connections will be preserved in your history. You can reconnect immediately after signing back in.</div>
+            <div>Your scan history and connections are preserved. You can sign back in instantly.</div>
           </div>
         </div>
         <div class="modal-footer">
           <button class="btn btn-outline" onclick="document.getElementById('session-warn-modal').remove(); _doAutoLogout();">Sign Out Now</button>
-          <button class="btn btn-gradient" onclick="extendSession()">Stay Signed In</button>
+          <button class="btn btn-gradient" onclick="extendSession()">Extend Session</button>
         </div>
       </div>
     </div>`);
@@ -166,7 +201,6 @@ function _doAutoLogout() {
 }
 
 function openSessionSettings() {
-  /* Renders a quick-select timeout modal */
   if (document.getElementById('session-settings-modal')) {
     document.getElementById('session-settings-modal').classList.add('open');
     return;
@@ -185,8 +219,8 @@ function openSessionSettings() {
       <div class="modal" style="max-width:420px">
         <div class="modal-header">
           <div>
-            <div class="modal-title">⏱ Session Timeout</div>
-            <div class="modal-subtitle">Auto sign-out after this period of inactivity</div>
+            <div class="modal-title">⏱ Session Duration</div>
+            <div class="modal-subtitle">How long until automatic sign-out from login time</div>
           </div>
           <span class="modal-close" onclick="document.getElementById('session-settings-modal').remove()">x</span>
         </div>
@@ -196,12 +230,12 @@ function openSessionSettings() {
               <button onclick="setSessionTimeout(${o.val}); document.getElementById('session-settings-modal').remove();"
                 class="btn ${current===o.val ? 'btn-gradient' : 'btn-outline'}"
                 style="justify-content:start;gap:.5rem">
-                ${current===o.val ? '[active]' : ''} ${o.label}
+                ${current===o.val ? '✓' : ''} ${o.label}
               </button>`).join('')}
           </div>
           <div class="info-box mt-2">
             <span class="info-icon">ℹ️</span>
-            <div>Any connected cloud module will remain connected — only your login session expires. You can reconnect without re-entering cloud credentials.</div>
+            <div>Timer counts down from your login time and won't reset on mouse movement.</div>
           </div>
         </div>
       </div>
