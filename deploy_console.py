@@ -442,7 +442,7 @@ def create_api_gateway(apigw, lmb, account_id: str, cfg: dict,
         routes = [
             ("risks",      "GET",  f"{project}-risk-reader"),
             ("chat",       "POST", f"{project}-chatbot-handler"),
-            ("scan-cloud", "POST", f"{project}-cloud-scanner"),
+            ("scan-cloud-infra", "POST", f"{project}-cloud-scanner"),
         ]
 
         for path_part, method, fn_name in routes:

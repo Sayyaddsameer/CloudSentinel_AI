@@ -331,7 +331,7 @@ resource "aws_api_gateway_integration" "chat_post" {
 resource "aws_api_gateway_resource" "scan_cloud" {
   rest_api_id = aws_api_gateway_rest_api.api.id
   parent_id   = aws_api_gateway_rest_api.api.root_resource_id
-  path_part   = "scan-cloud"
+  path_part   = "scan-cloud-infra"
 }
 
 resource "aws_api_gateway_method" "scan_cloud_post" {
