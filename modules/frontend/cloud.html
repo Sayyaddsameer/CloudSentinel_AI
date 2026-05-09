@@ -154,6 +154,15 @@
       <button class="btn btn-danger" id="btn-disconnect">Disconnect &amp; Remove</button>
     </div>
 
+    <!-- Scan History Timeline -->
+    <div class="risk-history-section" id="risk-history-section" style="display:none">
+      <div class="risk-history-header">
+        <div class="risk-history-title">Scan History</div>
+        <span class="text-xs text-dimmer" id="history-scan-count"></span>
+      </div>
+      <div style="display:flex;flex-direction:column;gap:.625rem" id="risk-history-list"></div>
+    </div>
+
   </div><!-- /view-risks -->
 </div><!-- /page-content -->
 
@@ -216,11 +225,7 @@
           Open CloudFormation Console &#8594;
         </a>
         <div style="font-size:.8rem;font-weight:600;color:var(--text-3);margin-bottom:.5rem">Or deploy via AWS CLI:</div>
-        <div class="code-block" id="cfn-cli-cmd">aws cloudformation create-stack \
-  --stack-name CloudSentinel-Scanner \
-  --template-url https://cloudsentinel-templates.s3.amazonaws.com/scanner-role.yaml \
-  --capabilities CAPABILITY_NAMED_IAM \
-  --region us-east-1</div>
+        <div class="code-block" id="cfn-cli-cmd">Generating command…</div>
         <button class="copy-btn mt-1" onclick="copyToClipboard(document.getElementById('cfn-cli-cmd').textContent,this)">Copy</button>
       </div>
       <div id="tf-instructions" style="display:none">
@@ -321,11 +326,18 @@
         <span class="info-icon">[!]</span>
         <div>This will remove the <strong>CloudSentinel-Scanner</strong> stack from your AWS account. To also remove GCP access, delete the service account from the GCP console.</div>
       </div>
-      <div class="code-block"># Delete the CloudFormation stack
+      <div class="code-block" id="disconnect-cli-cmd"># Delete the CloudFormation stack
 aws cloudformation delete-stack \
   --stack-name CloudSentinel-Scanner \
-  --region us-east-1</div>
-      <button class="copy-btn" onclick="copyToClipboard(document.querySelector('#modal-disconnect .code-block').textContent,this)">Copy command</button>
+  --region ${ENV_REGION}</div>
+      <script>
+        (function() {
+          var r = window.ENV_REGION || 'us-east-1';
+          var el = document.getElementById('disconnect-cli-cmd');
+          if (el) el.textContent = 'aws cloudformation delete-stack \\\n  --stack-name CloudSentinel-Scanner \\\n  --region ' + r;
+        })();
+      </script>
+      <button class="copy-btn" onclick="copyToClipboard(document.getElementById('disconnect-cli-cmd').textContent,this)">Copy command</button>
     </div>
     <div class="modal-footer">
       <button class="btn btn-outline" onclick="closeModal('modal-disconnect')">Cancel</button>
@@ -339,7 +351,7 @@ aws cloudformation delete-stack \
 <div id="chatbot-panel">
   <div class="chatbot-header">
     <div class="chatbot-header-icon">AI</div>
-    <div><div class="chatbot-header-title">CloudSentinel AI</div><div class="chatbot-header-sub">Ask about your cloud risks</div></div>
+    <div class="chatbot-header-info"><div class="chatbot-header-title">CloudSentinel AI</div><div class="chatbot-header-sub">Online</div></div>
     <span class="chatbot-close" id="chatbot-close">&#10005;</span>
   </div>
   <div class="chatbot-messages" id="chatbot-messages"></div>
