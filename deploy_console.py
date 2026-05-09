@@ -309,6 +309,9 @@ def _upsert_lambda(lmb, function_name: str, zip_bytes: bytes, handler: str,
         log.info("Lambda '%s' created.", function_name)
     except lmb.exceptions.ResourceConflictException:
         lmb.update_function_code(FunctionName=function_name, ZipFile=zip_bytes)
+        waiter = lmb.get_waiter("function_updated")
+        waiter.wait(FunctionName=function_name)
+        
         lmb.update_function_configuration(
             FunctionName=function_name,
             Handler=handler,
@@ -459,12 +462,47 @@ def create_api_gateway(apigw, lmb, account_id: str, cfg: dict,
                 type="AWS_PROXY",
                 uri=f"arn:aws:apigateway:{region}:lambda:path/2015-03-31/functions/{fn_arn}/invocations",
             )
-            lmb.add_permission(
-                FunctionName=fn_name,
-                StatementId=f"AllowAPIGW-{path_part}-{method}",
-                Action="lambda:InvokeFunction",
-                Principal="apigateway.amazonaws.com",
-                SourceArn=f"arn:aws:execute-api:{region}:{account_id}:{api_id}/*/*",
+            try:
+                lmb.add_permission(
+                    FunctionName=fn_name,
+                    StatementId=f"AllowAPIGW-{path_part}-{method}",
+                    Action="lambda:InvokeFunction",
+                    Principal="apigateway.amazonaws.com",
+                    SourceArn=f"arn:aws:execute-api:{region}:{account_id}:{api_id}/*/*",
+                )
+            except lmb.exceptions.ResourceConflictException:
+                pass
+
+            # --- CORS preflight (OPTIONS) ---
+            try:
+                apigw.put_method(
+                    restApiId=api_id, resourceId=resource_id,
+                    httpMethod="OPTIONS", authorizationType="NONE",
+                )
+            except apigw.exceptions.ConflictException:
+                pass
+            apigw.put_integration(
+                restApiId=api_id, resourceId=resource_id,
+                httpMethod="OPTIONS", type="MOCK",
+                requestTemplates={"application/json": '{"statusCode":200}'},
+            )
+            apigw.put_method_response(
+                restApiId=api_id, resourceId=resource_id,
+                httpMethod="OPTIONS", statusCode="200",
+                responseParameters={
+                    "method.response.header.Access-Control-Allow-Headers": False,
+                    "method.response.header.Access-Control-Allow-Methods": False,
+                    "method.response.header.Access-Control-Allow-Origin":  False,
+                },
+            )
+            apigw.put_integration_response(
+                restApiId=api_id, resourceId=resource_id,
+                httpMethod="OPTIONS", statusCode="200",
+                responseParameters={
+                    "method.response.header.Access-Control-Allow-Headers": "'Content-Type,Authorization,X-Amz-Date,X-Api-Key'",
+                    "method.response.header.Access-Control-Allow-Methods": f"'{method},OPTIONS'",
+                    "method.response.header.Access-Control-Allow-Origin":  "'*'",
+                },
             )
 
         deployment = apigw.create_deployment(restApiId=api_id)
