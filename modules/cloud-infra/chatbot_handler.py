@@ -20,17 +20,62 @@ CORS_HEADERS = {
     "Access-Control-Allow-Origin": "*",
 }
 
+# Resources that are intentionally public — exclude from chatbot context
+IGNORED_RESOURCE_NAMES = {"cloudsentinel-cf-templates-871070087236"}
+
+
+def fetch_all_risks(table):
+    """Scan entire table and return deduplicated risks, newest first per resource."""
+    items = []
+    try:
+        resp = table.scan()
+        items.extend(resp.get("Items", []))
+        while "LastEvaluatedKey" in resp:
+            resp = table.scan(ExclusiveStartKey=resp["LastEvaluatedKey"])
+            items.extend(resp.get("Items", []))
+    except ClientError as e:
+        logger.error(f"DynamoDB scan failed: {e}")
+        return []
+
+    # Filter ignored resources
+    items = [i for i in items if i.get("resourceName", "") not in IGNORED_RESOURCE_NAMES]
+
+    # Deduplicate — keep newest per (resourceId, riskType)
+    seen = {}
+    for item in items:
+        key = (item.get("resourceId", ""), item.get("riskType", ""))
+        existing = seen.get(key)
+        if existing is None or item.get("riskTimestamp", "") > existing.get("riskTimestamp", ""):
+            seen[key] = item
+
+    # Sort: High first, newest first
+    priority_order = {"High": 0, "Medium": 1, "Low": 2}
+    result = sorted(seen.values(), key=lambda x: (
+        priority_order.get(x.get("riskPriority", "Low"), 2),
+        x.get("riskTimestamp", ""),
+    ))
+    return result[:CONTEXT_LIMIT]
+
 
 def fetch_module_risks(table, module):
-    """Query the module-index GSI for the most recent risks in a given module."""
+    """Query the module-index GSI for risks in a specific module."""
     try:
         response = table.query(
             IndexName="module-index",
             KeyConditionExpression=Key("module").eq(module),
-            ScanIndexForward=False,         # newest first
-            Limit=CONTEXT_LIMIT,
+            ScanIndexForward=False,
+            Limit=CONTEXT_LIMIT * 5,
         )
-        return response.get("Items", [])
+        items = [i for i in response.get("Items", [])
+                 if i.get("resourceName", "") not in IGNORED_RESOURCE_NAMES]
+        # Deduplicate
+        seen = {}
+        for item in items:
+            key = (item.get("resourceId", ""), item.get("riskType", ""))
+            existing = seen.get(key)
+            if existing is None or item.get("riskTimestamp", "") > existing.get("riskTimestamp", ""):
+                seen[key] = item
+        return list(seen.values())[:CONTEXT_LIMIT]
     except ClientError as e:
         logger.error(f"DynamoDB query failed for module '{module}': {e}")
         return []
@@ -48,11 +93,12 @@ def build_chat_prompt(question, risks, module):
     context = "\n".join(context_lines) if context_lines else "No risks detected yet for this module."
 
     return (
-        f"You are CloudSentinel's AI assistant. The user is asking about their {module} environment.\n\n"
-        f"Here are the latest detected risks:\n{context}\n\n"
+        f"You are CloudSentinel's AI security assistant. The user is asking about their {module} environment.\n\n"
+        f"Here are the latest detected risks (deduplicated, High priority first):\n{context}\n\n"
         f"User question: {question}\n\n"
         "Answer helpfully and specifically based on the risks shown above. "
-        "If the question is general, relate it to the risks. Keep your answer under 300 words."
+        "If the question is general, relate it to the risks. Keep your answer under 300 words. "
+        "Format remediation steps as a numbered list where applicable."
     )
 
 
@@ -70,10 +116,78 @@ def call_bedrock(bedrock_client, prompt):
             body=body,
         )
         result = json.loads(resp["body"].read())
-        return result["content"][0]["text"].strip()
+        return result["content"][0]["text"].strip(), True
     except Exception as e:
         logger.error(f"Bedrock invoke failed: {e}")
-        return "Sorry, I could not generate a response right now. Please try again."
+        return str(e), False
+
+
+def rule_based_response(question: str, risks: list) -> str:
+    """Fallback rule-based response when Bedrock is unavailable."""
+    q = question.lower()
+
+    high = [r for r in risks if r.get("riskPriority") == "High"]
+    medium = [r for r in risks if r.get("riskPriority") == "Medium"]
+    total = len(risks)
+
+    if not risks:
+        return (
+            "No risks have been detected yet. Run a scan from the module page first, "
+            "then ask me about the results!"
+        )
+
+    if any(kw in q for kw in ["highest", "top", "worst", "critical", "priority", "most"]):
+        if high:
+            top = high[0]
+            others = f" (+{len(high)-1} more High risks)" if len(high) > 1 else ""
+            return (
+                f"Your highest risk right now is:\n\n"
+                f"🔴 **{top.get('riskType')}** on `{top.get('resourceName')}`\n"
+                f"{top.get('riskReason', '')}\n\n"
+                f"**Remediation:** {'; '.join(top.get('remediationSteps', ['See AWS documentation.']))}"
+                f"{others}"
+            )
+        return f"No High priority risks detected. You have {len(medium)} Medium risks."
+
+    if any(kw in q for kw in ["fix", "remediate", "resolve", "how"]):
+        if high:
+            r = high[0]
+            steps = r.get("remediationSteps", [])
+            steps_str = "\n".join(f"{i+1}. {s}" for i, s in enumerate(steps)) if steps else "Review the risk details on the dashboard."
+            return (
+                f"To fix **{r.get('riskType')}** on `{r.get('resourceName')}`:\n\n"
+                f"{steps_str}\n\n"
+                f"{'Alternative: ' + r.get('alternativeSolutions', [''])[0] if r.get('alternativeSolutions') else ''}"
+            )
+
+    if any(kw in q for kw in ["compare", "breakdown", "summary", "overview", "count", "how many"]):
+        return (
+            f"Here's your current risk breakdown:\n\n"
+            f"🔴 High: {len(high)}\n"
+            f"🟡 Medium: {len(medium)}\n"
+            f"🟢 Low: {total - len(high) - len(medium)}\n"
+            f"📊 Total: {total}\n\n"
+            f"Top concern: {high[0].get('riskType', 'N/A') if high else 'None — great job!'}"
+        )
+
+    if any(kw in q for kw in ["best", "practice", "recommend", "should", "advice"]):
+        return (
+            "Based on your current scan results, here are the top security best practices to apply:\n\n"
+            "1. **Restrict SSH (port 22)** — Never allow 0.0.0.0/0 on security groups. Use SSM Session Manager instead.\n"
+            "2. **Set an IAM Password Policy** — Require 14+ chars, uppercase, numbers, and 90-day expiry.\n"
+            "3. **Enable S3 Block Public Access** — Enable all 4 settings on every bucket.\n"
+            "4. **Add API authorization** — Use Cognito or IAM auth on all API Gateway endpoints.\n"
+            "5. **Enable MFA** — Enforce MFA for all IAM users and Cognito user pools."
+        )
+
+    # Default: summarize all risks
+    lines = [f"🔴 {r.get('riskType')} on `{r.get('resourceName')}`" for r in high[:5]]
+    summary = "\n".join(lines)
+    return (
+        f"You have **{total} unique risks** detected ({len(high)} High, {len(medium)} Medium).\n\n"
+        f"Top High-priority risks:\n{summary}\n\n"
+        "Ask me about a specific risk, how to fix it, or for a full breakdown!"
+    )
 
 
 def lambda_handler(event, context):
@@ -92,16 +206,30 @@ def lambda_handler(event, context):
         return {"statusCode": 400, "headers": CORS_HEADERS,
                 "body": json.dumps({"error": "question field is required"})}
 
-    ddb    = boto3.resource("dynamodb", region_name=REGION)
-    table  = ddb.Table(TABLE_NAME)
-    risks  = fetch_module_risks(table, module)
+    ddb   = boto3.resource("dynamodb", region_name=REGION)
+    table = ddb.Table(TABLE_NAME)
 
-    prompt  = build_chat_prompt(question, risks, module)
+    # Fetch risks: module-specific if a module is selected, otherwise all risks
+    if module and module != "cloud-infra":
+        risks = fetch_module_risks(table, module)
+    else:
+        risks = fetch_all_risks(table)
+
+    # Try Bedrock first; fall back to rule-based if not available
     bedrock = boto3.client("bedrock-runtime", region_name=REGION)
-    answer  = call_bedrock(bedrock, prompt)
+    prompt  = build_chat_prompt(question, risks, module)
+    answer, used_ai = call_bedrock(bedrock, prompt)
+
+    if not used_ai:
+        logger.info("Bedrock unavailable — using rule-based fallback")
+        answer = rule_based_response(question, risks)
 
     return {
         "statusCode": 200,
         "headers": CORS_HEADERS,
-        "body": json.dumps({"answer": answer, "contextRisks": len(risks)}),
+        "body": json.dumps({
+            "answer":       answer,
+            "contextRisks": len(risks),
+            "aiPowered":    used_ai,
+        }),
     }
