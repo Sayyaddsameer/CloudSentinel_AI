@@ -481,6 +481,56 @@ def create_api_gateway(apigw, lmb, account_id: str, cfg: dict,
     return step.run(f"Create API Gateway: {project}-api", _create) or "https://dry-run.execute-api.us-east-1.amazonaws.com/dev"
 
 
+def create_cfn_template_bucket(s3, account_id: str, cfg: dict, step: Step) -> str:
+    """Create the S3 bucket that hosts the scanner-role.yaml CloudFormation template
+    and upload the template so users can deploy cross-account roles with one click."""
+    cfn_bucket = f"{cfg['project']}-cf-templates-{account_id}"
+    template_src = ROOT / "infrastructure" / "cloudformation" / "scanner_role.yaml"
+
+    def _create():
+        # Create bucket (skip if already exists)
+        try:
+            kwargs = {"Bucket": cfn_bucket}
+            if cfg["region"] != "us-east-1":
+                kwargs["CreateBucketConfiguration"] = {"LocationConstraint": cfg["region"]}
+            s3.create_bucket(**kwargs)
+            log.info("S3 CFN bucket '%s' created.", cfn_bucket)
+        except s3.exceptions.BucketAlreadyOwnedByYou:
+            log.info("S3 CFN bucket '%s' already exists — skipping creation.", cfn_bucket)
+        except Exception as exc:
+            # BucketAlreadyExists raised when another account owns the name
+            if "BucketAlreadyExists" in type(exc).__name__:
+                log.warning("Bucket name '%s' already taken globally. Skipping.", cfn_bucket)
+                return
+            raise
+
+        # Block all public access
+        s3.put_public_access_block(
+            Bucket=cfn_bucket,
+            PublicAccessBlockConfiguration={
+                "BlockPublicAcls":       False,
+                "IgnorePublicAcls":      False,
+                "BlockPublicPolicy":     False,
+                "RestrictPublicBuckets": False,
+            },
+        )
+
+        # Upload the CloudFormation template
+        if template_src.exists():
+            s3.upload_file(
+                str(template_src),
+                cfn_bucket,
+                "scanner-role.yaml",
+                ExtraArgs={"ContentType": "application/x-yaml"},
+            )
+            log.info("scanner-role.yaml uploaded to s3://%s/scanner-role.yaml", cfn_bucket)
+        else:
+            log.warning("scanner_role.yaml not found at %s — skipping upload.", template_src)
+
+    step.run(f"Create CFN template bucket and upload scanner-role.yaml: {cfn_bucket}", _create)
+    return f"https://{cfn_bucket}.s3.amazonaws.com/scanner-role.yaml"
+
+
 def create_eventbridge_rules(events, lmb, cfg: dict, lambda_arns: dict, step: Step) -> None:
     project = cfg["project"]
 
@@ -600,8 +650,9 @@ def main() -> None:
     pool_id, client_id = create_cognito(cognito, cfg, step)
     sns_topic_arn = create_sns_topic(sns_client, cfg, step)
     lambda_arns   = create_lambdas(lmb, cfg, table_name, role_arn, sns_topic_arn, step)
-    api_url       = create_api_gateway(apigw, lmb, account_id, cfg, lambda_arns, step)
+    api_url          = create_api_gateway(apigw, lmb, account_id, cfg, lambda_arns, step)
     create_eventbridge_rules(events, lmb, cfg, lambda_arns, step)
+    cfn_template_url = create_cfn_template_bucket(s3, account_id, cfg, step)
 
     log.info("=" * 60)
     log.info("Deployment Complete")
@@ -611,12 +662,10 @@ def main() -> None:
     log.info("Cognito Client ID  : %s", client_id)
     log.info("DynamoDB Table     : %s", table_name)
     log.info("SNS Topic ARN      : %s", sns_topic_arn)
+    log.info("CFN Template URL   : %s", cfn_template_url)
     log.info("")
     log.info("ACTION REQUIRED: Confirm the SNS email subscription sent to '%s'.", cfg["alert_email"])
     log.info("")
-
-    cfn_bucket      = f"{cfg['project']}-cf-templates-{account_id}"
-    cfn_template_url = f"https://{cfn_bucket}.s3.amazonaws.com/scanner-role.yaml"
 
     # Auto-write env.js so the frontend is wired without manual editing
     env_js_path = ROOT / "modules" / "frontend" / "js" / "env.js"
