@@ -444,6 +444,15 @@ def create_lambdas(lmb, cfg: dict, table_name: str, role_arn: str,
             "timeout": 120, "memory": 256,
             "env": {"DYNAMODB_TABLE": table_name},
         },
+        {
+            "name": f"{project}-disconnect-handler", "zip": cloud_zip,
+            "handler": "disconnect_handler.lambda_handler",
+            "timeout": 60, "memory": 128,
+            "env": {
+                "DYNAMODB_TABLE": table_name,
+                "AWS_ACCOUNT_REGION": cfg["region"],
+            },
+        },
     ]
 
     arns = {}
@@ -503,6 +512,8 @@ def create_api_gateway(apigw, lmb, account_id: str, cfg: dict,
             ("scan-fullstack",   "POST", f"{project}-fullstack-analyzer"),
             ("scan-data-eng",    "POST", f"{project}-data-eng-analyzer"),
             ("scan-mobile",      "POST", f"{project}-mobile-analyzer"),
+            ("disconnect",       "POST", f"{project}-disconnect-handler"),
+            ("notify",           "POST", f"{project}-notification-handler"),
         ]
 
         # ── Create Cognito authorizer ───────────────────────────────

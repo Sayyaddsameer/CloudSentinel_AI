@@ -53,7 +53,7 @@ async function loadRisks() {
     /* Service summary counters */
     const s3risks   = allRisks.filter(r => r.resource === 'Data Storage' || r.resource === 'S3 Bucket').length;
     const ddbRisks  = allRisks.filter(r => r.resource === 'DynamoDB Table').length;
-    const glueRisks = allRisks.filter(r => r.resource === 'AWS Glue Job').length;
+    const glueRisks = allRisks.filter(r => r.resource === 'Glue ETL Job').length;
     const set = (id, val) => { const el = document.getElementById(id); if (el) el.textContent = val; };
     set('s3-count',   `${s3risks} risk${s3risks   !== 1 ? 's' : ''} detected`);
     set('ddb-count',  `${ddbRisks} risk${ddbRisks  !== 1 ? 's' : ''} detected`);
@@ -100,7 +100,9 @@ async function startScan() {
   try {
     await triggerScan(MODULE);
     fill.style.width = '100%';
-    await sleep(350);
+    label.textContent = 'Scan complete! Loading results…';
+    sub.textContent   = 'Waiting for risk records to be saved…';
+    await sleep(2000);
     showToast('Data environment scan complete!', 'success');
     localStorage.setItem(`cs_scan_${MODULE}`, new Date().toISOString());
     showRisksView(getConnections(MODULE));
@@ -114,6 +116,7 @@ async function startScan() {
 async function confirmDataConnect() {
   const accountId = document.getElementById('data-account-id').value.trim();
   const consent   = document.getElementById('data-consent').checked;
+  const btn       = document.querySelector('#modal-data .btn-primary');
 
   if (!accountId || accountId.length !== 12 || !/^\d+$/.test(accountId)) {
     showToast('Please enter a valid 12-digit AWS Account ID', 'warning');
@@ -125,6 +128,25 @@ async function confirmDataConnect() {
   }
 
   const roleArn = `arn:aws:iam::${accountId}:role/cloudsentinel-scanner-role`;
+
+  // ── Validate via STS before accepting connection ────────────────────────
+  if (btn) { btn.disabled = true; btn.textContent = 'Validating AWS access…'; }
+  try {
+    const result = await validateAwsConnection(MODULE, accountId, roleArn);
+    if (!result.valid) {
+      showToast(result.error || 'Could not connect: CloudSentinel IAM role not found.', 'error', 10000);
+      if (btn) { btn.disabled = false; btn.textContent = 'Connect & Scan'; }
+      return;
+    }
+    const alias = result.accountAlias ? ` (${result.accountAlias})` : '';
+    showToast(`AWS account ${result.accountId}${alias} verified!`, 'success');
+  } catch (err) {
+    showToast('Validation failed: ' + err.message, 'error', 8000);
+    if (btn) { btn.disabled = false; btn.textContent = 'Connect & Scan'; }
+    return;
+  }
+
+  if (btn) { btn.disabled = false; btn.textContent = 'Connect & Scan'; }
   closeModal('modal-data');
   setConnection(MODULE, 'aws-data', { accountId, roleArn, connectedAt: new Date().toISOString() });
 

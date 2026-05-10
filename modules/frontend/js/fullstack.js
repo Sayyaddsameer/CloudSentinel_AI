@@ -87,7 +87,9 @@ async function startScan() {
   try {
     await triggerScan(MODULE);
     fill.style.width = '100%';
-    await sleep(300);
+    label.textContent = 'Scan complete! Loading results…';
+    sub.textContent   = 'Waiting for risk records to be saved…';
+    await sleep(2000);
     showToast('API scan complete!', 'success');
     localStorage.setItem(`cs_scan_${MODULE}`, new Date().toISOString());
     showRisksView(getConnections(MODULE));

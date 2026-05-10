@@ -1,0 +1,57 @@
+# .github/workflows/bad-deploy.yml
+#
+# CloudSentinel DevOps Test Workflow
+# ─────────────────────────────────
+# This GitHub Actions workflow is intentionally designed with every
+# CI/CD anti-pattern so the DevOps scanner finds real risks:
+#
+#   RISK 1 (HIGH)   — Hardcoded AWS credentials in step
+#   RISK 2 (HIGH)   — No automated test step
+#   RISK 3 (MEDIUM) — No rollback strategy
+#   RISK 4 (MEDIUM) — No post-deploy monitoring / health check
+#
+# USAGE:
+#   1. Copy this file to your repo at .github/workflows/bad-deploy.yml
+#   2. git add + commit + push to main
+#   3. CloudSentinel DevOps module will flag 4 risks
+#   4. Replace with good-deploy.yml after testing
+
+name: Insecure Deploy Pipeline (CloudSentinel Test)
+
+on:
+  push:
+    branches: [main, master]
+
+jobs:
+  build-and-deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: checkout
+        uses: actions/checkout@v3
+
+      - name: install-dependencies
+        run: |
+          pip install -r requirements.txt
+
+      # ── RISK 1: Hardcoded AWS credentials ────────────────────────────────
+      # Never do this in production. Use OIDC or GitHub Secrets.
+      - name: configure-aws-bad-practice
+        run: |
+          aws configure set aws_access_key_id AKIAIOSFODNN7BADKEY12
+          aws configure set aws_secret_access_key wJalrXUtnFEMIbadSecretKey/bKEYxample
+
+      # ── RISK 2: No test step anywhere ────────────────────────────────────
+      # Going straight from install to deploy without running any tests.
+
+      # ── RISK 3: Direct deploy with no gate ───────────────────────────────
+      - name: deploy-to-lambda
+        run: |
+          zip -r package.zip . -x "*.git*"
+          aws lambda update-function-code \
+            --function-name my-production-lambda \
+            --zip-file fileb://package.zip
+
+      # ── RISK 4: No rollback, no health check ─────────────────────────────
+      # After deploy, nothing verifies the deployment succeeded.
+      # If the deploy breaks production, manual intervention is required.

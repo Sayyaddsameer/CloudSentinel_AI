@@ -1,0 +1,79 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: >
+  CloudSentinel TEST STACK — intentionally insecure resources.
+  Deploy this to generate real findings in the Cloud Infrastructure module.
+  DELETE after testing.
+
+  Deploy:
+    aws cloudformation create-stack \
+      --stack-name cs-test-insecure \
+      --template-body file://test-infra-insecure.yaml \
+      --capabilities CAPABILITY_NAMED_IAM
+
+  Cleanup:
+    aws cloudformation delete-stack --stack-name cs-test-insecure
+
+Resources:
+
+  # ── RISK 1 (HIGH): S3 bucket with no encryption ───────────────────────────
+  InsecureBucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      BucketName: !Sub 'cloudsentinel-insecure-test-${AWS::AccountId}'
+      # No BucketEncryption = encryption missing        → Medium risk
+      # No PublicAccessBlockConfiguration = public OK   → High risk
+      Tags:
+        - Key: Purpose
+          Value: CloudSentinel-Test
+        - Key: DeleteMe
+          Value: "true"
+
+  # ── RISK 2 (HIGH): Security group with SSH/MySQL open to internet ─────────
+  InsecureSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: CloudSentinel test - SSH and DB open to internet
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 22
+          ToPort: 22
+          CidrIp: 0.0.0.0/0        # HIGH RISK: SSH open to entire internet
+          Description: Insecure SSH - CloudSentinel test
+        - IpProtocol: tcp
+          FromPort: 3306
+          ToPort: 3306
+          CidrIp: 0.0.0.0/0        # HIGH RISK: MySQL open to entire internet
+          Description: Insecure MySQL - CloudSentinel test
+        - IpProtocol: tcp
+          FromPort: 3389
+          ToPort: 3389
+          CidrIp: 0.0.0.0/0        # HIGH RISK: RDP open to entire internet
+          Description: Insecure RDP - CloudSentinel test
+      Tags:
+        - Key: Purpose
+          Value: CloudSentinel-Test
+
+  # ── RISK 3 (HIGH): IAM user with full administrator access ────────────────
+  InsecureAdminUser:
+    Type: AWS::IAM::User
+    Properties:
+      UserName: cloudsentinel-test-admin-user
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/AdministratorAccess  # HIGH RISK: Full admin
+      Tags:
+        - Key: Purpose
+          Value: CloudSentinel-Test
+
+Outputs:
+  BucketName:
+    Description: Test bucket (no encryption, public access allowed)
+    Value: !Ref InsecureBucket
+  SecurityGroupId:
+    Description: Test security group (SSH/MySQL/RDP open to internet)
+    Value: !GetAtt InsecureSecurityGroup.GroupId
+  IAMUser:
+    Description: Test IAM user with AdministratorAccess
+    Value: !Ref InsecureAdminUser
+  TestNote:
+    Description: Reminder
+    Value: "DELETE this stack after testing: aws cloudformation delete-stack --stack-name cs-test-insecure"

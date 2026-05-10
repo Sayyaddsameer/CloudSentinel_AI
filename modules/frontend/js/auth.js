@@ -204,8 +204,14 @@
   }
 
   /* ── Logout ───────────────────────────────────────────────── */
-  function logout() {
+  async function logout() {
+    /* Step 1: Revoke all cloud connections + delete stacks BEFORE clearing session */
+    if (typeof autoDisconnectAll === 'function') {
+      try { await autoDisconnectAll(); } catch (e) { /* non-blocking */ }
+    }
+    /* Step 2: Clear local session */
     clearSession();
+    localStorage.removeItem('cs_last_activity');
     window.location.href = 'index.html';
   }
 

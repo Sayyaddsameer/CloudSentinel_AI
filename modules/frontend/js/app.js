@@ -118,30 +118,72 @@ async function apiCall(path, method = 'GET', body = null) {
   return res.json();
 }
 
+/* ── Central fetch wrapper with auto token-refresh on 401 ────── */
+async function apiFetch(url, opts = {}) {
+  if (!API_BASE) throw new Error('API is not configured.');
+
+  // Ensure auth header is always fresh
+  opts.headers = { 'Content-Type': 'application/json', ...opts.headers, Authorization: getToken() || '' };
+
+  let res = await fetch(url, opts);
+
+  // If 401, try to silently refresh the Cognito token then retry once
+  if (res.status === 401 && typeof refreshSession === 'function') {
+    try {
+      const renewed = await refreshSession();
+      if (renewed) {
+        opts.headers.Authorization = renewed.accessToken;
+        res = await fetch(url, opts); // retry
+      }
+    } catch (_) { /* fall through to throw below */ }
+  }
+
+  return res;
+}
+
 async function fetchRisks(module) {
   if (!API_BASE) throw new Error('API is not configured.');
-  const res = await fetch(`${API_BASE}/risks?module=${module}`, {
-    headers: { Authorization: getToken() || '' },
-  });
+  const res = await apiFetch(`${API_BASE}/risks?module=${module}`);
+  if (res.status === 401) {
+    throw new Error('Session expired — please sign in again.');
+  }
   if (!res.ok) throw new Error(`Failed to fetch risks (${res.status})`);
   const data = await res.json();
   return Array.isArray(data) ? data : (data.risks || []);
 }
 
-async function triggerScan(module) {
+async function triggerScan(module, extraParams = {}) {
   if (!API_BASE) throw new Error('API is not configured.');
 
-  // Pick up cross-account role ARN stored when the user connected the account
   const conn        = getConnections(module);
-  const roleArn     = conn?.aws?.roleArn || null;
-  const scanPayload = roleArn ? { targetRoleArn: roleArn } : {};
+  const roleArn     = conn?.aws?.roleArn || conn?.['aws-data']?.roleArn || conn?.['aws-mobile']?.roleArn || null;
+  const scanPayload = { ...(roleArn ? { targetRoleArn: roleArn } : {}), ...extraParams };
 
-  const res = await fetch(`${API_BASE}/scan-${module}`, {
-    method:  'POST',
-    headers: { Authorization: getToken() || '', 'Content-Type': 'application/json' },
-    body:    JSON.stringify(scanPayload),
+  const res = await apiFetch(`${API_BASE}/scan-${module}`, {
+    method: 'POST',
+    body:   JSON.stringify(scanPayload),
   });
+  if (res.status === 401) {
+    throw new Error('Session expired — please sign in again.');
+  }
   if (!res.ok) throw new Error(`Scan failed (${res.status})`);
+  return res.json();
+}
+
+
+/**
+ * validateAwsConnection — calls POST /validate-connection to verify that
+ * the CloudSentinel IAM role actually exists in the given AWS account.
+ * Returns { valid, accountAlias, error }.
+ */
+async function validateAwsConnection(module, accountId, roleArn) {
+  if (!API_BASE) throw new Error('API not configured.');
+  const res = await apiFetch(`${API_BASE}/validate-connection`, {
+    method: 'POST',
+    body:   JSON.stringify({ module, accountId, roleArn }),
+  });
+  if (res.status === 401) throw new Error('Session expired — please sign in again.');
+  if (!res.ok) throw new Error(`Validation request failed (${res.status})`);
   return res.json();
 }
 
@@ -302,18 +344,24 @@ async function sendChat() {
   const typingId = appendTyping();
   try {
     if (!API_BASE) throw new Error('API not configured. Set ENV_API_URL in env.js.');
-    const resp = await fetch(`${API_BASE}/chat`, {
-      method:  'POST',
-      headers: { Authorization: getToken() || '', 'Content-Type': 'application/json' },
-      body:    JSON.stringify({ question: q, module: chatModule }),
+    const resp = await apiFetch(`${API_BASE}/chat`, {
+      method: 'POST',
+      body:   JSON.stringify({ question: q, module: chatModule }),
     });
+    removeTyping(typingId);
+    if (resp.status === 401) {
+      appendBotMessage('Your session has expired. Please sign out and sign back in to continue.');
+      return;
+    }
     if (!resp.ok) throw new Error(`Chat API error ${resp.status}`);
     const data = await resp.json();
-    removeTyping(typingId);
     appendBotMessage(data.answer || 'No response from AI assistant.');
   } catch (err) {
     removeTyping(typingId);
-    appendBotMessage('\u26a0\ufe0f ' + escHtml(err.message) + '. Please ensure the API is configured and reachable.');
+    const msg = err.message.includes('expired')
+      ? 'Session expired. Please sign in again.'
+      : '\u26a0\ufe0f ' + escHtml(err.message);
+    appendBotMessage(msg);
   }
 }
 
@@ -431,8 +479,12 @@ function removeConnection(module, provider) { const c = getConnections(module); 
  */
 async function callDisconnectApi(module, provider = 'all') {
   if (!API_BASE) return null;
-  const conn     = getConnections(module);
-  const roleArn  = conn?.aws?.roleArn  || '';
+  const conn  = getConnections(module);
+  // roleArn may be stored under different keys depending on the module
+  const roleArn   = conn?.aws?.roleArn
+                 || conn?.['aws-mobile']?.roleArn
+                 || conn?.['aws-data']?.roleArn
+                 || '';
   const stackName = conn?.aws?.stackName || 'CloudSentinel-Scanner';
   try {
     const res = await fetch(`${API_BASE}/disconnect`, {
@@ -449,29 +501,63 @@ async function callDisconnectApi(module, provider = 'all') {
 }
 
 /**
- * autoDisconnectAll — called on session expiry to revoke all connected modules.
- * Non-blocking: failures are silently logged.
+ * autoDisconnectAll -- revokes all connected modules.
+ * Called on manual logout AND auto-logout (session expiry).
  */
 async function autoDisconnectAll() {
-  const modules = ['cloud-infra', 'devops', 'fullstack', 'data-eng', 'mobile'];
-  for (const m of modules) {
-    const conn = getConnections(m);
-    if (Object.keys(conn).length === 0) continue;
-    await callDisconnectApi(m, 'all').catch(() => {});
-    localStorage.removeItem(`cs_conn_${m}`);
-    localStorage.removeItem(`cs_scan_${m}`);
-    localStorage.removeItem(`cs_history_${m}`);
+  const MODULES = ['cloud-infra', 'devops', 'fullstack', 'data-eng', 'mobile'];
+  const connected = MODULES.filter(m => Object.keys(getConnections(m)).length > 0);
+  if (connected.length === 0) return;
+
+  if (typeof showToast === 'function') {
+    showToast(`Revoking access to ${connected.length} connected module(s)...`, 'info', 4000);
   }
+
+  await Promise.allSettled(
+    connected.map(async m => {
+      await callDisconnectApi(m, 'all').catch(() => {});
+      localStorage.removeItem(`cs_conn_${m}`);
+      localStorage.removeItem(`cs_scan_${m}`);
+      localStorage.removeItem(`cs_history_${m}`);
+      console.info(`[disconnect] Module ${m} revoked and local data cleared.`);
+    })
+  );
 }
+
+/**
+ * Beacon-based disconnect on tab close / page unload.
+ * navigator.sendBeacon() is fire-and-forget and works even as the page unloads.
+ * Note: only sends the request — stack deletion is best-effort on close.
+ */
+(function _registerUnloadDisconnect() {
+  if (!navigator.sendBeacon) return;
+  window.addEventListener('beforeunload', () => {
+    if (!API_BASE) return;
+    const MODULES = ['cloud-infra', 'devops', 'fullstack', 'data-eng', 'mobile'];
+    MODULES.forEach(m => {
+      const conn = getConnections(m);
+      if (Object.keys(conn).length === 0) return;
+      const roleArn   = conn?.aws?.roleArn || conn?.['aws-mobile']?.roleArn || conn?.['aws-data']?.roleArn || '';
+      const stackName = conn?.aws?.stackName || 'CloudSentinel-Scanner';
+      const payload   = JSON.stringify({ module: m, provider: 'all', roleArn, stackName });
+      navigator.sendBeacon(`${API_BASE}/disconnect`, new Blob([payload], { type: 'application/json' }));
+    });
+  });
+})();
 
 /* ── SNS alert stub (implemented server-side in notification Lambda) */
 async function triggerSnsAlert(module, highRisks) {
   if (!API_BASE) return;
   try {
+    const user = typeof getUser === 'function' ? getUser() : null;
     await fetch(`${API_BASE}/notify`, {
       method:  'POST',
       headers: { Authorization: getToken() || '', 'Content-Type': 'application/json' },
-      body:    JSON.stringify({ module, highCount: highRisks.length }),
+      body:    JSON.stringify({
+        module,
+        highCount:  highRisks.length,
+        userEmail:  user?.email || '',
+      }),
     });
   } catch { /* non-critical */ }
 }

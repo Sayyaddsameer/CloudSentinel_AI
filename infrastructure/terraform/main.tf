@@ -270,6 +270,8 @@ resource "aws_api_gateway_deployment" "dev" {
     aws_api_gateway_integration.risks_get,
     aws_api_gateway_integration.chat_post,
     aws_api_gateway_integration.scan_cloud_post,
+    aws_api_gateway_integration.disconnect_post,
+    aws_api_gateway_integration.notify_post,
   ]
   lifecycle { create_before_destroy = true }
 }
@@ -348,6 +350,52 @@ resource "aws_api_gateway_integration" "scan_cloud_post" {
   integration_http_method = "POST"
   type                    = "AWS_PROXY"
   uri                     = aws_lambda_function.cloud_scanner.invoke_arn
+}
+
+# /disconnect POST
+resource "aws_api_gateway_resource" "disconnect" {
+  rest_api_id = aws_api_gateway_rest_api.api.id
+  parent_id   = aws_api_gateway_rest_api.api.root_resource_id
+  path_part   = "disconnect"
+}
+
+resource "aws_api_gateway_method" "disconnect_post" {
+  rest_api_id   = aws_api_gateway_resource.disconnect.rest_api_id
+  resource_id   = aws_api_gateway_resource.disconnect.id
+  http_method   = "POST"
+  authorization = "NONE"
+}
+
+resource "aws_api_gateway_integration" "disconnect_post" {
+  rest_api_id             = aws_api_gateway_resource.disconnect.rest_api_id
+  resource_id             = aws_api_gateway_resource.disconnect.id
+  http_method             = aws_api_gateway_method.disconnect_post.http_method
+  integration_http_method = "POST"
+  type                    = "AWS_PROXY"
+  uri                     = aws_lambda_function.disconnect_handler.invoke_arn
+}
+
+# /notify POST
+resource "aws_api_gateway_resource" "notify" {
+  rest_api_id = aws_api_gateway_rest_api.api.id
+  parent_id   = aws_api_gateway_rest_api.api.root_resource_id
+  path_part   = "notify"
+}
+
+resource "aws_api_gateway_method" "notify_post" {
+  rest_api_id   = aws_api_gateway_resource.notify.rest_api_id
+  resource_id   = aws_api_gateway_resource.notify.id
+  http_method   = "POST"
+  authorization = "NONE"
+}
+
+resource "aws_api_gateway_integration" "notify_post" {
+  rest_api_id             = aws_api_gateway_resource.notify.rest_api_id
+  resource_id             = aws_api_gateway_resource.notify.id
+  http_method             = aws_api_gateway_method.notify_post.http_method
+  integration_http_method = "POST"
+  type                    = "AWS_PROXY"
+  uri                     = aws_lambda_function.notification_handler.invoke_arn
 }
 
 # ---------------------------------------------------------------------------

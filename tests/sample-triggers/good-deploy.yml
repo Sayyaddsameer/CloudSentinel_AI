@@ -1,0 +1,105 @@
+# .github/workflows/good-deploy.yml
+#
+# CloudSentinel DevOps — FIXED Workflow (no risks detected)
+# ──────────────────────────────────────────────────────────
+# Replace bad-deploy.yml with this to see CloudSentinel
+# give your pipeline a clean bill of health.
+
+name: Secure Deploy Pipeline (CloudSentinel Test - Clean)
+
+on:
+  push:
+    branches: [main, master]
+
+permissions:
+  id-token: write   # Required for OIDC
+  contents: read
+
+jobs:
+  # ── TEST JOB ─────────────────────────────────────────────────────────────
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: set-up-python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: install-dependencies
+        run: pip install -r requirements.txt
+
+      - name: pytest                           # ✅ FIX for RISK 2: automated tests
+        run: pytest tests/ -v --tb=short
+
+      - name: coverage-check
+        run: pytest tests/ --cov=modules --cov-fail-under=70
+
+  # ── DEPLOY JOB (only runs if tests pass) ──────────────────────────────────
+  deploy:
+    needs: test
+    runs-on: ubuntu-latest
+    environment: production
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: configure-aws-credentials        # ✅ FIX for RISK 1: OIDC, no hardcoded keys
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: arn:aws:iam::${{ vars.AWS_ACCOUNT_ID }}:role/github-actions-deploy-role
+          aws-region: us-east-1
+
+      - name: build-package
+        run: |
+          pip install -r requirements.txt --target ./package
+          zip -r package.zip . -x "*.git*" -x "tests/*"
+
+      - name: save-previous-version            # ✅ FIX for RISK 3: rollback prep
+        id: prev-version
+        run: |
+          PREV=$(aws lambda get-function-configuration \
+            --function-name my-production-lambda \
+            --query 'Version' --output text 2>/dev/null || echo "")
+          echo "version=$PREV" >> $GITHUB_OUTPUT
+
+      - name: deploy-to-lambda
+        run: |
+          aws lambda update-function-code \
+            --function-name my-production-lambda \
+            --zip-file fileb://package.zip
+
+      - name: wait-for-update
+        run: |
+          aws lambda wait function-updated \
+            --function-name my-production-lambda
+
+      - name: smoke-test                       # ✅ FIX for RISK 4: post-deploy monitoring
+        run: |
+          sleep 5
+          STATUS=$(curl -s -o /dev/null -w "%{http_code}" \
+            https://ojekcmosgj.execute-api.us-east-1.amazonaws.com/dev/risks \
+            -H "Authorization: test")
+          echo "API status: $STATUS"
+          if [ "$STATUS" -eq "401" ] || [ "$STATUS" -eq "200" ]; then
+            echo "API is responding correctly"
+          else
+            echo "API returned unexpected status $STATUS"
+            exit 1
+          fi
+
+      - name: cloudwatch-alarm-check          # ✅ Additional monitoring
+        run: |
+          aws cloudwatch describe-alarms \
+            --alarm-names "cloudsentinel-5xx-errors" \
+            --query "MetricAlarms[0].StateValue" --output text
+
+      - name: rollback-on-failure             # ✅ FIX for RISK 3: rollback strategy
+        if: failure() && steps.prev-version.outputs.version != ''
+        run: |
+          echo "Deployment failed! Rolling back to version ${{ steps.prev-version.outputs.version }}"
+          aws lambda update-alias \
+            --function-name my-production-lambda \
+            --name live \
+            --function-version ${{ steps.prev-version.outputs.version }} || true

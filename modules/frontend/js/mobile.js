@@ -88,9 +88,15 @@ async function startScan() {
   }
 
   try {
-    await triggerScan(MODULE);
+    // Pass the stored threshold to the backend
+    const stored   = getConnections(MODULE);
+    const apiUrl   = stored?.['aws-mobile']?.apiUrl || '';
+    const threshold = stored?.['aws-mobile']?.latencyThresholdMs || 1000;
+    await triggerScan(MODULE, { targetApiUrl: apiUrl, latencyThresholdMs: threshold });
     document.getElementById('scan-fill').style.width = '100%';
-    await sleep(350);
+    document.getElementById('scan-label').textContent = 'Scan complete! Loading results…';
+    document.getElementById('scan-sub').textContent   = 'Waiting for risk records to be saved…';
+    await sleep(2000);
     showToast('Mobile backend scan complete!', 'success');
     localStorage.setItem(`cs_scan_${MODULE}`, new Date().toISOString());
     showRisksView(getConnections(MODULE));
@@ -103,13 +109,43 @@ async function startScan() {
 async function confirmMobileConnect() {
   const apiUrl    = document.getElementById('mobile-api-url').value.trim();
   const accountId = document.getElementById('mobile-account-id').value.trim();
+  const threshold = parseInt(document.getElementById('mobile-threshold')?.value || '1000', 10);
   const consent   = document.getElementById('mobile-consent').checked;
-  if (!consent) { showToast('Please confirm your consent', 'warning'); return; }
-  if (!apiUrl) { showToast('Please enter your mobile API URL', 'warning'); return; }
-  if (!apiUrl.startsWith('https://')) { showToast('API URL must start with https://', 'warning'); return; }
+  const btn       = document.querySelector('#modal-mobile .btn-primary');
 
+  if (!consent)   { showToast('Please confirm your consent', 'warning'); return; }
+  if (!apiUrl)    { showToast('Please enter your mobile API URL', 'warning'); return; }
+  if (!apiUrl.startsWith('https://')) { showToast('API URL must start with https://', 'warning'); return; }
+  if (!accountId || accountId.length !== 12 || !/^\d+$/.test(accountId)) {
+    showToast('Please enter a valid 12-digit AWS Account ID', 'warning');
+    return;
+  }
+
+  // ── Validate via STS before accepting connection ────────────────────────
+  if (btn) { btn.disabled = true; btn.textContent = 'Validating AWS access…'; }
+  try {
+    const roleArn = `arn:aws:iam::${accountId}:role/cloudsentinel-scanner-role`;
+    const result  = await validateAwsConnection(MODULE, accountId, roleArn);
+    if (!result.valid) {
+      showToast(result.error || 'Could not connect: CloudSentinel IAM role not found.', 'error', 10000);
+      if (btn) { btn.disabled = false; btn.textContent = 'Connect & Monitor'; }
+      return;
+    }
+    showToast(`AWS account ${result.accountId} verified!`, 'success');
+  } catch (err) {
+    showToast('Validation failed: ' + err.message, 'error', 8000);
+    if (btn) { btn.disabled = false; btn.textContent = 'Connect & Monitor'; }
+    return;
+  }
+
+  if (btn) { btn.disabled = false; btn.textContent = 'Connect & Monitor'; }
   closeModal('modal-mobile');
-  setConnection(MODULE, 'aws-mobile', { apiUrl, accountId, connectedAt: new Date().toISOString() });
+  setConnection(MODULE, 'aws-mobile', {
+    apiUrl,
+    accountId,
+    latencyThresholdMs: isNaN(threshold) ? 1000 : threshold,
+    connectedAt: new Date().toISOString(),
+  });
   document.getElementById('mobile-aws-status').innerHTML = `<span style="color:var(--low)">- Connected</span>`;
   document.getElementById('mobile-aws-card').classList.add('connected');
   showToast('Mobile backend connected! Starting monitoring…', 'success');

@@ -28,8 +28,8 @@ logger = logging.getLogger()
 logger.setLevel(logging.INFO)
 
 REGION        = os.environ.get("AWS_REGION", "us-east-1")
-RISKS_TABLE   = os.environ.get("RISKS_TABLE", "CloudSentinelRisks")
-MODULE_INDEX  = "ModuleIndex"
+RISKS_TABLE   = os.environ.get("DYNAMODB_TABLE", os.environ.get("RISKS_TABLE", "cloudsentinel-risks"))
+MODULE_INDEX  = "module-index"
 DEFAULT_STACK = "CloudSentinel-Scanner"
 
 
@@ -100,6 +100,7 @@ def _delete_cfn_stack(role_arn: str, stack_name: str) -> str:
         creds = sts.assume_role(
             RoleArn=role_arn,
             RoleSessionName="CloudSentinelDisconnect",
+            ExternalId="cloudsentinel",
         )["Credentials"]
 
         cf = boto3.client(
@@ -152,10 +153,11 @@ def _delete_gcp_secret(module: str) -> str:
 
 def _purge_risks(module: str) -> int:
     """Delete all DynamoDB risk records for the given module."""
-    ddb = boto3.resource("dynamodb", region_name=REGION)
+    ddb   = boto3.resource("dynamodb", region_name=REGION)
     table = ddb.Table(RISKS_TABLE)
     purged = 0
     try:
+        # Paginate through ALL records for this module via GSI
         resp = table.query(
             IndexName=MODULE_INDEX,
             KeyConditionExpression="module = :m",
@@ -171,9 +173,15 @@ def _purge_risks(module: str) -> int:
             )
             items.extend(resp.get("Items", []))
 
+        # Table key: resourceId (HASH) + riskTimestamp (RANGE)
         with table.batch_writer() as batch:
             for item in items:
-                batch.delete_item(Key={"resourceId": item["resourceId"], "timestamp": item["timestamp"]})
+                rid = item.get("resourceId")
+                rts = item.get("riskTimestamp")
+                if not rid or not rts:
+                    logger.warning("Skipping item with missing key: %s", item.get("resourceId"))
+                    continue
+                batch.delete_item(Key={"resourceId": rid, "riskTimestamp": rts})
                 purged += 1
 
         logger.info("Purged %d risk records for module=%s", purged, module)

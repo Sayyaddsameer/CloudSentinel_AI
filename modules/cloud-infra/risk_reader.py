@@ -98,12 +98,13 @@ def lambda_handler(event, context):
     if priority_filter:
         items = [i for i in items if i.get("riskPriority", "").lower() == priority_filter.lower()]
 
-    # Sort: High first, then Medium, then Low; secondary sort by timestamp (newest first)
+    # Sort: High first, then Medium, then Low; within each priority newest timestamp first.
+    # Achieved with a stable two-pass sort (Python's sort is stable):
+    #   Pass 1: sort by timestamp descending (newest first)
+    #   Pass 2: sort by priority ascending (High=0, Medium=1, Low=2)
     priority_order = {"High": 0, "Medium": 1, "Low": 2}
-    items.sort(key=lambda x: (
-        priority_order.get(x.get("riskPriority", "Low"), 2),
-        x.get("riskTimestamp", ""),
-    ))
+    items.sort(key=lambda x: x.get("riskTimestamp", ""), reverse=True)  # newest first
+    items.sort(key=lambda x: priority_order.get(x.get("riskPriority", "Low"), 2))  # high first
 
     logger.info(f"Returning {len(items)} deduplicated risks")
     return {

@@ -187,7 +187,9 @@ async function startScan() {
     await triggerScan(MODULE);
     fill.style.width = '100%';
     pct.textContent  = '100%';
-    await sleep(400);
+    label.textContent = 'Scan complete! Loading results…';
+    sub.textContent   = 'Waiting for risk records to be saved…';
+    await sleep(2000);   // give DynamoDB writes time to propagate
     showToast('Scan complete!', 'success');
     localStorage.setItem(`cs_scan_${MODULE}`, new Date().toISOString());
     showRisksView(getConnections(MODULE));
@@ -276,7 +278,27 @@ async function confirmAwsConnect() {
   const accountId  = document.getElementById('aws-account-id').value.trim();
   const roleArnEl  = document.getElementById('aws-role-arn');
   const roleArn    = roleArnEl ? roleArnEl.value.trim() : `arn:aws:iam::${accountId}:role/cloudsentinel-scanner-role`;
+  const confirmBtn = document.getElementById('btn-confirm-aws');
 
+  if (confirmBtn) { confirmBtn.disabled = true; confirmBtn.textContent = 'Validating AWS access…'; }
+
+  // ── Validate via STS before accepting connection ────────────────────────
+  try {
+    const result = await validateAwsConnection(MODULE, accountId, roleArn);
+    if (!result.valid) {
+      showToast(result.error || 'Could not connect: CloudSentinel IAM role not found.', 'error', 10000);
+      if (confirmBtn) { confirmBtn.disabled = false; confirmBtn.textContent = 'Connect Account'; }
+      return;
+    }
+    const alias = result.accountAlias ? ` (${result.accountAlias})` : '';
+    showToast(`AWS account ${result.accountId}${alias} verified!`, 'success');
+  } catch (err) {
+    showToast('Validation failed: ' + err.message, 'error', 8000);
+    if (confirmBtn) { confirmBtn.disabled = false; confirmBtn.textContent = 'Connect Account'; }
+    return;
+  }
+
+  if (confirmBtn) { confirmBtn.disabled = false; confirmBtn.textContent = 'Connect Account'; }
   closeModal('modal-aws');
   setConnection(MODULE, 'aws', {
     accountId,

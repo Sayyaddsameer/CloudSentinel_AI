@@ -156,3 +156,69 @@ resource "aws_lambda_permission" "risk_reader_apigw" {
   principal     = "apigateway.amazonaws.com"
   source_arn    = "${aws_api_gateway_rest_api.api.execution_arn}/*/*"
 }
+
+# ---------------------------------------------------------------------------
+# disconnect-handler
+# ---------------------------------------------------------------------------
+
+resource "aws_lambda_function" "disconnect_handler" {
+  filename         = data.archive_file.cloud_scanner_zip.output_path
+  function_name    = "${var.project}-disconnect-handler"
+  role             = aws_iam_role.lambda_role.arn
+  handler          = "disconnect_handler.lambda_handler"
+  runtime          = "python3.11"
+  timeout          = 60
+  memory_size      = 128
+  source_code_hash = data.archive_file.cloud_scanner_zip.output_base64sha256
+
+  environment {
+    variables = {
+      DYNAMODB_TABLE     = aws_dynamodb_table.risks.name
+      AWS_ACCOUNT_REGION = var.aws_region
+    }
+  }
+
+  tags = { Project = var.project, Module = "cloud-infra", Owner = "sameer" }
+}
+
+resource "aws_lambda_permission" "disconnect_handler_apigw" {
+  statement_id  = "AllowAPIGatewayDisconnectHandler"
+  action        = "lambda:InvokeFunction"
+  function_name = aws_lambda_function.disconnect_handler.function_name
+  principal     = "apigateway.amazonaws.com"
+  source_arn    = "${aws_api_gateway_rest_api.api.execution_arn}/*/*"
+}
+
+# ---------------------------------------------------------------------------
+# notification-handler
+# ---------------------------------------------------------------------------
+
+resource "aws_lambda_function" "notification_handler" {
+  filename         = data.archive_file.cloud_scanner_zip.output_path
+  function_name    = "${var.project}-notification-handler"
+  role             = aws_iam_role.lambda_role.arn
+  handler          = "notification_handler.lambda_handler"
+  runtime          = "python3.11"
+  timeout          = 30
+  memory_size      = 256
+  source_code_hash = data.archive_file.cloud_scanner_zip.output_base64sha256
+
+  environment {
+    variables = {
+      DYNAMODB_TABLE         = aws_dynamodb_table.risks.name
+      SNS_TOPIC_ARN          = ""  # Set via tfvars or override
+      NOTIFICATION_THRESHOLD = var.notification_threshold
+      APP_URL                = var.app_url
+    }
+  }
+
+  tags = { Project = var.project, Module = "cloud-infra", Owner = "sameer" }
+}
+
+resource "aws_lambda_permission" "notification_handler_apigw" {
+  statement_id  = "AllowAPIGatewayNotificationHandler"
+  action        = "lambda:InvokeFunction"
+  function_name = aws_lambda_function.notification_handler.function_name
+  principal     = "apigateway.amazonaws.com"
+  source_arn    = "${aws_api_gateway_rest_api.api.execution_arn}/*/*"
+}

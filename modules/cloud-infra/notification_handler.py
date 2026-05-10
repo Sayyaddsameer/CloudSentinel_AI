@@ -50,30 +50,36 @@ table    = dynamodb.Table(DYNAMODB_TABLE)
 
 def lambda_handler(event, context):
     """
-    Expected event payload:
-    {
-        "module":    "cloud-infra",
-        "userId":    "user-uuid",
-        "scanId":    "scan-uuid",
-        "userEmail": "user@domain.com"
-    }
+    Dual-mode handler:
+    Mode A (API Gateway / frontend): POST /notify with body {module, highCount}
+    Mode B (EventBridge): {module, userId, userEmail, scanId, ...}
+    In both modes, sends SNS alert if there are High-priority open risks.
     """
-    module     = event.get("module", "unknown")
-    user_id    = event.get("userId", "")
-    user_email = event.get("userEmail", "")
-    scan_id    = event.get("scanId", "")
-
-    if not user_email:
-        logger.warning("Missing userEmail in event -- skipping notification. event=%s", json.dumps(event))
-        return {"statusCode": 200, "body": "Skipped: missing userEmail"}
+    # ── Parse event (API Gateway or EventBridge) ──────────────────────────────
+    if event.get("body") is not None:
+        # API Gateway call from frontend's triggerSnsAlert()
+        try:
+            body = json.loads(event.get("body") or "{}")
+        except Exception:
+            body = {}
+        module     = body.get("module", "unknown")
+        user_email = body.get("userEmail", "")  # optional
+        scan_id    = body.get("scanId", "")
+    else:
+        # Direct EventBridge invocation
+        module     = event.get("module", "unknown")
+        user_email = event.get("userEmail", "")
+        scan_id    = event.get("scanId", "")
 
     if not SNS_TOPIC_ARN:
         logger.error("SNS_TOPIC_ARN environment variable is not set -- cannot send notification")
-        return {"statusCode": 500, "body": "Configuration error: SNS_TOPIC_ARN is not set"}
+        return {
+            "statusCode": 500,
+            "headers": {"Content-Type": "application/json", "Access-Control-Allow-Origin": "*"},
+            "body": "Configuration error: SNS_TOPIC_ARN is not set",
+        }
 
-    # Query open risks for this module using the existing module-index GSI,
-    # then filter in memory by scanId and status to avoid requiring a
-    # userId-module-index GSI that is not defined in the table schema.
+    # ── Fetch risks for this module ───────────────────────────────────────────
     risks = _fetch_risks_for_scan(module, scan_id)
 
     notify_priorities = _THRESHOLD_PRIORITIES.get(NOTIFICATION_THRESHOLD, ["High"])
@@ -81,10 +87,14 @@ def lambda_handler(event, context):
 
     if not notify_risks:
         logger.info(
-            "No risks at threshold '%s' found for module=%s scanId=%s",
-            NOTIFICATION_THRESHOLD, module, scan_id,
+            "No risks at threshold '%s' found for module=%s",
+            NOTIFICATION_THRESHOLD, module,
         )
-        return {"statusCode": 200, "body": "No risks to notify"}
+        return {
+            "statusCode": 200,
+            "headers": {"Content-Type": "application/json", "Access-Control-Allow-Origin": "*"},
+            "body": json.dumps({"status": "no_risks", "module": module}),
+        }
 
     high   = sum(1 for r in notify_risks if r.get("riskPriority") == "High")
     medium = sum(1 for r in notify_risks if r.get("riskPriority") == "Medium")
@@ -99,24 +109,26 @@ def lambda_handler(event, context):
             TopicArn=SNS_TOPIC_ARN,
             Subject=subject,
             Message=text,
-            MessageAttributes={
-                "userEmail": {"DataType": "String", "StringValue": user_email},
-                "module":    {"DataType": "String", "StringValue": module},
-            },
+            MessageStructure="raw" if not user_email else "raw",
         )
         logger.info(
-            "SNS notification sent: risks=%d module=%s scanId=%s user=%s",
-            len(notify_risks), module, scan_id, user_id,
+            "SNS notification sent: risks=%d module=%s",
+            len(notify_risks), module,
         )
     except ClientError as exc:
         logger.error("SNS publish failed: %s", exc)
-        raise
+        return {
+            "statusCode": 500,
+            "headers": {"Content-Type": "application/json", "Access-Control-Allow-Origin": "*"},
+            "body": json.dumps({"error": str(exc)}),
+        }
 
     _mark_risks_notified(notify_risks)
 
     return {
         "statusCode": 200,
-        "body": json.dumps({"notified": len(notify_risks), "module": module, "scanId": scan_id}),
+        "headers": {"Content-Type": "application/json", "Access-Control-Allow-Origin": "*"},
+        "body": json.dumps({"notified": len(notify_risks), "module": module, "high": high}),
     }
 
 

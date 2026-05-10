@@ -240,6 +240,17 @@ def scan_iam_lambda_roles(iam, table):
 
 def lambda_handler(event, context):
     logger.info("mobile-analyzer started")
+
+    # Accept optional params from the frontend (API URL + custom threshold)
+    latency_ms = int(os.environ.get("LATENCY_THRESHOLD_MS", "1000"))
+    try:
+        body = json.loads((event.get("body") or "{}"))
+        custom_threshold = body.get("latencyThresholdMs")
+        if custom_threshold:
+            latency_ms = int(custom_threshold)
+    except Exception:
+        pass
+
     ddb     = boto3.resource("dynamodb", region_name=REGION)
     table   = ddb.Table(TABLE_NAME)
     apigw   = boto3.client("apigateway",  region_name=REGION)
@@ -251,7 +262,7 @@ def lambda_handler(event, context):
     all_risks += scan_cognito_pools(cognito, table)
     all_risks += scan_iam_lambda_roles(iam, table)
 
-    logger.info(f"mobile scan complete — {len(all_risks)} risk(s)")
+    logger.info(f"mobile scan complete -- {len(all_risks)} risk(s) (latency threshold: {latency_ms}ms)")
     return {
         "statusCode": 200,
         "headers": CORS_HEADERS,
