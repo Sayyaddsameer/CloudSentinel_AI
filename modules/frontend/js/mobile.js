@@ -39,6 +39,7 @@ async function loadRisks() {
     updateStats(allRisks);
     renderRiskCards(allRisks, 'risk-list');
     document.getElementById('last-scan-time').textContent = new Date().toLocaleTimeString();
+    recordScanToHistory(MODULE, allRisks);
     updateLiveMetrics();
   } catch (e) {
     showToast('Failed to load risks', 'error');

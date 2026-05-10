@@ -49,6 +49,7 @@ async function loadRisks() {
     updateStats(allRisks);
     renderRiskCards(allRisks, 'risk-list');
     document.getElementById('last-scan-time').textContent = new Date().toLocaleTimeString();
+    recordScanToHistory(MODULE, allRisks);
 
     /* Service summary counters */
     const s3risks   = allRisks.filter(r => r.resource === 'Data Storage' || r.resource === 'S3 Bucket').length;
