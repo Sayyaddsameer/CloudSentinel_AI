@@ -328,6 +328,20 @@ def scan_for_monitoring(repo_name, steps):
 
 
 # ---------------------------------------------------------------------------
+# PR Generation -- Scaffolding for Future Scope
+# ---------------------------------------------------------------------------
+
+def generate_github_pr_for_remediation(repo_name, risk):
+    """
+    Placeholder for future automated PR generation.
+    Will create a new branch, commit the fix (e.g. adding a test step), and
+    open a Pull Request using the GitHub API.
+    """
+    logger.info("Automated PR generation not yet implemented (v2 scope).")
+    return None
+
+
+# ---------------------------------------------------------------------------
 # Entry point — dual mode: GitHub Webhook OR manual JSON
 # ---------------------------------------------------------------------------
 
@@ -389,6 +403,7 @@ def lambda_handler(event, context):
 
     for r in all_risks:
         save_risk(table, r)
+        generate_github_pr_for_remediation(repo_name, r)  # Future scope
 
     emit_scan_completed("devops", all_risks)
 

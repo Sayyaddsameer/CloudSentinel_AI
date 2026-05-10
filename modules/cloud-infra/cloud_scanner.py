@@ -409,6 +409,33 @@ def scan_gcp_resources(table):
 
 
 # ---------------------------------------------------------------------------
+# Azure -- Scaffolding for Future Scope
+# ---------------------------------------------------------------------------
+
+def scan_azure_resources(table):
+    """
+    Placeholder for future Azure integration.
+    Will check Azure Resource Manager for open ports and public blobs.
+    """
+    found = []
+    logger.info("Azure scanning not yet implemented (v2 scope).")
+    return found
+
+
+# ---------------------------------------------------------------------------
+# Graph Topology -- Scaffolding for Future Scope
+# ---------------------------------------------------------------------------
+
+def generate_graph_topology():
+    """
+    Placeholder for future Graph Topology mapping.
+    Will map relationships between resources (e.g. S3 -> IAM -> EC2) to
+    identify complex attack paths.
+    """
+    logger.info("Graph topology mapping not yet implemented (v2 scope).")
+    return None
+
+# ---------------------------------------------------------------------------
 # Entry point
 # ---------------------------------------------------------------------------
 
@@ -436,6 +463,9 @@ def lambda_handler(event, context):
     all_risks += scan_iam_password_policy(clients, table)
     all_risks += scan_aws_config_findings(clients, table)
     all_risks += scan_gcp_resources(table)
+    all_risks += scan_azure_resources(table)  # Future scope
+
+    generate_graph_topology()  # Future scope
 
     # Emit ScanCompleted event so EventBridge triggers notification_handler
     emit_scan_completed("cloud-infra", all_risks)
