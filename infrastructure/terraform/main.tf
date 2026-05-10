@@ -251,6 +251,19 @@ resource "aws_cognito_user_pool_client" "web_client" {
   generate_secret                      = false
   explicit_auth_flows                  = ["ALLOW_USER_PASSWORD_AUTH", "ALLOW_REFRESH_TOKEN_AUTH"]
   prevent_user_existence_errors        = "ENABLED"
+
+  # Enforce 30-minute session at the Cognito level — the API Gateway Cognito
+  # authorizer validates token expiry on every request, so expired tokens are
+  # rejected server-side, not just by the client-side timer.
+  access_token_validity  = 30
+  id_token_validity      = 30
+  refresh_token_validity = 1
+
+  token_validity_units {
+    access_token  = "minutes"
+    id_token      = "minutes"
+    refresh_token = "days"
+  }
 }
 
 # ---------------------------------------------------------------------------

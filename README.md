@@ -28,10 +28,10 @@ The platform covers five specialized domains: Cloud Infrastructure, DevOps pipel
 
 | Module | What It Scans | Key Detections |
 |--------|---------------|----------------|
-| Cloud Infrastructure | S3, EC2, IAM, GCP Firewall | Public buckets, open SSH/RDP ports, missing password policy, GCP firewall exposure |
-| DevOps Intelligence | GitHub Actions CI/CD | Hardcoded secrets, no test step, missing rollback, no post-deploy monitoring |
-| Full-Stack Application | API Gateway, Lambda | Unauthenticated endpoints, permissive CORS, missing rate limiting, high error rates |
-| Data Engineering | DynamoDB, S3, Glue | Unencrypted tables, public data buckets, repeated ETL job failures |
+| Cloud Infrastructure | AWS S3, EC2, IAM, GCP GCS, GCP Firewall | Public buckets, open SSH/RDP ports, missing IAM password policy, GCP firewall/bucket exposure |
+| DevOps Intelligence | GitHub Actions CI/CD workflows | Hardcoded secrets, missing test step, missing rollback, no post-deploy monitoring |
+| Full-Stack Application | API Gateway, Lambda metrics | Unauthenticated endpoints, permissive CORS, missing rate limiting, high error rates |
+| Data Engineering | DynamoDB, S3, Glue jobs | Unencrypted tables, public data buckets, repeated ETL job failures |
 | Mobile Backend | Cognito, Lambda, API Routes | MFA disabled, weak password policy, over-permissioned Lambda roles, API auth gaps |
 
 ---
@@ -40,28 +40,35 @@ The platform covers five specialized domains: Cloud Infrastructure, DevOps pipel
 
 ```
 Browser (landing.html / dashboard / module pages)
-  |-- Amazon Cognito (sign-up, sign-in, forgot password, JWT tokens)
-  |-- Amazon API Gateway  [all routes require Cognito JWT]
-        |-- POST /scan-cloud-infra  --> cloudsentinel-cloud-scanner
-        |-- POST /scan-devops       --> cloudsentinel-devops-analyzer
-        |-- POST /scan-fullstack    --> cloudsentinel-fullstack-analyzer
-        |-- POST /scan-data-eng     --> cloudsentinel-data-eng-analyzer
-        |-- POST /scan-mobile       --> cloudsentinel-mobile-analyzer
-        |-- GET  /risks             --> cloudsentinel-risk-reader
-        |-- POST /chat              --> cloudsentinel-chatbot-handler
-        |-- POST /disconnect        --> cloudsentinel-disconnect-handler
+  |-- Amazon Cognito (sign-up, sign-in, forgot password, JWT tokens — 30-min expiry)
+  |-- Amazon API Gateway  [ALL routes require Cognito JWT — no NONE endpoints]
+        |-- POST /validate-connection --> cloudsentinel-validate-connection
+        |-- POST /scan-cloud-infra    --> cloudsentinel-cloud-scanner
+        |-- POST /scan-devops         --> cloudsentinel-devops-analyzer
+        |-- POST /scan-fullstack      --> cloudsentinel-fullstack-analyzer
+        |-- POST /scan-data-eng       --> cloudsentinel-data-eng-analyzer
+        |-- POST /scan-mobile         --> cloudsentinel-mobile-analyzer
+        |-- GET  /risks               --> cloudsentinel-risk-reader
+        |-- POST /chat                --> cloudsentinel-chatbot-handler
+        |-- POST /disconnect          --> cloudsentinel-disconnect-handler
 
 All scanners write risk records to:
-  Amazon DynamoDB (CloudSentinelRisks)
-    |-- ModuleIndex GSI (for per-module queries)
-    |-- cloudsentinel-ai-explainer (EventBridge hourly) --> Amazon Bedrock (Claude 3)
+  Amazon DynamoDB (cloudsentinel-risks)  [Point-In-Time Recovery enabled]
+    |-- module-index GSI   (per-module queries)
+    |-- priority-index GSI (High/Medium/Low filtering)
+    |-- cloudsentinel-ai-explainer (EventBridge hourly) --> Amazon Bedrock (Claude 3 Haiku)
     |-- cloudsentinel-notification-handler              --> Amazon SNS --> Email alerts
+
+GCP scanning (when GCP_SECRET_NAME is set):
+  cloud-scanner --> AWS Secrets Manager (GCP service-account JSON)
+    |-- Google Cloud Storage: scans bucket IAM policies for allUsers/allAuthenticatedUsers
+    |-- GCP Compute Engine:   scans firewall rules for open SSH/RDP (0.0.0.0/0)
 
 On disconnect or session expiry:
   cloudsentinel-disconnect-handler
     |-- Assumes cross-account scanner role --> cloudformation:DeleteStack
     |-- AWS Secrets Manager: ForceDeleteWithoutRecovery (GCP keys)
-    |-- DynamoDB: batch delete all risk records for module
+    |-- DynamoDB: batch delete all risk records for the module
 ```
 
 Full architecture diagrams, sequence flows, and the risk data schema are in [ARCHITECTURE.md](./ARCHITECTURE.md).
@@ -94,7 +101,7 @@ Full architecture diagrams, sequence flows, and the risk data schema are in [ARC
 ```
 CloudSentinel_AI/
 |-- .github/
-|   |-- workflows/ci.yml              # CI: unit tests + Bandit security scan
+|   |-- workflows/ci.yml              # CI: unit tests (fail-fast) + Bandit + Terraform validate
 |-- docs/
 |   |-- cloud-infrastructure-and-ai/  # Architecture, AWS setup, research, specs
 |   |-- devops-intelligence/
@@ -104,10 +111,10 @@ CloudSentinel_AI/
 |   |-- mobile-backend-intelligence/
 |-- infrastructure/
 |   |-- cloudformation/               # Scanner IAM role (cross-account)
-|   |-- iam/                          # Lambda execution policy
-|   |-- terraform/                    # Full IaC: all AWS resources
+|   |-- iam/lambda_policy.json        # Lambda execution policy (least-privilege)
+|   |-- terraform/                    # Full IaC: all AWS + Security Hub resources
 |-- modules/
-|   |-- cloud-infra/                  # Cloud Infrastructure + AI layer Lambdas
+|   |-- cloud-infra/                  # Cloud Infrastructure + AI + GCP scan Lambdas
 |   |-- devops/                       # DevOps Intelligence Lambda
 |   |-- fullstack/                    # Full-Stack Intelligence Lambda
 |   |-- data-eng/                     # Data Engineering Intelligence Lambda
@@ -124,12 +131,10 @@ CloudSentinel_AI/
 |       |-- js/session.js             # Session timer (login-time based, auto-revoke)
 |       |-- js/app.js                 # Shared utilities (API calls, disconnect API)
 |-- shared/schemas/                   # Risk record JSON schema
-|-- tests/                            # Unit tests (all modules)
-|-- add_jwt_authorizer.py             # One-time: attach Cognito auth to API Gateway
+|-- tests/                            # Unit tests for all 5 modules (pytest)
+|   |-- conftest.py                   # Shared fixtures and sys.path setup
+|-- pytest.ini                        # Pytest configuration
 |-- deploy_console.py                 # Full deployment without Terraform
-|-- deploy_disconnect.py              # Deploy disconnect Lambda + API route
-|-- sync_frontend.py                  # Upload frontend to S3 static website bucket
-|-- remove_emojis.py                  # Utility: clean emoji from all source files
 |-- ARCHITECTURE.md                   # Full architecture and design documentation
 |-- DEPLOYMENT.md                     # Step-by-step deployment guide
 |-- README.md
@@ -170,23 +175,31 @@ http://cloudsentinel-frontend-<account-id>.s3-website-us-east-1.amazonaws.com/la
 
 | Control | Implementation |
 |---------|---------------|
-| Authentication | Amazon Cognito User Pools with JWT tokens |
-| API Authorization | All 8 endpoints use `COGNITO_USER_POOLS` authorizer (no `NONE` routes except CORS OPTIONS) |
+| Authentication | Amazon Cognito User Pools — access tokens expire in **30 minutes** (enforced by Cognito, not client) |
+| API Authorization | All 9 endpoints use `COGNITO_USER_POOLS` authorizer — API Gateway rejects any missing or expired token |
 | Password Recovery | Cognito ForgotPassword + ConfirmForgotPassword (code sent to email) |
-| Session Management | Timer based on login timestamp — does not reset on mouse activity |
-| Credential Storage | GCP service account keys stored in AWS Secrets Manager, never in frontend |
-| Cross-account Access | Read-only IAM role via CloudFormation; no write access to user accounts |
+| Session Management | 30-min token expiry enforced **server-side** by Cognito + API Gateway; client timer matches |
+| Credential Storage | GCP service account keys in AWS Secrets Manager only; never in frontend code or env vars |
+| Cross-account Access | Read-only IAM role deployed via CloudFormation; STS AssumeRole scoped to `cloudsentinel-scanner-role` |
 | Automated Revocation | On disconnect or session expiry: CFN stack deleted, GCP secret purged, DynamoDB risks cleared |
+| DynamoDB Backup | Point-In-Time Recovery (PITR) enabled — any-second restore up to 35 days |
 
 ---
 
 ## Running Tests
 
 ```bash
-cd CloudSentinel_AI
-pip install boto3
-python -m pytest tests/ -v
+# Install dependencies
+pip install boto3 "moto[all]" pytest pytest-cov
+
+# Run all unit tests
+pytest tests/ -v
+
+# Run with coverage report
+pytest tests/ -v --cov=modules --cov-report=term-missing
 ```
+
+The test suite covers all 5 Lambda modules with mocked AWS services (no real AWS credentials needed).
 
 ---
 

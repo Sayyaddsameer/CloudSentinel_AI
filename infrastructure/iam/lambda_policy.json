@@ -158,12 +158,15 @@
       "Resource": "arn:aws:sns:*:*:cloudsentinel-alerts"
     },
     {
-      "Sid": "STS",
+      "Sid": "STSAssumeScanner",
       "Effect": "Allow",
-      "Action": [
-        "sts:AssumeRole",
-        "sts:GetCallerIdentity"
-      ],
+      "Action": ["sts:AssumeRole"],
+      "Resource": "arn:aws:iam::*:role/cloudsentinel-scanner-role"
+    },
+    {
+      "Sid": "STSCallerIdentity",
+      "Effect": "Allow",
+      "Action": ["sts:GetCallerIdentity"],
       "Resource": "*"
     },
     {
