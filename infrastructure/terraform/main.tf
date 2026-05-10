@@ -26,6 +26,12 @@ variable "aws_region" {
   default     = "us-east-1"
 }
 
+variable "secondary_region" {
+  description = "Secondary AWS region for future disaster recovery deployment"
+  type        = string
+  default     = "us-west-2"
+}
+
 variable "project" {
   description = "Project name prefix for all resources"
   type        = string
@@ -157,9 +163,21 @@ resource "aws_dynamodb_table" "risks" {
     projection_type = "ALL"
   }
 
+  point_in_time_recovery {
+    enabled = true
+  }
+
   tags = {
     Project = var.project
   }
+}
+
+# ---------------------------------------------------------------------------
+# AWS Security Hub (Groundwork for future integration)
+# ---------------------------------------------------------------------------
+
+resource "aws_securityhub_account" "main" {
+  enable_default_standards = true
 }
 
 # ---------------------------------------------------------------------------
