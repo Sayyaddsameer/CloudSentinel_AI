@@ -15,20 +15,20 @@ function initPage(moduleName) {
 
   /* Populate nav user info */
   const set = (id, val) => { const el = document.getElementById(id); if (el) el.textContent = val; };
-  set('nav-user-name',  user.name);
+  set('nav-user-name', user.name);
   set('nav-user-avatar', user.initials);
-  set('dd-user-name',   user.name);
-  set('dd-user-email',  user.email);
+  set('dd-user-name', user.name);
+  set('dd-user-email', user.email);
 
   /* Inject theme toggle into navbar */
   const navActions = document.querySelector('.navbar-actions');
   if (navActions && !document.getElementById('theme-toggle')) {
-    const themeBtn       = document.createElement('button');
-    themeBtn.id          = 'theme-toggle';
-    themeBtn.className   = 'theme-toggle-btn';
-    const currentTheme   = document.documentElement.getAttribute('data-theme') || 'dark';
+    const themeBtn = document.createElement('button');
+    themeBtn.id = 'theme-toggle';
+    themeBtn.className = 'theme-toggle-btn';
+    const currentTheme = document.documentElement.getAttribute('data-theme') || 'dark';
     themeBtn.textContent = currentTheme === 'dark' ? 'Light' : 'Dark';
-    themeBtn.title       = currentTheme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode';
+    themeBtn.title = currentTheme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode';
     themeBtn.addEventListener('click', toggleTheme);
     navActions.insertBefore(themeBtn, navActions.firstChild);
   }
@@ -68,7 +68,7 @@ function showToast(msg, type = 'info', duration = 4000) {
   t.innerHTML = `<span>${icons[type] || '[i]'}</span><span>${msg}</span>`;
   tc.appendChild(t);
   setTimeout(() => {
-    t.style.opacity   = '0';
+    t.style.opacity = '0';
     t.style.transform = 'translateX(110%)';
     t.style.transition = 'all .3s ease';
     setTimeout(() => t.remove(), 320);
@@ -77,7 +77,7 @@ function showToast(msg, type = 'info', duration = 4000) {
 
 /* ── Rate limiter (client-side -- defence in depth only) ───── */
 function checkRateLimit(email) {
-  const key  = `cs_rl_${btoa(email).slice(0, 12)}`;
+  const key = `cs_rl_${btoa(email).slice(0, 12)}`;
   const data = JSON.parse(localStorage.getItem(key) || '{"fails":0,"lockedUntil":0}');
   if (data.lockedUntil > Date.now()) {
     const remaining = Math.ceil((data.lockedUntil - Date.now()) / 1000);
@@ -87,7 +87,7 @@ function checkRateLimit(email) {
 }
 
 function recordLoginFailure(email) {
-  const key  = `cs_rl_${btoa(email).slice(0, 12)}`;
+  const key = `cs_rl_${btoa(email).slice(0, 12)}`;
   const data = JSON.parse(localStorage.getItem(key) || '{"fails":0,"lockedUntil":0}');
   data.fails++;
   const lockDurations = { 3: 60 * 1000, 5: 5 * 60 * 1000, 10: 30 * 60 * 1000 };
@@ -108,7 +108,7 @@ async function apiCall(path, method = 'GET', body = null) {
   const opts = {
     method,
     headers: {
-      'Content-Type':  'application/json',
+      'Content-Type': 'application/json',
       'Authorization': getToken() || '',
     },
   };
@@ -125,7 +125,7 @@ function _handleSessionExpired() {
   localStorage.removeItem('cs_last_activity');
 
   // Redirect to login page from any depth (index.html lives at root)
-  const depth  = (window.location.pathname.match(/\//g) || []).length - 1;
+  const depth = (window.location.pathname.match(/\//g) || []).length - 1;
   const prefix = depth > 0 ? '../'.repeat(depth) : '';
   window.location.href = prefix + 'index.html?reason=expired';
 }
@@ -155,7 +155,7 @@ async function apiFetch(url, opts = {}) {
     if (res.status === 401) {
       _handleSessionExpired();
       // Return a never-resolving promise so callers don't see a thrown error
-      return new Promise(() => {});
+      return new Promise(() => { });
     }
   }
 
@@ -173,13 +173,13 @@ async function fetchRisks(module) {
 async function triggerScan(module, extraParams = {}) {
   if (!API_BASE) throw new Error('API is not configured.');
 
-  const conn        = getConnections(module);
-  const roleArn     = conn?.aws?.roleArn || conn?.['aws-data']?.roleArn || conn?.['aws-mobile']?.roleArn || null;
+  const conn = getConnections(module);
+  const roleArn = conn?.aws?.roleArn || conn?.['aws-data']?.roleArn || conn?.['aws-mobile']?.roleArn || null;
   const scanPayload = { ...(roleArn ? { targetRoleArn: roleArn } : {}), ...extraParams };
 
   const res = await apiFetch(`${API_BASE}/scan-${module}`, {
     method: 'POST',
-    body:   JSON.stringify(scanPayload),
+    body: JSON.stringify(scanPayload),
   });
   if (!res.ok) throw new Error(`Scan failed (${res.status})`);
   return res.json();
@@ -195,7 +195,7 @@ async function validateAwsConnection(module, accountId, roleArn) {
   if (!API_BASE) throw new Error('API not configured.');
   const res = await apiFetch(`${API_BASE}/validate-connection`, {
     method: 'POST',
-    body:   JSON.stringify({ module, accountId, roleArn }),
+    body: JSON.stringify({ module, accountId, roleArn }),
   });
   if (res.status === 401) throw new Error('Session expired — please sign in again.');
   if (!res.ok) throw new Error(`Validation request failed (${res.status})`);
@@ -207,15 +207,15 @@ async function validateAwsConnection(module, accountId, roleArn) {
 const MAX_HISTORY = 30;
 
 function recordScanToHistory(module, risks) {
-  const key     = `cs_history_${module}`;
+  const key = `cs_history_${module}`;
   const history = JSON.parse(localStorage.getItem(key) || '[]');
   history.unshift({
     timestamp: new Date().toISOString(),
-    total:     risks.length,
-    high:      risks.filter(r => r.riskPriority === 'High').length,
-    medium:    risks.filter(r => r.riskPriority === 'Medium').length,
-    low:       risks.filter(r => r.riskPriority === 'Low').length,
-    risks:     risks.slice(0, 10),
+    total: risks.length,
+    high: risks.filter(r => r.riskPriority === 'High').length,
+    medium: risks.filter(r => r.riskPriority === 'Medium').length,
+    low: risks.filter(r => r.riskPriority === 'Low').length,
+    risks: risks.slice(0, 10),
     module,
   });
   if (history.length > MAX_HISTORY) history.splice(MAX_HISTORY);
@@ -247,9 +247,9 @@ function startAutoRefresh(module, onNewRisks, intervalMs = 5 * 60 * 1000) {
   stopAutoRefresh(module);
   _refreshTimers[module] = setInterval(async () => {
     try {
-      const risks   = await fetchRisks(module);
+      const risks = await fetchRisks(module);
       const history = getModuleHistory(module, 1);
-      const prev    = history[0]?.total ?? null;
+      const prev = history[0]?.total ?? null;
 
       if (prev !== null && risks.length > prev) {
         showToast(`${risks.length - prev} new risk(s) detected in ${formatModuleName(module)}`, 'warning', 8000);
@@ -274,18 +274,18 @@ function stopAutoRefresh(module) {
 function showNotificationBadge(module) {
   const moduleMap = {
     'cloud-infra': 'mod-cloud',
-    'devops':      'mod-devops',
-    'fullstack':   'mod-fullstack',
-    'data-eng':    'mod-data',
-    'mobile':      'mod-mobile',
+    'devops': 'mod-devops',
+    'fullstack': 'mod-fullstack',
+    'data-eng': 'mod-data',
+    'mobile': 'mod-mobile',
   };
   const card = document.getElementById(moduleMap[module]);
   if (!card) return;
   const top = card.querySelector('.module-card-top');
   if (top && !top.querySelector('.notif-badge')) {
-    const badge     = document.createElement('span');
+    const badge = document.createElement('span');
     badge.className = 'notif-badge';
-    badge.title     = 'New risks detected';
+    badge.title = 'New risks detected';
     top.style.position = 'relative';
     top.appendChild(badge);
   }
@@ -294,10 +294,10 @@ function showNotificationBadge(module) {
 function formatModuleName(module) {
   const names = {
     'cloud-infra': 'Cloud Infrastructure',
-    'devops':      'DevOps',
-    'fullstack':   'Full-Stack',
-    'data-eng':    'Data Engineering',
-    'mobile':      'Mobile Backend',
+    'devops': 'DevOps',
+    'fullstack': 'Full-Stack',
+    'data-eng': 'Data Engineering',
+    'mobile': 'Mobile Backend',
   };
   return names[module] || module;
 }
@@ -314,11 +314,11 @@ const CHAT_CHIPS = [
 
 function initChatbot(module) {
   chatModule = module || 'cloud-infra';
-  const fab   = document.getElementById('chatbot-fab');
+  const fab = document.getElementById('chatbot-fab');
   const panel = document.getElementById('chatbot-panel');
   const close = document.getElementById('chatbot-close');
   const input = document.getElementById('chatbot-input');
-  const send  = document.getElementById('chatbot-send');
+  const send = document.getElementById('chatbot-send');
   if (!fab || !panel) return;
 
   /* Update header subtitle with live module name */
@@ -361,7 +361,7 @@ async function sendChat() {
     if (!API_BASE) throw new Error('API not configured. Set ENV_API_URL in env.js.');
     const resp = await apiFetch(`${API_BASE}/chat`, {
       method: 'POST',
-      body:   JSON.stringify({ question: q, module: chatModule }),
+      body: JSON.stringify({ question: q, module: chatModule }),
     });
     removeTyping(typingId);
     if (resp.status === 401) {
@@ -403,7 +403,7 @@ function appendBotMessage(text) {
 
 function appendTyping() {
   const msgs = document.getElementById('chatbot-messages');
-  const id   = 'typing-' + Date.now();
+  const id = 'typing-' + Date.now();
   msgs?.insertAdjacentHTML('beforeend',
     `<div class="chat-msg bot" id="${id}"><div class="chat-avatar">CS</div><div class="chat-typing"><span></span><span></span><span></span></div></div>`);
   msgs && (msgs.scrollTop = msgs.scrollHeight);
@@ -471,10 +471,10 @@ function toggleRiskDetail(btn, id) {
 
 function updateStats(risks) {
   const set = (id, val) => { const el = document.getElementById(id); if (el) el.textContent = val; };
-  set('stat-total',  risks.length);
-  set('stat-high',   risks.filter(r => r.riskPriority === 'High').length);
+  set('stat-total', risks.length);
+  set('stat-high', risks.filter(r => r.riskPriority === 'High').length);
   set('stat-medium', risks.filter(r => r.riskPriority === 'Medium').length);
-  set('stat-low',    risks.filter(r => r.riskPriority === 'Low').length);
+  set('stat-low', risks.filter(r => r.riskPriority === 'Low').length);
 }
 
 /* ── Connection helpers ───────────────────────────────────── */
@@ -494,18 +494,18 @@ function removeConnection(module, provider) { const c = getConnections(module); 
  */
 async function callDisconnectApi(module, provider = 'all') {
   if (!API_BASE) return null;
-  const conn  = getConnections(module);
+  const conn = getConnections(module);
   // roleArn may be stored under different keys depending on the module
-  const roleArn   = conn?.aws?.roleArn
-                 || conn?.['aws-mobile']?.roleArn
-                 || conn?.['aws-data']?.roleArn
-                 || '';
+  const roleArn = conn?.aws?.roleArn
+    || conn?.['aws-mobile']?.roleArn
+    || conn?.['aws-data']?.roleArn
+    || '';
   const stackName = conn?.aws?.stackName || 'CloudSentinel-Scanner';
   try {
     const res = await fetch(`${API_BASE}/disconnect`, {
-      method:  'POST',
+      method: 'POST',
       headers: { Authorization: getToken() || '', 'Content-Type': 'application/json' },
-      body:    JSON.stringify({ module, provider, roleArn, stackName }),
+      body: JSON.stringify({ module, provider, roleArn, stackName }),
     });
     if (!res.ok) throw new Error(`Disconnect API error ${res.status}`);
     return await res.json();
@@ -530,7 +530,7 @@ async function autoDisconnectAll() {
 
   await Promise.allSettled(
     connected.map(async m => {
-      await callDisconnectApi(m, 'all').catch(() => {});
+      await callDisconnectApi(m, 'all').catch(() => { });
       localStorage.removeItem(`cs_conn_${m}`);
       localStorage.removeItem(`cs_scan_${m}`);
       localStorage.removeItem(`cs_history_${m}`);
@@ -552,9 +552,9 @@ async function autoDisconnectAll() {
     MODULES.forEach(m => {
       const conn = getConnections(m);
       if (Object.keys(conn).length === 0) return;
-      const roleArn   = conn?.aws?.roleArn || conn?.['aws-mobile']?.roleArn || conn?.['aws-data']?.roleArn || '';
+      const roleArn = conn?.aws?.roleArn || conn?.['aws-mobile']?.roleArn || conn?.['aws-data']?.roleArn || '';
       const stackName = conn?.aws?.stackName || 'CloudSentinel-Scanner';
-      const payload   = JSON.stringify({ module: m, provider: 'all', roleArn, stackName });
+      const payload = JSON.stringify({ module: m, provider: 'all', roleArn, stackName });
       navigator.sendBeacon(`${API_BASE}/disconnect`, new Blob([payload], { type: 'application/json' }));
     });
   });
@@ -566,12 +566,12 @@ async function triggerSnsAlert(module, highRisks) {
   try {
     const user = typeof getUser === 'function' ? getUser() : null;
     await fetch(`${API_BASE}/notify`, {
-      method:  'POST',
+      method: 'POST',
       headers: { Authorization: getToken() || '', 'Content-Type': 'application/json' },
-      body:    JSON.stringify({
+      body: JSON.stringify({
         module,
-        highCount:  highRisks.length,
-        userEmail:  user?.email || '',
+        highCount: highRisks.length,
+        userEmail: user?.email || '',
       }),
     });
   } catch { /* non-critical */ }
