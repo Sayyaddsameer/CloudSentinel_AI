@@ -307,7 +307,8 @@ resource "aws_api_gateway_method" "risks_get" {
   rest_api_id   = aws_api_gateway_resource.risks.rest_api_id
   resource_id   = aws_api_gateway_resource.risks.id
   http_method   = "GET"
-  authorization = "NONE"
+  authorization = "COGNITO_USER_POOLS"
+  authorizer_id = aws_api_gateway_authorizer.cognito.id
 }
 
 resource "aws_api_gateway_integration" "risks_get" {
@@ -330,7 +331,8 @@ resource "aws_api_gateway_method" "chat_post" {
   rest_api_id   = aws_api_gateway_resource.chat.rest_api_id
   resource_id   = aws_api_gateway_resource.chat.id
   http_method   = "POST"
-  authorization = "NONE"
+  authorization = "COGNITO_USER_POOLS"
+  authorizer_id = aws_api_gateway_authorizer.cognito.id
 }
 
 resource "aws_api_gateway_integration" "chat_post" {
@@ -353,7 +355,8 @@ resource "aws_api_gateway_method" "scan_cloud_post" {
   rest_api_id   = aws_api_gateway_resource.scan_cloud.rest_api_id
   resource_id   = aws_api_gateway_resource.scan_cloud.id
   http_method   = "POST"
-  authorization = "NONE"
+  authorization = "COGNITO_USER_POOLS"
+  authorizer_id = aws_api_gateway_authorizer.cognito.id
 }
 
 resource "aws_api_gateway_integration" "scan_cloud_post" {
@@ -376,7 +379,8 @@ resource "aws_api_gateway_method" "disconnect_post" {
   rest_api_id   = aws_api_gateway_resource.disconnect.rest_api_id
   resource_id   = aws_api_gateway_resource.disconnect.id
   http_method   = "POST"
-  authorization = "NONE"
+  authorization = "COGNITO_USER_POOLS"
+  authorizer_id = aws_api_gateway_authorizer.cognito.id
 }
 
 resource "aws_api_gateway_integration" "disconnect_post" {
@@ -399,7 +403,8 @@ resource "aws_api_gateway_method" "notify_post" {
   rest_api_id   = aws_api_gateway_resource.notify.rest_api_id
   resource_id   = aws_api_gateway_resource.notify.id
   http_method   = "POST"
-  authorization = "NONE"
+  authorization = "COGNITO_USER_POOLS"
+  authorizer_id = aws_api_gateway_authorizer.cognito.id
 }
 
 resource "aws_api_gateway_integration" "notify_post" {
