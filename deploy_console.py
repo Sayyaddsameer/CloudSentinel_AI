@@ -102,6 +102,7 @@ def load_config() -> dict:
         "gcp_secret_name":        os.environ.get("CS_GCP_SECRET_NAME", ""),
         "target_role_arn":        os.environ.get("CS_TARGET_ROLE_ARN", ""),
         "webhook_secret_arn":     os.environ.get("CS_WEBHOOK_SECRET_ARN", ""),
+        "github_pat_secret_arn":  os.environ.get("CS_GITHUB_PAT_SECRET_ARN", ""),
     }
     return cfg
 
@@ -266,10 +267,10 @@ def create_cognito(cognito_idp, cfg: dict, step: Step) -> tuple:
         pool = cognito_idp.create_user_pool(
             PoolName=pool_name,
             Policies={"PasswordPolicy": {
-                "MinimumLength":                 8,
+                "MinimumLength":                 12,
                 "RequireUppercase":              True,
                 "RequireNumbers":                True,
-                "RequireSymbols":                False,
+                "RequireSymbols":                True,
                 "TemporaryPasswordValidityDays": 7,
             }},
             AutoVerifiedAttributes=["email"],
@@ -418,8 +419,9 @@ def create_lambdas(lmb, cfg: dict, table_name: str, role_arn: str,
             "handler": "devops_analyzer.lambda_handler",
             "timeout": 120, "memory": 256,
             "env": {
-                "DYNAMODB_TABLE":    table_name,
-                "WEBHOOK_SECRET_ARN": cfg.get("webhook_secret_arn", ""),
+                "DYNAMODB_TABLE":       table_name,
+                "WEBHOOK_SECRET_ARN":   cfg.get("webhook_secret_arn", ""),
+                "GITHUB_PAT_SECRET_ARN": cfg.get("github_pat_secret_arn", ""),
             },
         },
         {

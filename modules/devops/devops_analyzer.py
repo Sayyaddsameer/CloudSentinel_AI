@@ -1,3 +1,4 @@
+import base64
 import hashlib
 import hmac
 import json
@@ -5,17 +6,27 @@ import os
 import logging
 import re
 from datetime import datetime, timezone
+from urllib.request import Request, urlopen
+from urllib.error import URLError
 
 import boto3
 from botocore.exceptions import ClientError
+
+try:
+    import yaml
+except ImportError:          # PyYAML not installed in test env — fallback parser
+    yaml = None
+
 from scan_events import emit_scan_completed
 
 logger = logging.getLogger()
 logger.setLevel(logging.INFO)
 
-TABLE_NAME         = os.environ["DYNAMODB_TABLE"]
-REGION             = os.environ.get("AWS_REGION", "us-east-1")
-WEBHOOK_SECRET_ARN = os.environ.get("WEBHOOK_SECRET_ARN", "")
+TABLE_NAME           = os.environ["DYNAMODB_TABLE"]
+REGION               = os.environ.get("AWS_REGION", "us-east-1")
+WEBHOOK_SECRET_ARN   = os.environ.get("WEBHOOK_SECRET_ARN", "")
+GITHUB_PAT_SECRET_ARN = os.environ.get("GITHUB_PAT_SECRET_ARN", "")
+GITHUB_API_BASE      = "https://api.github.com"
 
 # Regex patterns for secret detection
 SECRET_PATTERNS = [
@@ -35,15 +46,111 @@ CORS_HEADERS = {
 # GitHub signs every webhook payload with HMAC-SHA256 using WEBHOOK_SECRET
 # ---------------------------------------------------------------------------
 
-def get_webhook_secret():
-    if not WEBHOOK_SECRET_ARN:
+def _get_secret(arn):
+    """Generic Secrets Manager retrieval — returns None on any error."""
+    if not arn:
         return None
     try:
         sm = boto3.client("secretsmanager", region_name=REGION)
-        return sm.get_secret_value(SecretId=WEBHOOK_SECRET_ARN)["SecretString"]
+        return sm.get_secret_value(SecretId=arn)["SecretString"]
     except Exception as e:
-        logger.error(f"Could not retrieve webhook secret: {e}")
+        logger.error(f"Could not retrieve secret {arn}: {e}")
         return None
+
+
+def get_webhook_secret():
+    return _get_secret(WEBHOOK_SECRET_ARN)
+
+
+def get_github_pat():
+    return _get_secret(GITHUB_PAT_SECRET_ARN)
+
+
+# ---------------------------------------------------------------------------
+# GitHub API — fetch workflow YAML files from a repository
+# Calls GET /repos/{owner}/{repo}/contents/.github/workflows to list all
+# YAML files, then fetches and merges each one into a single pipeline_config
+# dict so the existing scan checks run against real pipeline definitions.
+# ---------------------------------------------------------------------------
+
+def _github_api_get(path, pat):
+    """Make an authenticated GET request to the GitHub API."""
+    url = f"{GITHUB_API_BASE}{path}"
+    headers = {
+        "Accept":               "application/vnd.github+json",
+        "X-GitHub-Api-Version": "2022-11-28",
+        "User-Agent":           "CloudSentinel-DevOps-Analyzer/1.0",
+    }
+    if pat:
+        headers["Authorization"] = f"Bearer {pat}"
+    req = Request(url, headers=headers)
+    try:
+        with urlopen(req, timeout=10) as resp:
+            return json.loads(resp.read().decode("utf-8"))
+    except URLError as e:
+        logger.warning(f"GitHub API request failed for {path}: {e}")
+        return None
+
+
+def _parse_yaml_content(raw_text):
+    """Parse a YAML workflow file; returns dict or {} on failure."""
+    if yaml is None:
+        # PyYAML unavailable — return an empty config that triggers gap checks
+        logger.warning("PyYAML not available; skipping YAML parse")
+        return {}
+    try:
+        return yaml.safe_load(raw_text) or {}
+    except Exception as e:
+        logger.warning(f"YAML parse error: {e}")
+        return {}
+
+
+def _fetch_workflow_from_github(full_repo_name):
+    """
+    Fetch all .github/workflows/*.yml files for *full_repo_name* (owner/repo).
+    Returns a merged pipeline_config dict compatible with flatten_steps(), or
+    None if the fetch fails.
+    """
+    pat = get_github_pat()
+    if not pat:
+        logger.info("No GITHUB_PAT_SECRET_ARN configured — skipping GitHub API fetch")
+        return None
+
+    owner_repo = full_repo_name.replace(" ", "-")  # safety normalise
+    listing = _github_api_get(
+        f"/repos/{owner_repo}/contents/.github/workflows", pat
+    )
+    if not listing or not isinstance(listing, list):
+        logger.warning(f"Could not list workflow files for {owner_repo}")
+        return None
+
+    merged_jobs = {}
+    for entry in listing:
+        name = entry.get("name", "")
+        if not name.endswith((".yml", ".yaml")):
+            continue
+        file_meta = _github_api_get(f"/repos/{owner_repo}/contents/.github/workflows/{name}", pat)
+        if not file_meta or "content" not in file_meta:
+            continue
+        try:
+            raw_yaml = base64.b64decode(file_meta["content"]).decode("utf-8")
+        except Exception as e:
+            logger.warning(f"Base64 decode failed for {name}: {e}")
+            continue
+        workflow = _parse_yaml_content(raw_yaml)
+        jobs = workflow.get("jobs", {})
+        # Prefix job names with the workflow file name to avoid collisions
+        prefix = name.replace(".yml", "").replace(".yaml", "")
+        for job_key, job_val in jobs.items():
+            merged_jobs[f"{prefix}__{job_key}"] = job_val
+        logger.info(f"Fetched {len(jobs)} job(s) from {name}")
+
+    if not merged_jobs:
+        logger.warning("No jobs found in fetched workflow files")
+        return None
+
+    logger.info(f"GitHub API fetch complete — {len(merged_jobs)} total job(s) for {owner_repo}")
+    return {"jobs": merged_jobs}
 
 
 def verify_github_signature(payload_bytes, signature_header, secret):
@@ -255,14 +362,10 @@ def lambda_handler(event, context):
         head_commit = body.get("head_commit", {})
         logger.info(f"Webhook push from {repo_name}, commit: {head_commit.get('id', '')[:8]}")
 
-        # Use workflow content from the push event if present, else use a generic stub
-        # (full parsing would require GitHub API calls to fetch the .yml content)
+        # Prefer pipeline_config embedded in the event; otherwise fetch from GitHub API.
         pipeline_config = body.get("pipeline_config", {})
         if not pipeline_config:
-            # When the pipeline_config isn't embedded in the event,
-            # run the checks against an empty pipeline so at least
-            # test/rollback/monitoring gaps are surfaced.
-            pipeline_config = {"jobs": {"build": {"steps": []}}}
+            pipeline_config = _fetch_workflow_from_github(repo_name) or {"jobs": {"build": {"steps": []}}}
     else:
         # Manual / demo mode — pipeline_config provided directly in the body
         repo_name       = body.get("repo_name", "CloudSentinel_AI")

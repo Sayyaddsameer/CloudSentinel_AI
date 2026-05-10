@@ -18,8 +18,9 @@ resource "aws_lambda_function" "devops_analyzer" {
 
   environment {
     variables = {
-      DYNAMODB_TABLE      = aws_dynamodb_table.risks.name
-      WEBHOOK_SECRET_ARN  = var.webhook_secret_arn
+      DYNAMODB_TABLE         = aws_dynamodb_table.risks.name
+      WEBHOOK_SECRET_ARN     = var.webhook_secret_arn
+      GITHUB_PAT_SECRET_ARN  = var.github_pat_secret_arn
     }
   }
 

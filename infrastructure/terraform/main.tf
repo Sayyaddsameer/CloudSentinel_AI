@@ -27,7 +27,7 @@ variable "aws_region" {
 }
 
 variable "secondary_region" {
-  description = "Secondary AWS region for future disaster recovery deployment"
+  description = "Secondary AWS region — hosts the DynamoDB Global Table replica for active disaster recovery"
   type        = string
   default     = "us-west-2"
 }
@@ -72,6 +72,13 @@ variable "gcp_secret_name" {
 variable "webhook_secret_arn" {
   description = "ARN of the Secrets Manager secret holding the GitHub webhook HMAC secret"
   type        = string
+  default     = ""
+}
+
+variable "github_pat_secret_arn" {
+  description = "ARN of the Secrets Manager secret holding the GitHub PAT used by devops-analyzer to fetch workflow YAML via the GitHub Contents API"
+  type        = string
+  sensitive   = true
   default     = ""
 }
 
@@ -167,6 +174,11 @@ resource "aws_dynamodb_table" "risks" {
     enabled = true
   }
 
+  # Active cross-region replica — provides < 1-second RPO for risk records
+  replica {
+    region_name = var.secondary_region
+  }
+
   tags = {
     Project = var.project
   }
@@ -250,10 +262,10 @@ resource "aws_cognito_user_pool" "users" {
   name = "${var.project}-users"
 
   password_policy {
-    minimum_length                   = 8
+    minimum_length                   = 12
     require_uppercase                = true
     require_numbers                  = true
-    require_symbols                  = false
+    require_symbols                  = true
     temporary_password_validity_days = 7
   }
 
