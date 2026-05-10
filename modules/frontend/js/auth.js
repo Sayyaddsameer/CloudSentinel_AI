@@ -57,7 +57,8 @@
 
   function getToken() {
     const u = getSession();
-    return u ? u.accessToken : null;
+    // API Gateway COGNITO_USER_POOLS authorizer validates the IdToken, NOT the AccessToken.
+    return u ? (u.idToken || u.accessToken) : null;
   }
 
   /* ── Login ────────────────────────────────────────────────── */
