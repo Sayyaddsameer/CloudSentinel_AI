@@ -118,24 +118,45 @@ async function apiCall(path, method = 'GET', body = null) {
   return res.json();
 }
 
+/* ── Session expiry redirect ──────────────────────────────────── */
+function _handleSessionExpired() {
+  // Clear dead session data from localStorage
+  if (typeof clearSession === 'function') clearSession();
+  localStorage.removeItem('cs_last_activity');
+
+  // Redirect to login page from any depth (index.html lives at root)
+  const depth  = (window.location.pathname.match(/\//g) || []).length - 1;
+  const prefix = depth > 0 ? '../'.repeat(depth) : '';
+  window.location.href = prefix + 'index.html?reason=expired';
+}
+
 /* ── Central fetch wrapper with auto token-refresh on 401 ────── */
 async function apiFetch(url, opts = {}) {
   if (!API_BASE) throw new Error('API is not configured.');
 
-  // Ensure auth header is always fresh
   opts.headers = { 'Content-Type': 'application/json', ...opts.headers, Authorization: getToken() || '' };
 
   let res = await fetch(url, opts);
 
-  // If 401, try to silently refresh the Cognito token then retry once
-  if (res.status === 401 && typeof refreshSession === 'function') {
-    try {
-      const renewed = await refreshSession();
-      if (renewed) {
-        opts.headers.Authorization = renewed.accessToken;
-        res = await fetch(url, opts); // retry
-      }
-    } catch (_) { /* fall through to throw below */ }
+  // On 401: try silent Cognito token refresh, then retry once
+  if (res.status === 401) {
+    let refreshed = false;
+    if (typeof refreshSession === 'function') {
+      try {
+        const renewed = await refreshSession();
+        if (renewed && renewed.accessToken) {
+          opts.headers.Authorization = renewed.accessToken;
+          res = await fetch(url, opts);
+          refreshed = true;
+        }
+      } catch (_) { /* refresh also failed */ }
+    }
+    // If still 401 after refresh attempt -> session is completely dead
+    if (res.status === 401) {
+      _handleSessionExpired();
+      // Return a never-resolving promise so callers don't see a thrown error
+      return new Promise(() => {});
+    }
   }
 
   return res;
@@ -144,9 +165,6 @@ async function apiFetch(url, opts = {}) {
 async function fetchRisks(module) {
   if (!API_BASE) throw new Error('API is not configured.');
   const res = await apiFetch(`${API_BASE}/risks?module=${module}`);
-  if (res.status === 401) {
-    throw new Error('Session expired — please sign in again.');
-  }
   if (!res.ok) throw new Error(`Failed to fetch risks (${res.status})`);
   const data = await res.json();
   return Array.isArray(data) ? data : (data.risks || []);
@@ -163,9 +181,6 @@ async function triggerScan(module, extraParams = {}) {
     method: 'POST',
     body:   JSON.stringify(scanPayload),
   });
-  if (res.status === 401) {
-    throw new Error('Session expired — please sign in again.');
-  }
   if (!res.ok) throw new Error(`Scan failed (${res.status})`);
   return res.json();
 }

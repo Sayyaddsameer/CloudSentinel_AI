@@ -163,9 +163,15 @@
   /* ── Redirect if already logged in ── */
   if (getSession()) window.location.href = 'dashboard.html';
 
-  /* ── Show session timeout reason ── */
-  if (new URLSearchParams(location.search).get('reason') === 'timeout') {
-    document.getElementById('timeout-banner').style.display = 'flex';
+  /* ── Show session timeout/expiry reason ── */
+  const _reason = new URLSearchParams(location.search).get('reason');
+  if (_reason === 'timeout' || _reason === 'expired') {
+    const banner = document.getElementById('timeout-banner');
+    banner.style.display = 'flex';
+    if (_reason === 'expired') {
+      banner.querySelector('span:last-child').textContent =
+        'Your session expired. Please sign in again to continue.';
+    }
   }
 
   /* ── Utility: show/hide steps ── */
