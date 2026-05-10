@@ -10,14 +10,14 @@
 # ---------------------------------------------------------------------------
 
 resource "aws_lambda_function" "auto_rescan_router" {
-  filename         = data.archive_file.cloud_scanner_zip.output_path
+  filename         = data.archive_file.auto_rescan_router_zip.output_path
   function_name    = "${var.project}-auto-rescan-router"
   role             = aws_iam_role.lambda_role.arn
   handler          = "auto_rescan_router.lambda_handler"
   runtime          = "python3.11"
   timeout          = 60
   memory_size      = 128
-  source_code_hash = data.archive_file.cloud_scanner_zip.output_base64sha256
+  source_code_hash = data.archive_file.auto_rescan_router_zip.output_base64sha256
 
   environment {
     variables = {

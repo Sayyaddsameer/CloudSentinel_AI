@@ -38,7 +38,8 @@ resource "aws_api_gateway_method" "fullstack_post" {
   rest_api_id   = aws_api_gateway_resource.scan_fullstack.rest_api_id
   resource_id   = aws_api_gateway_resource.scan_fullstack.id
   http_method   = "POST"
-  authorization = "NONE"
+  authorization = "COGNITO_USER_POOLS"
+  authorizer_id = aws_api_gateway_authorizer.cognito.id
 }
 
 resource "aws_api_gateway_integration" "fullstack_post" {

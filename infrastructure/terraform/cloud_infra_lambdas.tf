@@ -1,4 +1,5 @@
 # Sameer's Lambda functions: cloud-scanner, ai-explainer, chatbot-handler, risk-reader
+# Each Lambda packages ONLY its own handler file to minimise deployment size and cold-start time.
 
 # ---------------------------------------------------------------------------
 # cloud-scanner
@@ -6,7 +7,7 @@
 
 data "archive_file" "cloud_scanner_zip" {
   type        = "zip"
-  source_dir  = "${path.module}/../../modules/cloud-infra"
+  source_file = "${path.module}/../../modules/cloud-infra/cloud_scanner.py"
   output_path = "${path.module}/../../modules/cloud-infra/cloud_scanner.zip"
 }
 
@@ -45,7 +46,7 @@ resource "aws_lambda_permission" "cloud_scanner_apigw" {
 
 data "archive_file" "ai_explainer_zip" {
   type        = "zip"
-  source_dir  = "${path.module}/../../modules/cloud-infra"
+  source_file = "${path.module}/../../modules/cloud-infra/ai_explainer.py"
   output_path = "${path.module}/../../modules/cloud-infra/ai_explainer.zip"
 }
 
@@ -85,7 +86,7 @@ resource "aws_lambda_permission" "ai_explainer_events" {
 
 data "archive_file" "chatbot_zip" {
   type        = "zip"
-  source_dir  = "${path.module}/../../modules/cloud-infra"
+  source_file = "${path.module}/../../modules/cloud-infra/chatbot_handler.py"
   output_path = "${path.module}/../../modules/cloud-infra/chatbot_handler.zip"
 }
 
@@ -125,7 +126,7 @@ resource "aws_lambda_permission" "chatbot_apigw" {
 
 data "archive_file" "risk_reader_zip" {
   type        = "zip"
-  source_dir  = "${path.module}/../../modules/cloud-infra"
+  source_file = "${path.module}/../../modules/cloud-infra/risk_reader.py"
   output_path = "${path.module}/../../modules/cloud-infra/risk_reader.zip"
 }
 
@@ -158,18 +159,24 @@ resource "aws_lambda_permission" "risk_reader_apigw" {
 }
 
 # ---------------------------------------------------------------------------
-# disconnect-handler
+# disconnect-handler  (own zip — only disconnect_handler.py)
 # ---------------------------------------------------------------------------
 
+data "archive_file" "disconnect_handler_zip" {
+  type        = "zip"
+  source_file = "${path.module}/../../modules/cloud-infra/disconnect_handler.py"
+  output_path = "${path.module}/../../modules/cloud-infra/disconnect_handler.zip"
+}
+
 resource "aws_lambda_function" "disconnect_handler" {
-  filename         = data.archive_file.cloud_scanner_zip.output_path
+  filename         = data.archive_file.disconnect_handler_zip.output_path
   function_name    = "${var.project}-disconnect-handler"
   role             = aws_iam_role.lambda_role.arn
   handler          = "disconnect_handler.lambda_handler"
   runtime          = "python3.11"
   timeout          = 60
   memory_size      = 128
-  source_code_hash = data.archive_file.cloud_scanner_zip.output_base64sha256
+  source_code_hash = data.archive_file.disconnect_handler_zip.output_base64sha256
 
   environment {
     variables = {
@@ -190,35 +197,74 @@ resource "aws_lambda_permission" "disconnect_handler_apigw" {
 }
 
 # ---------------------------------------------------------------------------
-# notification-handler
+# auto-rescan-router  (own zip — only auto_rescan_router.py)
+# NOTE: notification_handler is defined authoritatively in sns.tf
+#       which correctly wires SNS_TOPIC_ARN. Do NOT redeclare it here.
 # ---------------------------------------------------------------------------
 
-resource "aws_lambda_function" "notification_handler" {
-  filename         = data.archive_file.cloud_scanner_zip.output_path
-  function_name    = "${var.project}-notification-handler"
+data "archive_file" "auto_rescan_router_zip" {
+  type        = "zip"
+  source_file = "${path.module}/../../modules/cloud-infra/auto_rescan_router.py"
+  output_path = "${path.module}/../../modules/cloud-infra/auto_rescan_router.zip"
+}
+
+# ---------------------------------------------------------------------------
+# validate-connection  — verifies STS AssumeRole before saving a connection
+# Own zip: only validate_connection.py
+# ---------------------------------------------------------------------------
+
+data "archive_file" "validate_connection_zip" {
+  type        = "zip"
+  source_file = "${path.module}/../../modules/cloud-infra/validate_connection.py"
+  output_path = "${path.module}/../../modules/cloud-infra/validate_connection.zip"
+}
+
+resource "aws_lambda_function" "validate_connection" {
+  filename         = data.archive_file.validate_connection_zip.output_path
+  function_name    = "${var.project}-validate-connection"
   role             = aws_iam_role.lambda_role.arn
-  handler          = "notification_handler.lambda_handler"
+  handler          = "validate_connection.lambda_handler"
   runtime          = "python3.11"
   timeout          = 30
-  memory_size      = 256
-  source_code_hash = data.archive_file.cloud_scanner_zip.output_base64sha256
+  memory_size      = 128
+  source_code_hash = data.archive_file.validate_connection_zip.output_base64sha256
 
   environment {
     variables = {
-      DYNAMODB_TABLE         = aws_dynamodb_table.risks.name
-      SNS_TOPIC_ARN          = ""  # Set via tfvars or override
-      NOTIFICATION_THRESHOLD = var.notification_threshold
-      APP_URL                = var.app_url
+      AWS_ACCOUNT_REGION = var.aws_region
     }
   }
 
   tags = { Project = var.project, Module = "cloud-infra", Owner = "sameer" }
 }
 
-resource "aws_lambda_permission" "notification_handler_apigw" {
-  statement_id  = "AllowAPIGatewayNotificationHandler"
+resource "aws_api_gateway_resource" "validate_connection" {
+  rest_api_id = aws_api_gateway_rest_api.api.id
+  parent_id   = aws_api_gateway_rest_api.api.root_resource_id
+  path_part   = "validate-connection"
+}
+
+resource "aws_api_gateway_method" "validate_connection_post" {
+  rest_api_id   = aws_api_gateway_resource.validate_connection.rest_api_id
+  resource_id   = aws_api_gateway_resource.validate_connection.id
+  http_method   = "POST"
+  authorization = "COGNITO_USER_POOLS"
+  authorizer_id = aws_api_gateway_authorizer.cognito.id
+}
+
+resource "aws_api_gateway_integration" "validate_connection_post" {
+  rest_api_id             = aws_api_gateway_resource.validate_connection.rest_api_id
+  resource_id             = aws_api_gateway_resource.validate_connection.id
+  http_method             = aws_api_gateway_method.validate_connection_post.http_method
+  integration_http_method = "POST"
+  type                    = "AWS_PROXY"
+  uri                     = aws_lambda_function.validate_connection.invoke_arn
+}
+
+resource "aws_lambda_permission" "validate_connection_apigw" {
+  statement_id  = "AllowAPIGatewayValidateConnection"
   action        = "lambda:InvokeFunction"
-  function_name = aws_lambda_function.notification_handler.function_name
+  function_name = aws_lambda_function.validate_connection.function_name
   principal     = "apigateway.amazonaws.com"
   source_arn    = "${aws_api_gateway_rest_api.api.execution_arn}/*/*"
 }

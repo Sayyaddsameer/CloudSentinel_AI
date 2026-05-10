@@ -46,6 +46,7 @@ def get_webhook_secret():
 
 
 def verify_github_signature(payload_bytes, signature_header, secret):
+    """Constant-time HMAC-SHA256 comparison against the GitHub signature header."""
     if not signature_header or not secret:
         return False
     expected = "sha256=" + hmac.new(
@@ -236,10 +237,17 @@ def lambda_handler(event, context):
 
     if gh_event == "push" or sig_header:
         secret = get_webhook_secret()
-        if secret and not verify_github_signature(raw_body, sig_header, secret):
-            logger.warning("Webhook signature verification failed")
-            return {"statusCode": 401, "headers": CORS_HEADERS,
-                    "body": json.dumps({"error": "Invalid webhook signature"})}
+        # If a webhook secret is configured, BOTH signature presence AND validity are required.
+        # An absent signature header with a configured secret is treated as a forgery attempt.
+        if secret:
+            if not sig_header:
+                logger.warning("Webhook received without X-Hub-Signature-256 header — rejecting")
+                return {"statusCode": 401, "headers": CORS_HEADERS,
+                        "body": json.dumps({"error": "Missing webhook signature"})}
+            if not verify_github_signature(raw_body, sig_header, secret):
+                logger.warning("Webhook signature verification failed")
+                return {"statusCode": 401, "headers": CORS_HEADERS,
+                        "body": json.dumps({"error": "Invalid webhook signature"})}
 
         # Extract repo and workflow content from the push payload
         repo_name   = body.get("repository", {}).get("full_name", "unknown-repo")

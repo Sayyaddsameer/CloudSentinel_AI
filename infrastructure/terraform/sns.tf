@@ -79,7 +79,7 @@ resource "aws_iam_role_policy" "lambda_sns_publish" {
 
 data "archive_file" "notification_handler_zip" {
   type        = "zip"
-  source_dir  = "${path.module}/../../modules/cloud-infra"
+  source_file = "${path.module}/../../modules/cloud-infra/notification_handler.py"
   output_path = "${path.module}/../../modules/cloud-infra/notification_handler.zip"
 }
 

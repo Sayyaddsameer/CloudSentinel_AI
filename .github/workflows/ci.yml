@@ -5,6 +5,7 @@ on:
     branches:
       - "feature/**"
       - develop
+      - main
   pull_request:
     branches:
       - develop
@@ -22,12 +23,18 @@ jobs:
         with:
           python-version: "3.11"
 
-      - name: Install dependencies
+      - name: Install test dependencies
         run: |
           pip install --upgrade pip
-          pip install boto3 pytest pytest-cov moto
+          pip install boto3 "moto[all]" pytest pytest-cov
 
-      - name: Run tests
+      - name: Install module requirements
+        run: |
+          for req in modules/*/requirements.txt; do
+            pip install -r "$req" 2>/dev/null || true
+          done
+
+      - name: Run unit tests
         env:
           DYNAMODB_TABLE: cloudsentinel-risks
           AWS_REGION: us-east-1
@@ -36,10 +43,9 @@ jobs:
           AWS_SECRET_ACCESS_KEY: testing
         run: |
           pytest tests/ -v --tb=short --cov=modules --cov-report=term-missing
-        continue-on-error: true
 
   security:
-    name: Security scan
+    name: Security scan (Bandit)
     runs-on: ubuntu-latest
     needs: test
     steps:
@@ -53,9 +59,9 @@ jobs:
       - name: Install Bandit
         run: pip install bandit
 
-      - name: Run Bandit security scan
+      - name: Run Bandit (fail on HIGH severity)
         run: |
-          bandit -r modules/ -f txt -o bandit-report.txt || true
+          bandit -r modules/ -f txt -o bandit-report.txt -ll
           cat bandit-report.txt
 
       - name: Upload Bandit report
@@ -64,3 +70,27 @@ jobs:
           name: bandit-report
           path: bandit-report.txt
         continue-on-error: true
+
+  terraform-validate:
+    name: Terraform validate
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: "~1.6"
+
+      - name: Terraform fmt check
+        working-directory: infrastructure/terraform
+        run: terraform fmt -check
+        continue-on-error: true
+
+      - name: Terraform init (no backend)
+        working-directory: infrastructure/terraform
+        run: terraform init -backend=false
+
+      - name: Terraform validate
+        working-directory: infrastructure/terraform
+        run: terraform validate
