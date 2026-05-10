@@ -7,8 +7,15 @@
 
 data "archive_file" "cloud_scanner_zip" {
   type        = "zip"
-  source_file = "${path.module}/../../modules/cloud-infra/cloud_scanner.py"
   output_path = "${path.module}/../../modules/cloud-infra/cloud_scanner.zip"
+  source {
+    content  = file("${path.module}/../../modules/cloud-infra/cloud_scanner.py")
+    filename = "cloud_scanner.py"
+  }
+  source {
+    content  = file("${path.module}/../../modules/cloud-infra/scan_events.py")
+    filename = "scan_events.py"
+  }
 }
 
 resource "aws_lambda_function" "cloud_scanner" {

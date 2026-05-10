@@ -5,6 +5,7 @@ from datetime import datetime, timezone
 
 import boto3
 from botocore.exceptions import ClientError
+from scan_events import emit_scan_completed
 
 logger = logging.getLogger()
 logger.setLevel(logging.INFO)
@@ -261,6 +262,8 @@ def lambda_handler(event, context):
     all_risks += scan_api_gateway(apigw, table)
     all_risks += scan_cognito_pools(cognito, table)
     all_risks += scan_iam_lambda_roles(iam, table)
+
+    emit_scan_completed("mobile", all_risks)
 
     logger.info(f"mobile scan complete -- {len(all_risks)} risk(s) (latency threshold: {latency_ms}ms)")
     return {

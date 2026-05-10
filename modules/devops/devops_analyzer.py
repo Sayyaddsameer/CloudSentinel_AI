@@ -8,6 +8,7 @@ from datetime import datetime, timezone
 
 import boto3
 from botocore.exceptions import ClientError
+from scan_events import emit_scan_completed
 
 logger = logging.getLogger()
 logger.setLevel(logging.INFO)
@@ -285,6 +286,8 @@ def lambda_handler(event, context):
 
     for r in all_risks:
         save_risk(table, r)
+
+    emit_scan_completed("devops", all_risks)
 
     logger.info(f"devops scan done — {len(all_risks)} risk(s)")
     return {

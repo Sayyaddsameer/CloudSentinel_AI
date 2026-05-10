@@ -5,6 +5,7 @@ from datetime import datetime, timezone, timedelta
 
 import boto3
 from botocore.exceptions import ClientError
+from scan_events import emit_scan_completed
 
 logger = logging.getLogger()
 logger.setLevel(logging.INFO)
@@ -260,6 +261,8 @@ def lambda_handler(event, context):
     all_risks += scan_api_authentication(apigw, table)
     all_risks += scan_throttling(apigw, table)
     all_risks += scan_cloudwatch_metrics(apigw, cw, table)
+
+    emit_scan_completed("fullstack", all_risks)
 
     logger.info(f"fullstack scan complete — {len(all_risks)} risk(s)")
     return {

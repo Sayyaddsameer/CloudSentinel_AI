@@ -5,6 +5,7 @@ from datetime import datetime, timezone
 
 import boto3
 from botocore.exceptions import ClientError
+from scan_events import emit_scan_completed
 
 logger = logging.getLogger()
 logger.setLevel(logging.INFO)
@@ -435,6 +436,9 @@ def lambda_handler(event, context):
     all_risks += scan_iam_password_policy(clients, table)
     all_risks += scan_aws_config_findings(clients, table)
     all_risks += scan_gcp_resources(table)
+
+    # Emit ScanCompleted event so EventBridge triggers notification_handler
+    emit_scan_completed("cloud-infra", all_risks)
 
     logger.info(f"Scan complete -- {len(all_risks)} risk(s) found")
     return {

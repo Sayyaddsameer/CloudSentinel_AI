@@ -5,6 +5,7 @@ from datetime import datetime, timezone, timedelta
 
 import boto3
 from botocore.exceptions import ClientError
+from scan_events import emit_scan_completed
 
 logger = logging.getLogger()
 logger.setLevel(logging.INFO)
@@ -259,6 +260,8 @@ def lambda_handler(event, context):
     all_risks += scan_s3_data_buckets(s3, table)
     all_risks += scan_dynamodb_tables(ddb_client, table)
     all_risks += scan_glue_jobs(glue, table)
+
+    emit_scan_completed("data-eng", all_risks)
 
     logger.info(f"data-eng scan complete — {len(all_risks)} risk(s)")
     return {

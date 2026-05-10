@@ -170,6 +170,12 @@
       "Resource": "*"
     },
     {
+      "Sid": "EventBridgeEmitScanEvents",
+      "Effect": "Allow",
+      "Action": ["events:PutEvents"],
+      "Resource": "arn:aws:events:*:*:event-bus/default"
+    },
+    {
       "Sid": "StepFunctions",
       "Effect": "Allow",
       "Action": [
