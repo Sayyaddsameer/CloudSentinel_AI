@@ -345,6 +345,32 @@ def generate_github_pr_for_remediation(repo_name, risk):
 # Entry point — dual mode: GitHub Webhook OR manual JSON
 # ---------------------------------------------------------------------------
 
+def purge_module_risks(table, module):
+    try:
+        resp = table.query(
+            IndexName="module-index",
+            KeyConditionExpression="module = :m",
+            ExpressionAttributeValues={":m": module},
+        )
+        items = resp.get("Items", [])
+        while "LastEvaluatedKey" in resp:
+            resp = table.query(
+                IndexName="module-index",
+                KeyConditionExpression="module = :m",
+                ExpressionAttributeValues={":m": module},
+                ExclusiveStartKey=resp["LastEvaluatedKey"],
+            )
+            items.extend(resp.get("Items", []))
+
+        with table.batch_writer() as batch:
+            for item in items:
+                rid = item.get("resourceId")
+                rts = item.get("riskTimestamp")
+                if rid and rts:
+                    batch.delete_item(Key={"resourceId": rid, "riskTimestamp": rts})
+    except Exception as e:
+        logger.error(f"Failed to purge old risks: {e}")
+
 def lambda_handler(event, context):
     logger.info("devops-analyzer invoked")
     ddb   = boto3.resource("dynamodb", region_name=REGION)
@@ -352,6 +378,8 @@ def lambda_handler(event, context):
 
     raw_body = (event.get("body") or "{}").encode("utf-8")
     body     = json.loads(raw_body)
+
+    purge_module_risks(table, "devops")
 
     # GitHub Webhook mode — verify signature if secret is configured
     gh_event = (event.get("headers") or {}).get("X-GitHub-Event", "")

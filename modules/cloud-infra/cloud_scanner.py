@@ -439,6 +439,34 @@ def generate_graph_topology():
 # Entry point
 # ---------------------------------------------------------------------------
 
+def purge_module_risks(table, module):
+    """Delete all existing risk records for this module before a new scan."""
+    try:
+        resp = table.query(
+            IndexName="module-index",
+            KeyConditionExpression="module = :m",
+            ExpressionAttributeValues={":m": module},
+        )
+        items = resp.get("Items", [])
+        while "LastEvaluatedKey" in resp:
+            resp = table.query(
+                IndexName="module-index",
+                KeyConditionExpression="module = :m",
+                ExpressionAttributeValues={":m": module},
+                ExclusiveStartKey=resp["LastEvaluatedKey"],
+            )
+            items.extend(resp.get("Items", []))
+
+        with table.batch_writer() as batch:
+            for item in items:
+                rid = item.get("resourceId")
+                rts = item.get("riskTimestamp")
+                if rid and rts:
+                    batch.delete_item(Key={"resourceId": rid, "riskTimestamp": rts})
+        logger.info(f"Purged {len(items)} old risks for module {module}")
+    except Exception as e:
+        logger.error(f"Failed to purge old risks: {e}")
+
 def lambda_handler(event, context):
     logger.info("cloud-scanner started")
     ddb = boto3.resource("dynamodb", region_name=REGION)
@@ -454,6 +482,9 @@ def lambda_handler(event, context):
 
     if target_role_arn:
         logger.info(f"Cross-account scan requested for role: {target_role_arn}")
+
+    # Purge old risks before scanning
+    purge_module_risks(table, "cloud-infra")
 
     clients = get_aws_clients(role_arn=target_role_arn)
     all_risks = []

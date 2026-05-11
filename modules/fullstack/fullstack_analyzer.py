@@ -250,12 +250,40 @@ def scan_cloudwatch_metrics(apigw, cw, table):
 # Entry point
 # ---------------------------------------------------------------------------
 
+def purge_module_risks(table, module):
+    try:
+        resp = table.query(
+            IndexName="module-index",
+            KeyConditionExpression="module = :m",
+            ExpressionAttributeValues={":m": module},
+        )
+        items = resp.get("Items", [])
+        while "LastEvaluatedKey" in resp:
+            resp = table.query(
+                IndexName="module-index",
+                KeyConditionExpression="module = :m",
+                ExpressionAttributeValues={":m": module},
+                ExclusiveStartKey=resp["LastEvaluatedKey"],
+            )
+            items.extend(resp.get("Items", []))
+
+        with table.batch_writer() as batch:
+            for item in items:
+                rid = item.get("resourceId")
+                rts = item.get("riskTimestamp")
+                if rid and rts:
+                    batch.delete_item(Key={"resourceId": rid, "riskTimestamp": rts})
+    except Exception as e:
+        logger.error(f"Failed to purge old risks: {e}")
+
 def lambda_handler(event, context):
     logger.info("fullstack-analyzer started")
     ddb   = boto3.resource("dynamodb", region_name=REGION)
     table = ddb.Table(TABLE_NAME)
     apigw = boto3.client("apigateway", region_name=REGION)
     cw    = boto3.client("cloudwatch",  region_name=REGION)
+
+    purge_module_risks(table, "fullstack")
 
     all_risks = []
     all_risks += scan_api_authentication(apigw, table)

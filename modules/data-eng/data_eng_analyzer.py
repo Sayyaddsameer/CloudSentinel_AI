@@ -248,6 +248,32 @@ def scan_glue_jobs(glue, table):
 # Entry point
 # ---------------------------------------------------------------------------
 
+def purge_module_risks(table, module):
+    try:
+        resp = table.query(
+            IndexName="module-index",
+            KeyConditionExpression="module = :m",
+            ExpressionAttributeValues={":m": module},
+        )
+        items = resp.get("Items", [])
+        while "LastEvaluatedKey" in resp:
+            resp = table.query(
+                IndexName="module-index",
+                KeyConditionExpression="module = :m",
+                ExpressionAttributeValues={":m": module},
+                ExclusiveStartKey=resp["LastEvaluatedKey"],
+            )
+            items.extend(resp.get("Items", []))
+
+        with table.batch_writer() as batch:
+            for item in items:
+                rid = item.get("resourceId")
+                rts = item.get("riskTimestamp")
+                if rid and rts:
+                    batch.delete_item(Key={"resourceId": rid, "riskTimestamp": rts})
+    except Exception as e:
+        logger.error(f"Failed to purge old risks: {e}")
+
 def lambda_handler(event, context):
     logger.info("data-eng-analyzer started")
     ddb          = boto3.resource("dynamodb", region_name=REGION)
@@ -255,6 +281,8 @@ def lambda_handler(event, context):
     s3           = boto3.client("s3",       region_name=REGION)
     ddb_client   = boto3.client("dynamodb", region_name=REGION)
     glue         = boto3.client("glue",     region_name=REGION)
+
+    purge_module_risks(table, "data-eng")
 
     all_risks = []
     all_risks += scan_s3_data_buckets(s3, table)
