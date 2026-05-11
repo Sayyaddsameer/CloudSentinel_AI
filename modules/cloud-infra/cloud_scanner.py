@@ -444,14 +444,16 @@ def purge_module_risks(table, module):
     try:
         resp = table.query(
             IndexName="module-index",
-            KeyConditionExpression="module = :m",
+            KeyConditionExpression="#m = :m",
+            ExpressionAttributeNames={"#m": "module"},
             ExpressionAttributeValues={":m": module},
         )
         items = resp.get("Items", [])
         while "LastEvaluatedKey" in resp:
             resp = table.query(
                 IndexName="module-index",
-                KeyConditionExpression="module = :m",
+                KeyConditionExpression="#m = :m",
+                ExpressionAttributeNames={"#m": "module"},
                 ExpressionAttributeValues={":m": module},
                 ExclusiveStartKey=resp["LastEvaluatedKey"],
             )
@@ -472,11 +474,14 @@ def lambda_handler(event, context):
     ddb = boto3.resource("dynamodb", region_name=REGION)
     table = ddb.Table(TABLE_NAME)
 
-    # Accept targetRoleArn from request body for cross-account scanning
+    # Accept targetRoleArn and providers from request body
     target_role_arn = None
+    providers = ["aws", "gcp"]  # default to both if not specified
     try:
         body = json.loads(event.get("body") or "{}")
         target_role_arn = body.get("targetRoleArn") or None
+        if "providers" in body:
+            providers = body["providers"]
     except Exception:
         pass
 
@@ -486,14 +491,18 @@ def lambda_handler(event, context):
     # Purge old risks before scanning
     purge_module_risks(table, "cloud-infra")
 
-    clients = get_aws_clients(role_arn=target_role_arn)
     all_risks = []
 
-    all_risks += scan_s3_buckets(clients, table)
-    all_risks += scan_security_groups(clients, table)
-    all_risks += scan_iam_password_policy(clients, table)
-    all_risks += scan_aws_config_findings(clients, table)
-    all_risks += scan_gcp_resources(table)
+    if "aws" in providers:
+        clients = get_aws_clients(role_arn=target_role_arn)
+        all_risks += scan_s3_buckets(clients, table)
+        all_risks += scan_security_groups(clients, table)
+        all_risks += scan_iam_password_policy(clients, table)
+        all_risks += scan_aws_config_findings(clients, table)
+
+    if "gcp" in providers:
+        all_risks += scan_gcp_resources(table)
+
     all_risks += scan_azure_resources(table)  # Future scope
 
     generate_graph_topology()  # Future scope

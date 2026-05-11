@@ -160,14 +160,16 @@ def _purge_risks(module: str) -> int:
         # Paginate through ALL records for this module via GSI
         resp = table.query(
             IndexName=MODULE_INDEX,
-            KeyConditionExpression="module = :m",
+            KeyConditionExpression="#m = :m",
+            ExpressionAttributeNames={"#m": "module"},
             ExpressionAttributeValues={":m": module},
         )
         items = resp.get("Items", [])
         while "LastEvaluatedKey" in resp:
             resp = table.query(
                 IndexName=MODULE_INDEX,
-                KeyConditionExpression="module = :m",
+                KeyConditionExpression="#m = :m",
+                ExpressionAttributeNames={"#m": "module"},
                 ExpressionAttributeValues={":m": module},
                 ExclusiveStartKey=resp["LastEvaluatedKey"],
             )

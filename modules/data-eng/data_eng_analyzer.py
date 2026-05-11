@@ -252,14 +252,16 @@ def purge_module_risks(table, module):
     try:
         resp = table.query(
             IndexName="module-index",
-            KeyConditionExpression="module = :m",
+            KeyConditionExpression="#m = :m",
+            ExpressionAttributeNames={"#m": "module"},
             ExpressionAttributeValues={":m": module},
         )
         items = resp.get("Items", [])
         while "LastEvaluatedKey" in resp:
             resp = table.query(
                 IndexName="module-index",
-                KeyConditionExpression="module = :m",
+                KeyConditionExpression="#m = :m",
+                ExpressionAttributeNames={"#m": "module"},
                 ExpressionAttributeValues={":m": module},
                 ExclusiveStartKey=resp["LastEvaluatedKey"],
             )
