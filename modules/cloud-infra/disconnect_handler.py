@@ -114,7 +114,9 @@ def _delete_cfn_stack(role_arn: str, stack_name: str) -> str:
         try:
             cf.describe_stacks(StackName=stack_name)
         except ClientError as e:
-            if "does not exist" in str(e):
+            err_code = e.response.get("Error", {}).get("Code", "")
+            err_msg  = str(e)
+            if err_code == "ValidationError" or "does not exist" in err_msg:
                 logger.info("Stack %s already deleted or never existed.", stack_name)
                 return "already_deleted"
             raise

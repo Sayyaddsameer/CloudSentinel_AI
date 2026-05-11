@@ -2,8 +2,12 @@
 
 data "archive_file" "mobile_zip" {
   type        = "zip"
-  source_dir  = "${path.module}/../../modules/mobile"
   output_path = "${path.module}/../../modules/mobile/mobile_analyzer.zip"
+  # scan_events is provided by the shared Lambda layer — do NOT bundle the shim
+  source {
+    content  = file("${path.module}/../../modules/mobile/mobile_analyzer.py")
+    filename = "mobile_analyzer.py"
+  }
 }
 
 resource "aws_lambda_function" "mobile_analyzer" {
@@ -15,6 +19,7 @@ resource "aws_lambda_function" "mobile_analyzer" {
   timeout          = 120
   memory_size      = 256
   source_code_hash = data.archive_file.mobile_zip.output_base64sha256
+  layers           = [aws_lambda_layer_version.scan_events.arn]
 
   environment {
     variables = {

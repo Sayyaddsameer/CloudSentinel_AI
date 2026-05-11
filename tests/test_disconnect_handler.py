@@ -139,8 +139,9 @@ class TestPurgeRisks(unittest.TestCase):
         table = MagicMock()
         table.query.return_value = {
             "Items": [
-                {"resourceId": "id1", "timestamp": "t1"},
-                {"resourceId": "id2", "timestamp": "t2"},
+                # Keys must match what _purge_risks reads: resourceId + riskTimestamp
+                {"resourceId": "id1", "riskTimestamp": "2026-05-01T00:00:00+00:00", "module": "cloud-infra"},
+                {"resourceId": "id2", "riskTimestamp": "2026-05-02T00:00:00+00:00", "module": "cloud-infra"},
             ]
         }
         batch_writer = MagicMock()

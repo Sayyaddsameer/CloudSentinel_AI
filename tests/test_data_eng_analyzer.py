@@ -9,7 +9,6 @@ import unittest
 from unittest.mock import MagicMock
 from botocore.exceptions import ClientError
 
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "modules", "data-eng"))
 os.environ.setdefault("DYNAMODB_TABLE",   "cloudsentinel-risks")
 os.environ.setdefault("AWS_REGION",       "us-east-1")
 os.environ.setdefault("GLUE_FAIL_THRESHOLD", "2")

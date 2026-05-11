@@ -2,8 +2,12 @@
 
 data "archive_file" "data_eng_zip" {
   type        = "zip"
-  source_dir  = "${path.module}/../../modules/data-eng"
   output_path = "${path.module}/../../modules/data-eng/data_eng_analyzer.zip"
+  # scan_events is provided by the shared Lambda layer — do NOT bundle the shim
+  source {
+    content  = file("${path.module}/../../modules/data-eng/data_eng_analyzer.py")
+    filename = "data_eng_analyzer.py"
+  }
 }
 
 resource "aws_lambda_function" "data_eng_analyzer" {
@@ -15,6 +19,7 @@ resource "aws_lambda_function" "data_eng_analyzer" {
   timeout          = 120
   memory_size      = 256
   source_code_hash = data.archive_file.data_eng_zip.output_base64sha256
+  layers           = [aws_lambda_layer_version.scan_events.arn]
 
   environment {
     variables = {

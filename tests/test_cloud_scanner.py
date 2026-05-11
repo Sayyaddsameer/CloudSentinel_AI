@@ -9,7 +9,6 @@ from unittest.mock import MagicMock, patch
 from datetime import timezone, datetime
 
 import sys, os
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "modules", "cloud-infra"))
 
 
 class TestBuildRisk(unittest.TestCase):

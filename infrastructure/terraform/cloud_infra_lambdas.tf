@@ -8,13 +8,10 @@
 data "archive_file" "cloud_scanner_zip" {
   type        = "zip"
   output_path = "${path.module}/../../modules/cloud-infra/cloud_scanner.zip"
+  # scan_events is provided by the shared Lambda layer — do NOT bundle it here
   source {
     content  = file("${path.module}/../../modules/cloud-infra/cloud_scanner.py")
     filename = "cloud_scanner.py"
-  }
-  source {
-    content  = file("${path.module}/../../modules/cloud-infra/scan_events.py")
-    filename = "scan_events.py"
   }
 }
 
@@ -27,6 +24,7 @@ resource "aws_lambda_function" "cloud_scanner" {
   timeout          = 300
   memory_size      = 256
   source_code_hash = data.archive_file.cloud_scanner_zip.output_base64sha256
+  layers           = [aws_lambda_layer_version.scan_events.arn]
 
   environment {
     variables = {

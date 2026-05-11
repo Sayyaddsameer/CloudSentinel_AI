@@ -10,7 +10,6 @@ from unittest.mock import MagicMock, patch
 import sys
 import os
 
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "modules", "mobile"))
 os.environ.setdefault("DYNAMODB_TABLE", "cloudsentinel-risks")
 os.environ.setdefault("AWS_REGION", "us-east-1")
 
@@ -41,10 +40,10 @@ class TestMobileAnalyzerHandler(unittest.TestCase):
         mock_ddb.Table.return_value.put_item = MagicMock()
 
         import mobile_analyzer as ma
-        # Patch out all AWS calls
-        with patch.object(ma, "scan_cognito_user_pools", return_value=[]):
-            with patch.object(ma, "scan_api_gateway_auth", return_value=[]):
-                with patch.object(ma, "scan_lambda_roles", return_value=[]):
+        # Use the actual function names from mobile_analyzer.py
+        with patch.object(ma, "scan_api_gateway", return_value=[]):
+            with patch.object(ma, "scan_cognito_pools", return_value=[]):
+                with patch.object(ma, "scan_iam_lambda_roles", return_value=[]):
                     event = self._make_event({})
                     resp = ma.lambda_handler(event, None)
                     self.assertIn(resp["statusCode"], [200, 500])
@@ -74,7 +73,7 @@ class TestCognitoMFAScan(unittest.TestCase):
         cognito.list_user_pools.return_value = {"UserPools": [self._make_pool(mfa="OFF")]}
         cognito.describe_user_pool.return_value = {"UserPool": self._make_pool(mfa="OFF")}
         table = MagicMock()
-        risks = self.ma.scan_cognito_user_pools({"cognito": cognito}, table)
+        risks = self.ma.scan_cognito_pools(cognito, table)
         priorities = [r["riskPriority"] for r in risks]
         self.assertIn("High", priorities)
 
@@ -84,7 +83,7 @@ class TestCognitoMFAScan(unittest.TestCase):
         cognito.list_user_pools.return_value = {"UserPools": [pool]}
         cognito.describe_user_pool.return_value = {"UserPool": pool}
         table = MagicMock()
-        risks = self.ma.scan_cognito_user_pools({"cognito": cognito}, table)
+        risks = self.ma.scan_cognito_pools(cognito, table)
         mfa_risks = [r for r in risks if "MFA" in r.get("riskType", "")]
         self.assertEqual(len(mfa_risks), 0)
 
@@ -94,7 +93,7 @@ class TestCognitoMFAScan(unittest.TestCase):
         cognito.list_user_pools.return_value = {"UserPools": [pool]}
         cognito.describe_user_pool.return_value = {"UserPool": pool}
         table = MagicMock()
-        risks = self.ma.scan_cognito_user_pools({"cognito": cognito}, table)
+        risks = self.ma.scan_cognito_pools(cognito, table)
         pw_risks = [r for r in risks if "Password" in r.get("riskType", "")]
         if pw_risks:
             self.assertIn(pw_risks[0]["riskPriority"], ["Medium", "High"])
@@ -103,7 +102,7 @@ class TestCognitoMFAScan(unittest.TestCase):
         cognito = MagicMock()
         cognito.list_user_pools.return_value = {"UserPools": []}
         table = MagicMock()
-        risks = self.ma.scan_cognito_user_pools({"cognito": cognito}, table)
+        risks = self.ma.scan_cognito_pools(cognito, table)
         self.assertEqual(risks, [])
 
 

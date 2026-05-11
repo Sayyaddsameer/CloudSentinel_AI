@@ -7,7 +7,6 @@ import os
 import sys
 import unittest
 
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "modules", "devops"))
 os.environ.setdefault("DYNAMODB_TABLE", "cloudsentinel-risks")
 os.environ.setdefault("AWS_REGION",     "us-east-1")
 
