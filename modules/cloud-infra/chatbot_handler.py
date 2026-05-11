@@ -238,6 +238,9 @@ def rule_based_response(question: str, risks: list, module: str) -> str:
             )
         return f"No High priority risks detected. You have {len(medium)} Medium risks."
 
+    if any(kw in q for kw in ["still see", "after fixing", "not updating", "not clearing", "already fixed"]):
+        return "If you've fixed a risk in your AWS/GCP account, you must click **Rescan Now** on the dashboard to trigger a fresh scan. CloudSentinel will then verify the fix and automatically clear the resolved risk from your view."
+
     if any(kw in q for kw in ["fix", "remediate", "resolve", "how"]):
         if high:
             r = high[0]
