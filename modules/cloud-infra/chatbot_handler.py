@@ -93,12 +93,14 @@ def build_chat_prompt(question, risks, module):
     context = "\n".join(context_lines) if context_lines else "No risks detected yet for this module."
 
     return (
-        f"You are CloudSentinel's AI security assistant. The user is asking about their {module} environment.\n\n"
-        f"Here are the latest detected risks (deduplicated, High priority first):\n{context}\n\n"
+        f"You are CloudSentinel's AI security assistant. The user is currently viewing the {module} module.\n\n"
+        f"Here are the latest detected risks in this module (deduplicated, High priority first):\n{context}\n\n"
         f"User question: {question}\n\n"
-        "Answer helpfully and specifically based on the risks shown above. "
-        "If the question is general, relate it to the risks. Keep your answer under 300 words. "
-        "Format remediation steps as a numbered list where applicable."
+        "Instructions:\n"
+        "1. If the user asks a general question about CloudSentinel, the website, or how to use it, answer helpfully and accurately.\n"
+        f"2. If the user asks what this module ({module}) does, explain its purpose and what kind of risks it scans for.\n"
+        "3. If the user asks about their risks, answer specifically based on the risks shown above.\n"
+        "Keep your answer under 300 words. Format remediation steps as a numbered list where applicable."
     )
 
 
@@ -122,7 +124,7 @@ def call_bedrock(bedrock_client, prompt):
         return str(e), False
 
 
-def rule_based_response(question: str, risks: list) -> str:
+def rule_based_response(question: str, risks: list, module: str) -> str:
     """Fallback rule-based response when Bedrock is unavailable."""
     q = question.lower()
 
@@ -142,6 +144,17 @@ def rule_based_response(question: str, risks: list) -> str:
 
     # ── Platform-level guidance (no risk data needed) ───────────
     if any(kw in q for kw in ["what is", "what does", "what can", "cloudsentinel", "platform", "about", "project", "this app", "purpose"]):
+        if module == "devops" and "devops" in q:
+            return "The DevOps module analyzes your CI/CD pipelines (like GitHub Actions) to detect hardcoded secrets, missing test steps, and missing rollback strategies."
+        if module == "fullstack" and "fullstack" in q:
+            return "The Full-Stack module analyzes API Gateway and CloudWatch metrics to detect unauthenticated API routes, missing rate limits, and latency/error spikes."
+        if module == "data-eng" and "data" in q:
+            return "The Data Engineering module scans S3, DynamoDB, and Glue to detect unencrypted tables, public buckets, and failing ETL jobs."
+        if module == "mobile" and "mobile" in q:
+            return "The Mobile Backend module scans Cognito and API Gateway to detect weak password policies, missing MFA, and unauthenticated routes."
+        if module == "cloud-infra" and "cloud" in q:
+            return "The Cloud Infrastructure module scans core AWS/GCP resources like S3 buckets, EC2 security groups, and IAM policies for misconfigurations."
+
         return (
             "**CloudSentinel AI** is a cloud security intelligence platform that scans your AWS and GCP "
             "environments for misconfigurations, IAM vulnerabilities, and compliance gaps.\n\n"
@@ -154,7 +167,17 @@ def rule_based_response(question: str, risks: list) -> str:
             "Each scan stores results in DynamoDB and shows actionable remediation steps on the dashboard."
         )
 
-    if any(kw in q for kw in ["module", "start", "first", "begin", "which"]):
+    if any(kw in q for kw in ["this module", "what module", "current module", "do here"]):
+        module_descriptions = {
+            "cloud-infra": "You are currently in the **Cloud Infrastructure** module. It scans S3, EC2 security groups, and IAM policies for misconfigurations.",
+            "devops": "You are currently in the **DevOps** module. It scans CI/CD pipelines for hardcoded secrets, missing tests, and deployment issues.",
+            "fullstack": "You are currently in the **Full-Stack** module. It analyzes API Gateway configurations and CloudWatch metrics.",
+            "data-eng": "You are currently in the **Data Engineering** module. It focuses on S3 data buckets, DynamoDB encryption, and AWS Glue ETL jobs.",
+            "mobile": "You are currently in the **Mobile Backend** module. It scans Cognito user pools for MFA and password policies, and API Gateway for route authorization."
+        }
+        return module_descriptions.get(module, "You are in a CloudSentinel module that detects security risks.")
+
+    if any(kw in q for kw in ["start", "first", "begin", "which"]):
         return (
             "**Start with the Cloud Infrastructure module** -- it's the foundation.\n\n"
             "1. Go to **Cloud Infrastructure** -> Connect your AWS account (takes 60 seconds via CloudFormation)\n"
@@ -288,7 +311,7 @@ def lambda_handler(event, context):
 
     if not used_ai:
         logger.info("Bedrock unavailable -- using rule-based fallback")
-        answer = rule_based_response(question, risks)
+        answer = rule_based_response(question, risks, module)
 
     return {
         "statusCode": 200,
