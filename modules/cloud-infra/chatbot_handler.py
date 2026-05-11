@@ -126,8 +126,22 @@ def rule_based_response(question: str, risks: list) -> str:
     """Fallback rule-based response when Bedrock is unavailable."""
     q = question.lower()
 
+    # ── Generic Conversational ──────────────────────────────────
+    if any(kw in q.split() for kw in ["hi", "hello", "hey", "greetings", "hola", "sup"]):
+        return (
+            "Hello! I am CloudSentinel AI, your security assistant.\n\n"
+            "You can ask me about the platform, how to connect your AWS/GCP accounts, "
+            "or to summarize and explain the security risks detected in your environment."
+        )
+
+    if any(kw in q for kw in ["thanks", "thank you", "awesome", "great", "ok", "okay"]):
+        return "You're welcome! Let me know if you need help analyzing or fixing any other security risks."
+
+    if any(kw in q for kw in ["how are you", "who are you", "what are you"]):
+        return "I'm CloudSentinel AI, an automated assistant here to help you secure your cloud infrastructure. How can I assist you today?"
+
     # ── Platform-level guidance (no risk data needed) ───────────
-    if any(kw in q for kw in ["what is", "what does", "what can", "cloudsentinel", "platform", "about"]):
+    if any(kw in q for kw in ["what is", "what does", "what can", "cloudsentinel", "platform", "about", "project", "this app", "purpose"]):
         return (
             "**CloudSentinel AI** is a cloud security intelligence platform that scans your AWS and GCP "
             "environments for misconfigurations, IAM vulnerabilities, and compliance gaps.\n\n"
