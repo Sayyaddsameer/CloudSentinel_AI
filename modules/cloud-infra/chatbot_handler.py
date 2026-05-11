@@ -97,9 +97,10 @@ def build_chat_prompt(question, risks, module):
         f"Here are the latest detected risks in this module (deduplicated, High priority first):\n{context}\n\n"
         f"User question: {question}\n\n"
         "Instructions:\n"
-        "1. If the user asks a general question about CloudSentinel, the website, or how to use it, answer helpfully and accurately.\n"
-        f"2. If the user asks what this module ({module}) does, explain its purpose and what kind of risks it scans for.\n"
-        "3. If the user asks about their risks, answer specifically based on the risks shown above.\n"
+        "1. If the user says a conversational greeting (like 'hi', 'hello', etc.), reply politely and briefly introduce yourself as the CloudSentinel AI assistant.\n"
+        "2. If the user asks a general question about CloudSentinel, the website, or how to use it, answer helpfully and accurately.\n"
+        f"3. If the user asks what this module ({module}) does, explain its purpose and what kind of risks it scans for.\n"
+        "4. If the user asks about their risks, answer specifically based on the risks shown above.\n"
         "Keep your answer under 300 words. Format remediation steps as a numbered list where applicable."
     )
 
