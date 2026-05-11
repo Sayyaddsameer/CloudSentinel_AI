@@ -517,5 +517,5 @@ def lambda_handler(event, context):
             "Content-Type": "application/json",
             "Access-Control-Allow-Origin": "*",
         },
-        "body": json.dumps({"message": "Scan complete", "risksFound": len(all_risks)}),
+        "body": json.dumps({"message": "Scan complete", "risksFound": len(all_risks), "module": "cloud-infra"}),
     }
