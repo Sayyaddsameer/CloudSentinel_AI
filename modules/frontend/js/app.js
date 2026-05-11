@@ -175,7 +175,16 @@ async function triggerScan(module, extraParams = {}) {
 
   const conn = getConnections(module);
   const roleArn = conn?.aws?.roleArn || conn?.['aws-data']?.roleArn || conn?.['aws-mobile']?.roleArn || null;
-  const scanPayload = { ...(roleArn ? { targetRoleArn: roleArn } : {}), ...extraParams };
+  
+  // Identify connected providers (e.g. 'aws', 'gcp')
+  const activeKeys = Object.keys(conn);
+  const providers = [...new Set(activeKeys.map(k => k.startsWith('aws') ? 'aws' : k))];
+
+  const scanPayload = { 
+    ...(roleArn ? { targetRoleArn: roleArn } : {}), 
+    providers,
+    ...extraParams 
+  };
 
   const res = await apiFetch(`${API_BASE}/scan-${module}`, {
     method: 'POST',
