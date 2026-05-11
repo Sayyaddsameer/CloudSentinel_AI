@@ -164,6 +164,27 @@
     </div>
 
   </div><!-- /view-risks -->
+
+  <!-- Previous Scan Results (visible after rescan/disconnect, cleared on logout) -->
+  <div class="card mt-3" id="previous-risks-section" style="display:none;padding:0;overflow:hidden;border:1px solid var(--medium)">
+    <div style="padding:1.25rem 1.5rem;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:.75rem;background:rgba(255,193,7,0.06)">
+      <div>
+        <div class="card-title" style="color:var(--medium)">[PREV] Previous Scan Results</div>
+        <div class="card-subtitle">Scan from <span id="prev-scan-time">--</span></div>
+      </div>
+      <div style="display:flex;align-items:center;gap:1rem;flex-wrap:wrap">
+        <div style="display:flex;align-items:center;gap:.5rem;font-size:.82rem">
+          <span class="badge badge-high badge-dot"><span id="prev-stat-high">0</span></span> High
+          <span class="badge badge-medium badge-dot"><span id="prev-stat-medium">0</span></span> Med
+          <span class="badge badge-low badge-dot"><span id="prev-stat-low">0</span></span> Low
+          <span style="font-weight:600;color:var(--text-2);margin-left:.5rem"><span id="prev-stat-total">0</span> Total</span>
+        </div>
+        <button class="btn btn-outline btn-sm" onclick="hidePreviousRisks()">Hide</button>
+      </div>
+    </div>
+    <div style="padding:1.25rem;display:flex;flex-direction:column;gap:.875rem" id="previous-risk-list"></div>
+  </div>
+
 </div><!-- /page-content -->
 
 <!-- AWS Connect Modal -->

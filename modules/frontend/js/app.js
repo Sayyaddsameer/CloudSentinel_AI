@@ -164,7 +164,7 @@ async function apiFetch(url, opts = {}) {
 
 async function fetchRisks(module) {
   if (!API_BASE) throw new Error('API is not configured.');
-  const res = await apiFetch(`${API_BASE}/risks?module=${module}`);
+  const res = await apiFetch(`${API_BASE}/risks?module=${module}&_t=${Date.now()}`);
   if (!res.ok) throw new Error(`Failed to fetch risks (${res.status})`);
   const data = await res.json();
   return Array.isArray(data) ? data : (data.risks || []);
@@ -240,6 +240,30 @@ function getAllHistory(limit = 30) {
   const modules = ['cloud-infra', 'devops', 'fullstack', 'data-eng', 'mobile'];
   const all = modules.flatMap(m => getModuleHistory(m, 20));
   return all.sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp)).slice(0, limit);
+}
+
+/* ── Previous Risks (session-level, survives disconnect but cleared on logout) ── */
+function savePreviousRisks(module, risks) {
+  if (!risks || risks.length === 0) return;
+  const entry = {
+    timestamp: new Date().toISOString(),
+    risks: risks,
+    total: risks.length,
+    high:   risks.filter(r => r.riskPriority === 'High').length,
+    medium: risks.filter(r => r.riskPriority === 'Medium').length,
+    low:    risks.filter(r => r.riskPriority === 'Low').length,
+  };
+  sessionStorage.setItem(`cs_prev_risks_${module}`, JSON.stringify(entry));
+}
+
+function getPreviousRisks(module) {
+  try { return JSON.parse(sessionStorage.getItem(`cs_prev_risks_${module}`) || 'null'); }
+  catch { return null; }
+}
+
+function clearAllPreviousRisks() {
+  const MODULES = ['cloud-infra', 'devops', 'fullstack', 'data-eng', 'mobile'];
+  MODULES.forEach(m => sessionStorage.removeItem(`cs_prev_risks_${m}`));
 }
 
 function getRiskTrend(module) {
@@ -546,6 +570,9 @@ async function autoDisconnectAll() {
       console.info(`[disconnect] Module ${m} revoked and local data cleared.`);
     })
   );
+
+  /* Clear session-level previous risks on logout */
+  clearAllPreviousRisks();
 }
 
 /**

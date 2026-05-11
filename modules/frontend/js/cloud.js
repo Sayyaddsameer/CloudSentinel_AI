@@ -39,7 +39,15 @@ function showConnectView() {
   document.getElementById('view-connect').style.display = '';
   document.getElementById('view-scan').style.display    = 'none';
   document.getElementById('view-risks').style.display   = 'none';
-  document.getElementById('header-actions').innerHTML   = '';
+
+  /* Show "View Previous" button in header if previous data exists */
+  const prev = getPreviousRisks(MODULE);
+  if (prev) {
+    document.getElementById('header-actions').innerHTML = `
+      <button class="btn btn-outline btn-sm" id="btn-view-previous-header" onclick="showPreviousRisks()">View Previous Scan</button>`;
+  } else {
+    document.getElementById('header-actions').innerHTML = '';
+  }
 
   /* Update provider card states */
   const conns = getConnections(MODULE);
@@ -58,8 +66,13 @@ function showRisksView(conns) {
   document.getElementById('view-scan').style.display    = 'none';
   document.getElementById('view-risks').style.display   = '';
 
-  /* Header actions */
+  /* Header actions — include "Previous" button if data exists */
+  const prev = getPreviousRisks(MODULE);
+  const prevBtn = prev
+    ? `<button class="btn btn-outline btn-sm" onclick="showPreviousRisks()">Previous Scan</button>`
+    : '';
   document.getElementById('header-actions').innerHTML = `
+    ${prevBtn}
     <button class="btn btn-outline btn-sm" onclick="showConnectView()">Manage Connections</button>
     <button class="btn btn-gradient btn-sm" onclick="startScan()">Rescan Now</button>`;
 
@@ -97,6 +110,11 @@ function updateProviderCard(provider, connected) {
 
 /* ── Load risks ─────────────────────────────────────────────── */
 async function loadRisks() {
+  /* Save current risks as "previous" before fetching new ones */
+  if (allRisks.length > 0) {
+    savePreviousRisks(MODULE, allRisks);
+  }
+
   document.getElementById('risk-list').innerHTML = `
     <div class="empty-state"><div class="empty-state-icon">...</div><div class="empty-state-title">Loading risks</div></div>`;
 
@@ -109,9 +127,49 @@ async function loadRisks() {
     /* Record to history and render scan history timeline */
     recordScanToHistory(MODULE, allRisks);
     renderScanHistory();
+
+    /* Update "Previous Scan" button visibility in header */
+    refreshHeaderActions();
   } catch (e) {
     showToast('Failed to load risks: ' + e.message, 'error');
   }
+}
+
+/* ── Refresh header actions (updates Previous button visibility) ── */
+function refreshHeaderActions() {
+  const prev = getPreviousRisks(MODULE);
+  const prevBtn = prev
+    ? `<button class="btn btn-outline btn-sm" onclick="showPreviousRisks()">Previous Scan</button>`
+    : '';
+  document.getElementById('header-actions').innerHTML = `
+    ${prevBtn}
+    <button class="btn btn-outline btn-sm" onclick="showConnectView()">Manage Connections</button>
+    <button class="btn btn-gradient btn-sm" onclick="startScan()">Rescan Now</button>`;
+}
+
+/* ── Previous Risks Viewer ───────────────────────────────── */
+function showPreviousRisks() {
+  const prev = getPreviousRisks(MODULE);
+  if (!prev) { showToast('No previous scan data available', 'info'); return; }
+
+  const section = document.getElementById('previous-risks-section');
+  if (!section) return;
+
+  section.style.display = '';
+  document.getElementById('prev-scan-time').textContent = new Date(prev.timestamp).toLocaleString();
+  document.getElementById('prev-stat-total').textContent = prev.total;
+  document.getElementById('prev-stat-high').textContent = prev.high;
+  document.getElementById('prev-stat-medium').textContent = prev.medium;
+  document.getElementById('prev-stat-low').textContent = prev.low;
+  renderRiskCards(prev.risks, 'previous-risk-list');
+
+  /* Scroll into view */
+  section.scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
+
+function hidePreviousRisks() {
+  const section = document.getElementById('previous-risks-section');
+  if (section) section.style.display = 'none';
 }
 
 /* ── Scan History Timeline ───────────────────────────────── */
@@ -162,6 +220,11 @@ async function startScan() {
     return;
   }
 
+  /* Save current risks as "previous" before rescanning */
+  if (allRisks.length > 0) {
+    savePreviousRisks(MODULE, allRisks);
+  }
+
   showScanView();
   const fill   = document.getElementById('scan-fill');
   const pct    = document.getElementById('scan-pct');
@@ -192,6 +255,9 @@ async function startScan() {
     await sleep(2000);   // give DynamoDB writes time to propagate
     showToast('Scan complete!', 'success');
     localStorage.setItem(`cs_scan_${MODULE}`, new Date().toISOString());
+
+    /* Reset allRisks so loadRisks fetches fresh from API */
+    allRisks = [];
     showRisksView(getConnections(MODULE));
   } catch (e) {
     showToast('Scan failed: ' + e.message, 'error');
@@ -308,9 +374,12 @@ async function confirmAwsConnect() {
   });
   updateProviderCard('aws', true);
   showToast('AWS account connected! Starting first scan…', 'success');
+
+  /* Clear stale risk data so fresh scan results load cleanly */
+  allRisks = [];
+
+  /* Go directly to scan instead of showing stale risks first */
   await sleep(500);
-  showRisksView(getConnections(MODULE));
-  await sleep(400);
   startScan();
 }
 
@@ -329,16 +398,21 @@ async function confirmGcpConnect() {
   showToast('GCP project connected!', 'success');
 
   const conns = getConnections(MODULE);
-  if (Object.keys(conns).length === 1) {
-    /* First connection -- go to scan */
+  if (Object.keys(conns).length >= 1) {
+    /* Clear stale data and go directly to scan */
+    allRisks = [];
     await sleep(400);
-    showRisksView(conns);
     startScan();
   }
 }
 
 async function performDisconnect() {
   closeModal('modal-disconnect');
+
+  /* ── Save current risks as "previous" BEFORE clearing ──────── */
+  if (allRisks.length > 0) {
+    savePreviousRisks(MODULE, allRisks);
+  }
 
   const conn = getConnections(MODULE);
   const hasAws = !!conn?.aws;
@@ -354,6 +428,9 @@ async function performDisconnect() {
   localStorage.removeItem(`cs_conn_${MODULE}`);
   localStorage.removeItem(`cs_scan_${MODULE}`);
   allRisks = [];
+
+  /* Hide previous risks panel (user can re-open via button) */
+  hidePreviousRisks();
 
   if (result) {
     const awsStatus = result.aws;
