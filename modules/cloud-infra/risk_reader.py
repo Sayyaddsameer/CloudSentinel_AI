@@ -15,7 +15,7 @@ PAGE_LIMIT = int(os.environ.get("RISKS_PAGE_LIMIT", "100"))
 
 CORS_HEADERS = {
     "Content-Type":                "application/json",
-    "Access-Control-Allow-Origin": "*",
+    "Access-Control-Allow-Origin": os.environ.get("AMPLIFY_DOMAIN", "*"),
 }
 
 # Resources that are intentionally configured in a way that would otherwise

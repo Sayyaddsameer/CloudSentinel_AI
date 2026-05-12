@@ -5,7 +5,8 @@ from datetime import datetime, timezone
 
 import boto3
 from botocore.exceptions import ClientError
-from scan_events import emit_scan_completed
+from shared.scan_events import emit_scan_completed
+from shared.schemas.risk_record import build_risk_record
 
 logger = logging.getLogger()
 logger.setLevel(logging.INFO)
@@ -52,29 +53,9 @@ def get_aws_clients(role_arn=None):
 # Risk record builder -- shared schema
 # ---------------------------------------------------------------------------
 
-def build_risk(module, resource, resource_name, risk_type, risk_reason, priority,
-               remediation_steps=None, alternative_solutions=None,
-               cloud_provider="AWS"):
-    ts = datetime.now(timezone.utc).isoformat()
-    safe = resource_name.lower().replace(" ", "-").replace("/", "-")[:60]
-    res_key = resource.lower().replace(" ", "-")
-    return {
-        "resourceId":           f"{module}-{res_key}-{safe}",
-        "riskTimestamp":        ts,
-        "module":               module,
-        "cloudProvider":        cloud_provider,
-        "resource":             resource,
-        "resourceName":         resource_name,
-        "riskType":             risk_type,
-        "riskReason":           risk_reason,
-        "riskPriority":         priority,
-        "remediationSteps":     remediation_steps or [],
-        "alternativeSolutions": alternative_solutions or [],
-        "aiExplanation":        "",
-        "riskCategory":         "",
-        "status":               "OPEN",
-        "region":               REGION,
-    }
+def build_risk(*args, **kwargs):
+    # This acts as a facade over the shared schema so we don't have to change the call sites
+    return build_risk_record(*args, **kwargs)
 
 
 def save_risk(table, risk):
@@ -459,7 +440,7 @@ def purge_module_risks(table, module):
             )
             items.extend(resp.get("Items", []))
 
-        with table.batch_writer() as batch:
+        with table.batch_writer(overwrite_by_pkeys=["resourceId", "riskTimestamp"]) as batch:
             for item in items:
                 rid = item.get("resourceId")
                 rts = item.get("riskTimestamp")
@@ -498,7 +479,7 @@ def lambda_handler(event, context):
         all_risks += scan_s3_buckets(clients, table)
         all_risks += scan_security_groups(clients, table)
         all_risks += scan_iam_password_policy(clients, table)
-        all_risks += scan_aws_config_findings(clients, table)
+        # all_risks += scan_aws_config_findings(clients, table)  # Removed because AWS Config is often stale
 
     if "gcp" in providers:
         all_risks += scan_gcp_resources(table)
@@ -515,7 +496,7 @@ def lambda_handler(event, context):
         "statusCode": 200,
         "headers": {
             "Content-Type": "application/json",
-            "Access-Control-Allow-Origin": "*",
+            "Access-Control-Allow-Origin": os.environ.get("AMPLIFY_DOMAIN", "*"),
         },
         "body": json.dumps({"message": "Scan complete", "risksFound": len(all_risks), "module": "cloud-infra"}),
     }

@@ -75,7 +75,7 @@ def lambda_handler(event, context):
         logger.error("SNS_TOPIC_ARN environment variable is not set -- cannot send notification")
         return {
             "statusCode": 500,
-            "headers": {"Content-Type": "application/json", "Access-Control-Allow-Origin": "*"},
+            "headers": {"Content-Type": "application/json", "Access-Control-Allow-Origin": os.environ.get("AMPLIFY_DOMAIN", "*")},
             "body": "Configuration error: SNS_TOPIC_ARN is not set",
         }
 
@@ -92,7 +92,7 @@ def lambda_handler(event, context):
         )
         return {
             "statusCode": 200,
-            "headers": {"Content-Type": "application/json", "Access-Control-Allow-Origin": "*"},
+            "headers": {"Content-Type": "application/json", "Access-Control-Allow-Origin": os.environ.get("AMPLIFY_DOMAIN", "*")},
             "body": json.dumps({"status": "no_risks", "module": module}),
         }
 
@@ -119,7 +119,7 @@ def lambda_handler(event, context):
         logger.error("SNS publish failed: %s", exc)
         return {
             "statusCode": 500,
-            "headers": {"Content-Type": "application/json", "Access-Control-Allow-Origin": "*"},
+            "headers": {"Content-Type": "application/json", "Access-Control-Allow-Origin": os.environ.get("AMPLIFY_DOMAIN", "*")},
             "body": json.dumps({"error": str(exc)}),
         }
 
@@ -127,7 +127,7 @@ def lambda_handler(event, context):
 
     return {
         "statusCode": 200,
-        "headers": {"Content-Type": "application/json", "Access-Control-Allow-Origin": "*"},
+        "headers": {"Content-Type": "application/json", "Access-Control-Allow-Origin": os.environ.get("AMPLIFY_DOMAIN", "*")},
         "body": json.dumps({"notified": len(notify_risks), "module": module, "high": high}),
     }
 

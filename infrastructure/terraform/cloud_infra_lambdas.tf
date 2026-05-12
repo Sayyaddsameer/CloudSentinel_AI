@@ -111,6 +111,7 @@ resource "aws_lambda_function" "chatbot_handler" {
       BEDROCK_MODEL_ID      = var.bedrock_model_id
       MAX_TOKENS            = tostring(var.max_tokens)
       CHATBOT_CONTEXT_RISKS = tostring(var.chatbot_context_risks)
+      AMPLIFY_DOMAIN        = var.amplify_domain
     }
   }
 

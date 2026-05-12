@@ -460,13 +460,13 @@ function renderRiskCards(risks, containerId, filterPriority = 'All') {
     return;
   }
   container.innerHTML = filtered.map((r, i) => `
-    <div class="risk-card priority-${r.riskPriority.toLowerCase()}" style="animation-delay:${i * 0.05}s">
+    <div class="risk-card priority-${(r.riskPriority || 'Low').toLowerCase()}" style="animation-delay:${i * 0.05}s">
       <div class="risk-card-header">
         <div>
           <div class="risk-card-title">${escHtml(r.riskType)}</div>
           <div class="risk-card-resource"><span class="text-muted">Resource:</span> ${escHtml(r.resource)} -- <strong>${escHtml(r.resourceName)}</strong></div>
         </div>
-        <span class="badge badge-${r.riskPriority.toLowerCase()} badge-dot">${r.riskPriority}</span>
+        <span class="badge badge-${(r.riskPriority || 'Low').toLowerCase()} badge-dot">${r.riskPriority || 'Low'}</span>
       </div>
       <div class="risk-card-reason">${escHtml(r.riskReason)}</div>
       <div class="risk-card-footer">

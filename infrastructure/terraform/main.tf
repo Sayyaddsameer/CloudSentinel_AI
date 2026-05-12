@@ -56,6 +56,12 @@ variable "app_url" {
   default     = ""
 }
 
+variable "amplify_domain" {
+  description = "Domain name for CORS configuration"
+  type        = string
+  default     = "*"
+}
+
 variable "github_token" {
   description = "GitHub personal access token for Amplify source connection"
   type        = string

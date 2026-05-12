@@ -22,7 +22,8 @@
         "dynamodb:Query",
         "dynamodb:Scan",
         "dynamodb:DescribeTable",
-        "dynamodb:ListTables"
+        "dynamodb:ListTables",
+        "dynamodb:BatchWriteItem"
       ],
       "Resource": [
         "arn:aws:dynamodb:*:*:table/cloudsentinel-risks",

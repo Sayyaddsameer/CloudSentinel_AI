@@ -16,6 +16,12 @@ BEDROCK_MODEL = os.environ.get("BEDROCK_MODEL_ID", "anthropic.claude-3-haiku-202
 MAX_TOKENS  = int(os.environ.get("MAX_TOKENS", "400"))
 MAX_RISKS   = int(os.environ.get("MAX_RISKS_PER_RUN", "50"))
 
+# Initialize clients globally for reuse
+ddb      = boto3.resource("dynamodb", region_name=REGION)
+table    = ddb.Table(TABLE_NAME)
+bedrock  = boto3.client("bedrock-runtime", region_name=REGION)
+comp     = boto3.client("comprehend", region_name=REGION)
+
 
 # ---------------------------------------------------------------------------
 # Bedrock -- generate a developer-friendly explanation for a risk
@@ -130,10 +136,6 @@ def update_risk(table, risk, explanation, category):
 
 def lambda_handler(event, context):
     logger.info("ai-explainer started")
-    ddb      = boto3.resource("dynamodb", region_name=REGION)
-    table    = ddb.Table(TABLE_NAME)
-    bedrock  = boto3.client("bedrock-runtime", region_name=REGION)
-    comp     = boto3.client("comprehend", region_name=REGION)
 
     risks = fetch_open_risks(table)
     logger.info(f"{len(risks)} risk(s) need AI explanation")

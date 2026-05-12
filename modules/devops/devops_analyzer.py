@@ -12,12 +12,13 @@ from urllib.error import URLError
 import boto3
 from botocore.exceptions import ClientError
 
+from shared.scan_events import emit_scan_completed
+from shared.schemas.risk_record import build_risk_record
+
 try:
     import yaml
 except ImportError:          # PyYAML not installed in test env — fallback parser
     yaml = None
-
-from scan_events import emit_scan_completed
 
 logger = logging.getLogger()
 logger.setLevel(logging.INFO)
@@ -37,7 +38,7 @@ SECRET_PATTERNS = [
 
 CORS_HEADERS = {
     "Content-Type":                "application/json",
-    "Access-Control-Allow-Origin": "*",
+    "Access-Control-Allow-Origin": os.environ.get("AMPLIFY_DOMAIN", "*"),
 }
 
 
@@ -171,26 +172,20 @@ def verify_github_signature(payload_bytes, signature_header, secret):
 
 def build_risk(repo_name, risk_type, risk_reason, priority,
                remediation_steps=None, alternative_solutions=None):
-    ts = datetime.now(timezone.utc).isoformat()
-    safe_repo = repo_name.replace("/", "-").replace(" ", "-")
     slug = risk_type.lower().replace(" ", "-")
-    return {
-        "resourceId":           f"devops-{safe_repo}-{slug}",
-        "riskTimestamp":        ts,
-        "module":               "devops",
-        "cloudProvider":        "AWS",
-        "resource":             "CI/CD Pipeline",
-        "resourceName":         repo_name,
-        "riskType":             risk_type,
-        "riskReason":           risk_reason,
-        "riskPriority":         priority,
-        "remediationSteps":     remediation_steps or [],
-        "alternativeSolutions": alternative_solutions or [],
-        "aiExplanation":        "",
-        "riskCategory":         "",
-        "status":               "OPEN",
-        "region":               REGION,
-    }
+    # Facade over shared schema to preserve caller compatibility
+    return build_risk_record(
+        module="devops",
+        resource="CI/CD Pipeline",
+        resource_name=f"{repo_name} {slug}",
+        risk_type=risk_type,
+        risk_reason=risk_reason,
+        priority=priority,
+        remediation_steps=remediation_steps,
+        alternative_solutions=alternative_solutions,
+        cloud_provider="AWS",
+        region=REGION,
+    )
 
 
 def save_risk(table, risk):
@@ -364,7 +359,7 @@ def purge_module_risks(table, module):
             )
             items.extend(resp.get("Items", []))
 
-        with table.batch_writer() as batch:
+        with table.batch_writer(overwrite_by_pkeys=["resourceId", "riskTimestamp"]) as batch:
             for item in items:
                 rid = item.get("resourceId")
                 rts = item.get("riskTimestamp")
@@ -411,18 +406,35 @@ def lambda_handler(event, context):
         if not pipeline_config:
             pipeline_config = _fetch_workflow_from_github(repo_name) or {"jobs": {"build": {"steps": []}}}
     else:
-        # Manual / demo mode — pipeline_config provided directly in the body
-        repo_name       = body.get("repo_name", "CloudSentinel_AI")
-        pipeline_config = body.get("pipeline_config", {
-            "jobs": {
-                "build": {
-                    "steps": [
-                        {"name": "install", "run": "pip install -r requirements.txt"},
-                        {"name": "deploy",  "run": "aws lambda update-function-code --function-name cloudsentinel-cloud-scanner"},
+        # Manual mode — pipeline_config provided directly in the body, or fetch via API
+        repo_name       = body.get("repo_name", "Sayyaddsameer/CloudSentinel_AI")
+        pipeline_config = body.get("pipeline_config")
+        
+        if not pipeline_config:
+            if not get_github_pat():
+                logger.warning("GITHUB_PAT_SECRET_ARN not configured; generating risk instead of silent demo mode.")
+                all_risks = [build_risk(
+                    repo_name,
+                    "GitHub Integration Not Configured",
+                    "GitHub webhook and API integration requires GITHUB_PAT_SECRET_ARN. "
+                    "Falling back to demo mode would mask real security gaps in your repositories.",
+                    "High",
+                    remediation_steps=[
+                        "Create a GitHub PAT with repo scope",
+                        "Store it in AWS Secrets Manager",
+                        "Set github_pat_secret_arn in terraform.tfvars and deploy"
                     ]
+                )]
+                for r in all_risks:
+                    save_risk(table, r)
+                emit_scan_completed("devops", all_risks)
+                return {
+                    "statusCode": 200,
+                    "headers": CORS_HEADERS,
+                    "body": json.dumps({"message": "DevOps scan incomplete (PAT missing)", "risksFound": 1}),
                 }
-            }
-        })
+            
+            pipeline_config = _fetch_workflow_from_github(repo_name) or {"jobs": {"build": {"steps": []}}}
 
     steps     = flatten_steps(pipeline_config)
     all_risks = []

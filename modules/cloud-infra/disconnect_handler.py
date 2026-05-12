@@ -35,7 +35,7 @@ DEFAULT_STACK = "CloudSentinel-Scanner"
 
 def cors_headers():
     return {
-        "Access-Control-Allow-Origin":  "*",
+        "Access-Control-Allow-Origin":  os.environ.get("AMPLIFY_DOMAIN", "*"),
         "Access-Control-Allow-Headers": "Content-Type,Authorization",
         "Access-Control-Allow-Methods": "POST,OPTIONS",
         "Content-Type": "application/json",
@@ -178,7 +178,7 @@ def _purge_risks(module: str) -> int:
             items.extend(resp.get("Items", []))
 
         # Table key: resourceId (HASH) + riskTimestamp (RANGE)
-        with table.batch_writer() as batch:
+        with table.batch_writer(overwrite_by_pkeys=["resourceId", "riskTimestamp"]) as batch:
             for item in items:
                 rid = item.get("resourceId")
                 rts = item.get("riskTimestamp")

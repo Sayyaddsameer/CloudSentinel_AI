@@ -21,7 +21,7 @@ REGION = os.environ.get("AWS_REGION", "us-east-1")
 
 CORS_HEADERS = {
     "Content-Type": "application/json",
-    "Access-Control-Allow-Origin": "*",
+    "Access-Control-Allow-Origin": os.environ.get("AMPLIFY_DOMAIN", "*"),
     "Access-Control-Allow-Headers": "Content-Type,Authorization",
 }
 

@@ -5,7 +5,9 @@ from datetime import datetime, timezone, timedelta
 
 import boto3
 from botocore.exceptions import ClientError
-from scan_events import emit_scan_completed
+
+from shared.scan_events import emit_scan_completed
+from shared.schemas.risk_record import build_risk_record
 
 logger = logging.getLogger()
 logger.setLevel(logging.INFO)
@@ -20,31 +22,25 @@ LOOKBACK_HOURS       = int(os.environ.get("LOOKBACK_HOURS", "1"))
 
 CORS_HEADERS = {
     "Content-Type":                "application/json",
-    "Access-Control-Allow-Origin": "*",
+    "Access-Control-Allow-Origin": os.environ.get("AMPLIFY_DOMAIN", "*"),
 }
 
 
 def build_risk(api_name, resource_path, risk_type, risk_reason, priority,
                remediation_steps=None, alternative_solutions=None):
-    ts = datetime.now(timezone.utc).isoformat()
-    safe = f"{api_name}-{resource_path}".lower().replace("/", "-").replace(" ", "-")[:80]
-    return {
-        "resourceId":           f"fullstack-apigw-{safe}",
-        "riskTimestamp":        ts,
-        "module":               "fullstack",
-        "cloudProvider":        "AWS",
-        "resource":             "API Gateway",
-        "resourceName":         f"{api_name} {resource_path}".strip(),
-        "riskType":             risk_type,
-        "riskReason":           risk_reason,
-        "riskPriority":         priority,
-        "remediationSteps":     remediation_steps or [],
-        "alternativeSolutions": alternative_solutions or [],
-        "aiExplanation":        "",
-        "riskCategory":         "",
-        "status":               "OPEN",
-        "region":               REGION,
-    }
+    # Facade over shared schema
+    return build_risk_record(
+        module="fullstack",
+        resource="API Gateway",
+        resource_name=f"{api_name} {resource_path}".strip(),
+        risk_type=risk_type,
+        risk_reason=risk_reason,
+        priority=priority,
+        remediation_steps=remediation_steps,
+        alternative_solutions=alternative_solutions,
+        cloud_provider="AWS",
+        region=REGION,
+    )
 
 
 def save_risk(table, risk):
@@ -269,7 +265,7 @@ def purge_module_risks(table, module):
             )
             items.extend(resp.get("Items", []))
 
-        with table.batch_writer() as batch:
+        with table.batch_writer(overwrite_by_pkeys=["resourceId", "riskTimestamp"]) as batch:
             for item in items:
                 rid = item.get("resourceId")
                 rts = item.get("riskTimestamp")

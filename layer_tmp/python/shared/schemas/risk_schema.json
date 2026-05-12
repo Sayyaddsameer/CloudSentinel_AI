@@ -1,0 +1,132 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "CloudSentinel Risk Record",
+  "description": "Schema for every risk record stored in DynamoDB cloudsentinel-risks table",
+  "type": "object",
+  "required": [
+    "resourceId",
+    "riskTimestamp",
+    "module",
+    "cloudProvider",
+    "resource",
+    "resourceName",
+    "riskType",
+    "riskReason",
+    "riskPriority",
+    "remediationSteps",
+    "alternativeSolutions",
+    "aiExplanation",
+    "riskCategory",
+    "status",
+    "region"
+  ],
+  "properties": {
+    "resourceId": {
+      "type": "string",
+      "description": "Partition key. Format: {module}-{resource-slug}-{resource-name-slug}. Example: cloud-infra-s3-bucket-my-bucket"
+    },
+    "riskTimestamp": {
+      "type": "string",
+      "description": "Sort key. ISO-8601 UTC timestamp of when the risk was detected. Example: 2024-01-15T10:30:00+00:00"
+    },
+    "scanId": {
+      "type": "string",
+      "description": "Optional UUID linking all risks from a single scan run"
+    },
+    "userId": {
+      "type": "string",
+      "description": "Cognito user sub — used by the userId-module-index GSI for notification queries"
+    },
+    "module": {
+      "type": "string",
+      "enum": ["cloud-infra", "devops", "fullstack", "data-eng", "mobile"],
+      "description": "Engineering domain that detected this risk"
+    },
+    "cloudProvider": {
+      "type": "string",
+      "enum": ["AWS", "GCP", "Azure"],
+      "description": "Cloud provider the affected resource belongs to"
+    },
+    "resource": {
+      "type": "string",
+      "description": "Resource type in human-readable form. Examples: S3 Bucket, EC2 Security Group, CI/CD Pipeline, API Gateway, DynamoDB Table, Glue ETL Job, Lambda Function"
+    },
+    "resourceName": {
+      "type": "string",
+      "description": "Name or identifier of the specific resource instance"
+    },
+    "riskType": {
+      "type": "string",
+      "description": "Short label for the risk class. Example: S3 Public Access Not Fully Blocked"
+    },
+    "riskReason": {
+      "type": "string",
+      "description": "Explanation of why the configuration is risky"
+    },
+    "riskPriority": {
+      "type": "string",
+      "enum": ["High", "Medium", "Low"],
+      "description": "Severity classification. High = immediate action required. Medium = address soon. Low = recommended improvement."
+    },
+    "remediationSteps": {
+      "type": "array",
+      "items": { "type": "string" },
+      "description": "Ordered list of concrete actions to resolve the risk"
+    },
+    "alternativeSolutions": {
+      "type": "array",
+      "items": { "type": "string" },
+      "description": "Secure alternative configurations or architectural approaches"
+    },
+    "aiExplanation": {
+      "type": "string",
+      "description": "AI-generated plain-English explanation produced by the ai-explainer Lambda via Amazon Bedrock. Empty string until processed."
+    },
+    "riskCategory": {
+      "type": "string",
+      "enum": ["SECURITY", "PERFORMANCE", "RELIABILITY", "COMPLIANCE", ""],
+      "description": "Category assigned by Amazon Comprehend keyword analysis"
+    },
+    "status": {
+      "type": "string",
+      "enum": ["OPEN", "IN_PROGRESS", "RESOLVED"],
+      "description": "Resolution lifecycle state of the risk"
+    },
+    "notified": {
+      "type": "boolean",
+      "description": "True after the notification-handler Lambda has sent an SNS alert for this risk. Prevents duplicate alerts."
+    },
+    "region": {
+      "type": "string",
+      "description": "AWS region where the risk was detected. Example: us-east-1"
+    }
+  },
+  "additionalProperties": false,
+  "examples": [
+    {
+      "resourceId": "cloud-infra-s3-bucket-my-data-bucket",
+      "riskTimestamp": "2024-01-15T10:30:00+00:00",
+      "module": "cloud-infra",
+      "cloudProvider": "AWS",
+      "resource": "S3 Bucket",
+      "resourceName": "my-data-bucket",
+      "riskType": "S3 Public Access Not Fully Blocked",
+      "riskReason": "One or more Block Public Access settings are disabled on this bucket.",
+      "riskPriority": "High",
+      "remediationSteps": [
+        "Enable all four Block Public Access settings in the S3 console",
+        "Review and restrict the bucket policy for any public grants",
+        "Enable SSE-S3 or SSE-KMS encryption"
+      ],
+      "alternativeSolutions": [
+        "Use pre-signed URLs for any content that needs to be temporarily accessible",
+        "Serve static content through CloudFront with an Origin Access Control (OAC)"
+      ],
+      "aiExplanation": "",
+      "riskCategory": "SECURITY",
+      "status": "OPEN",
+      "notified": false,
+      "region": "us-east-1"
+    }
+  ]
+}

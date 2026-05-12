@@ -15,9 +15,16 @@ BEDROCK_MODEL = os.environ.get("BEDROCK_MODEL_ID", "anthropic.claude-3-haiku-202
 CONTEXT_LIMIT = int(os.environ.get("CHATBOT_CONTEXT_RISKS", "20"))
 MAX_TOKENS    = int(os.environ.get("MAX_TOKENS", "600"))
 
+# Initialize clients outside the handler for connection reuse across invocations (reduces cold-starts)
+ddb   = boto3.resource("dynamodb", region_name=REGION)
+table = ddb.Table(TABLE_NAME)
+bedrock = boto3.client("bedrock-runtime", region_name=REGION)
+
+# Use environment variable for CORS domain, fallback to * if not set to avoid breaking dev
+AMPLIFY_DOMAIN = os.environ.get("AMPLIFY_DOMAIN", "*")
 CORS_HEADERS = {
     "Content-Type":                "application/json",
-    "Access-Control-Allow-Origin": "*",
+    "Access-Control-Allow-Origin": AMPLIFY_DOMAIN,
 }
 
 # Resources that are intentionally public -- exclude from chatbot context
@@ -187,9 +194,6 @@ def lambda_handler(event, context):
         return {"statusCode": 400, "headers": CORS_HEADERS,
                 "body": json.dumps({"error": "question field is required"})}
 
-    ddb   = boto3.resource("dynamodb", region_name=REGION)
-    table = ddb.Table(TABLE_NAME)
-
     # Fetch risks: always scoped to the current module so chatbot context
     # matches exactly what the user sees on the dashboard page
     if module:
@@ -198,7 +202,6 @@ def lambda_handler(event, context):
         risks = fetch_all_risks(table)
 
     # Try Bedrock first; fall back to rule-based if not available
-    bedrock = boto3.client("bedrock-runtime", region_name=REGION)
     prompt  = build_chat_prompt(question, risks, module)
     answer, used_ai = call_bedrock(bedrock, prompt)
 

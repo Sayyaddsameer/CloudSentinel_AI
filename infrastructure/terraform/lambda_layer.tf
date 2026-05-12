@@ -18,8 +18,20 @@ data "archive_file" "scan_events_layer_zip" {
 
   # Lambda Python layers must live under python/ inside the zip
   source {
+    content  = file("${path.module}/../../shared/__init__.py")
+    filename = "python/shared/__init__.py"
+  }
+  source {
     content  = file("${path.module}/../../shared/scan_events.py")
-    filename = "python/scan_events.py"
+    filename = "python/shared/scan_events.py"
+  }
+  source {
+    content  = file("${path.module}/../../shared/schemas/__init__.py")
+    filename = "python/shared/schemas/__init__.py"
+  }
+  source {
+    content  = file("${path.module}/../../shared/schemas/risk_record.py")
+    filename = "python/shared/schemas/risk_record.py"
   }
 }
 
