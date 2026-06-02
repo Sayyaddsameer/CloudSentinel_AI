@@ -28,9 +28,10 @@ logger = logging.getLogger()
 logger.setLevel(logging.INFO)
 
 REGION        = os.environ.get("AWS_REGION", "us-east-1")
-RISKS_TABLE   = os.environ.get("DYNAMODB_TABLE", os.environ.get("RISKS_TABLE", "cloudsentinel-risks"))
+RISKS_TABLE   = os.environ["DYNAMODB_TABLE"]          # required — no hardcoded default
+GCP_SECRET_PREFIX = os.environ.get("GCP_SECRET_PREFIX", "cloudsentinel-gcp-creds")  # configurable prefix
 MODULE_INDEX  = "module-index"
-DEFAULT_STACK = "CloudSentinel-Scanner"
+DEFAULT_STACK = os.environ.get("DEFAULT_CFN_STACK", "CloudSentinel-Scanner")
 
 
 def cors_headers():
@@ -141,7 +142,7 @@ def _delete_cfn_stack(role_arn: str, stack_name: str) -> str:
 def _delete_gcp_secret(module: str) -> str:
     """Delete the GCP service account key from Secrets Manager."""
     sm = boto3.client("secretsmanager", region_name=REGION)
-    secret_name = f"cloudsentinel-gcp-creds-{module}"
+    secret_name = f"{GCP_SECRET_PREFIX}-{module}"
     try:
         sm.delete_secret(SecretId=secret_name, ForceDeleteWithoutRecovery=True)
         logger.info("Deleted GCP secret: %s", secret_name)

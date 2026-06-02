@@ -73,3 +73,18 @@ webhook_secret_arn = ""
 # IAM role ARN to assume for cross-account scanning.
 # Leave empty to scan resources in the same AWS account as the Lambda function.
 target_role_arn = ""
+
+# Default GitHub repository scanned by the DevOps analyzer when the API caller
+# does not supply a repo_name in the request body. Format: "owner/repo"
+default_github_repo = ""
+
+# Prefix used when storing GCP service account keys in Secrets Manager.
+# The full secret name will be: {gcp_secret_prefix}-{module}
+# Example: "myproject-gcp-creds" produces "myproject-gcp-creds-cloud-infra"
+gcp_secret_prefix = "cloudsentinel-gcp-creds"
+
+# Comma-separated list of resource names to suppress from the risk dashboard.
+# Use this for resources that are intentionally misconfigured (e.g. a public
+# S3 bucket used to serve CloudFormation templates to external accounts).
+# Example: "my-public-bucket-123456789012,another-intentional-resource"
+ignored_resources = ""

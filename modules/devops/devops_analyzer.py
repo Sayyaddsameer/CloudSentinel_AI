@@ -409,7 +409,7 @@ def lambda_handler(event, context):
             pipeline_config = _fetch_workflow_from_github(repo_name) or {"jobs": {"build": {"steps": []}}}
     else:
         # Manual mode — pipeline_config provided directly in the body, or fetch via API
-        repo_name       = body.get("repo_name", "Sayyaddsameer/CloudSentinel_AI")
+        repo_name       = body.get("repo_name", os.environ.get("DEFAULT_GITHUB_REPO", ""))
         pipeline_config = body.get("pipeline_config")
         
         if not pipeline_config:

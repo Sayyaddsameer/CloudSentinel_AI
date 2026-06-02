@@ -28,7 +28,10 @@ CORS_HEADERS = {
 }
 
 # Resources that are intentionally public -- exclude from chatbot context
-IGNORED_RESOURCE_NAMES = {"cloudsentinel-cf-templates-871070087236"}
+# Resources intentionally excluded from risk reporting (comma-separated env var).
+# Example: IGNORED_RESOURCES=cloudsentinel-cf-templates-123456789012
+_ignored_raw = os.environ.get("IGNORED_RESOURCES", "")
+IGNORED_RESOURCE_NAMES = {r.strip() for r in _ignored_raw.split(",") if r.strip()}
 
 
 def fetch_all_risks(table):

@@ -21,11 +21,11 @@ CORS_HEADERS = {
 
 # Resources that are intentionally configured in a way that would otherwise
 # be flagged -- suppress these to avoid false positives on the dashboard.
-IGNORED_RESOURCE_NAMES = {
-    # This bucket is intentionally public so CloudFormation in external
-    # accounts can download the scanner-role.yaml template.
-    "cloudsentinel-cf-templates-871070087236",
-}
+# Resources intentionally excluded from risk results (e.g. deliberately-public buckets).
+# Configure via env var IGNORED_RESOURCES as a comma-separated list of resource names.
+# Example: IGNORED_RESOURCES=my-public-bucket-123456789012,another-resource
+_ignored_raw = os.environ.get("IGNORED_RESOURCES", "")
+IGNORED_RESOURCE_NAMES = {r.strip() for r in _ignored_raw.split(",") if r.strip()}
 
 
 def deduplicate(items: list) -> list:

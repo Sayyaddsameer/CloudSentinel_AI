@@ -94,6 +94,24 @@ variable "target_role_arn" {
   default     = ""
 }
 
+variable "default_github_repo" {
+  description = "Default GitHub repository to scan when no repo_name is provided in the DevOps scan request (format: owner/repo)"
+  type        = string
+  default     = ""
+}
+
+variable "gcp_secret_prefix" {
+  description = "Prefix for Secrets Manager secrets that hold GCP service account keys (e.g. myapp-gcp-creds)"
+  type        = string
+  default     = "cloudsentinel-gcp-creds"
+}
+
+variable "ignored_resources" {
+  description = "Comma-separated list of resource names to suppress from risk results (e.g. intentionally-public S3 buckets)"
+  type        = string
+  default     = ""
+}
+
 variable "bedrock_model_id" {
   description = "Amazon Bedrock model ID used by the AI explainer and chatbot Lambda functions"
   type        = string
