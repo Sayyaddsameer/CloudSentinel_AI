@@ -1,6 +1,7 @@
 import json
 import os
 import logging
+import time
 from datetime import datetime, timezone
 
 import boto3
@@ -56,6 +57,27 @@ def get_aws_clients(role_arn=None):
 def build_risk(*args, **kwargs):
     # This acts as a facade over the shared schema so we don't have to change the call sites
     return build_risk_record(*args, **kwargs)
+
+
+# ---------------------------------------------------------------------------
+# CloudWatch helper -- write scan timing metrics for benchmarking (paper Table II)
+# ---------------------------------------------------------------------------
+
+def _write_cloudwatch_metric(metric_name, value_ms, module="cloud-infra"):
+    """Write a duration metric to CloudWatch namespace CloudSentinel/Performance."""
+    try:
+        cw = boto3.client("cloudwatch", region_name=REGION)
+        cw.put_metric_data(
+            Namespace="CloudSentinel/Performance",
+            MetricData=[{
+                "MetricName": metric_name,
+                "Dimensions":  [{"Name": "Module", "Value": module}],
+                "Value":       value_ms,
+                "Unit":        "Milliseconds",
+            }],
+        )
+    except Exception as e:
+        logger.warning(f"CloudWatch metric write failed (non-fatal): {e}")
 
 
 def save_risk(table, risk):
@@ -242,6 +264,44 @@ def scan_iam_password_policy(clients, table):
         else:
             logger.error(f"get_account_password_policy: {e}")
 
+    return found
+
+
+# ---------------------------------------------------------------------------
+# AWS -- IAM Root Account MFA (Critical severity)
+# ---------------------------------------------------------------------------
+
+def scan_root_mfa(clients, table):
+    """Critical -- root account must always have MFA enabled.
+    Root compromise gives an attacker unrestricted, unaudited access to all AWS resources.
+    """
+    iam = clients["iam"]
+    found = []
+    try:
+        summary = iam.get_account_summary()["SummaryMap"]
+        if summary.get("AccountMFAEnabled", 0) == 0:
+            r = build_risk(
+                "cloud-infra", "IAM", "root-account",
+                "Root Account MFA Not Enabled",
+                "The AWS root account does not have multi-factor authentication enabled. "
+                "Root compromise gives an attacker unrestricted access to all AWS resources "
+                "including billing, IAM, and all services.",
+                "Critical",
+                remediation_steps=[
+                    "Sign in as root user → My Security Credentials → Activate MFA",
+                    "Use a hardware MFA token (YubiKey) or virtual MFA (Google Authenticator)",
+                    "Never use root credentials for day-to-day operations",
+                    "Create an IAM admin user with least-privilege permissions instead",
+                ],
+                alternative_solutions=[
+                    "Enable AWS Organizations SCP to mandate MFA for all member accounts",
+                    "Use AWS IAM Identity Center (SSO) and disable root login entirely",
+                ],
+            )
+            found.append(r)
+            save_risk(table, r)
+    except ClientError as e:
+        logger.warning(f"get_account_summary: {e}")
     return found
 
 
@@ -451,6 +511,7 @@ def purge_module_risks(table, module):
         logger.error(f"Failed to purge old risks: {e}")
 
 def lambda_handler(event, context):
+    _start = time.time()
     logger.info("cloud-scanner started")
     ddb = boto3.resource("dynamodb", region_name=REGION)
     table = ddb.Table(TABLE_NAME)
@@ -476,27 +537,38 @@ def lambda_handler(event, context):
 
     if "aws" in providers:
         clients = get_aws_clients(role_arn=target_role_arn)
+        all_risks += scan_root_mfa(clients, table)           # Critical severity check
         all_risks += scan_s3_buckets(clients, table)
         all_risks += scan_security_groups(clients, table)
         all_risks += scan_iam_password_policy(clients, table)
-        # all_risks += scan_aws_config_findings(clients, table)  # Removed because AWS Config is often stale
+        # all_risks += scan_aws_config_findings(clients, table)  # Removed: Config is often stale
 
     if "gcp" in providers:
         all_risks += scan_gcp_resources(table)
 
-    all_risks += scan_azure_resources(table)  # Future scope
+    all_risks += scan_azure_resources(table)  # Future scope (v2)
 
-    generate_graph_topology()  # Future scope
+    generate_graph_topology()  # Future scope (v2)
 
     # Emit ScanCompleted event so EventBridge triggers notification_handler
     emit_scan_completed("cloud-infra", all_risks)
 
-    logger.info(f"Scan complete -- {len(all_risks)} risk(s) found")
+    # Record execution timing for benchmarking (paper Table II)
+    duration_ms = int((time.time() - _start) * 1000)
+    _write_cloudwatch_metric("ScanDurationMs", duration_ms, module="cloud-infra")
+    logger.info(f"Scan complete -- {len(all_risks)} risk(s) in {duration_ms}ms")
+
     return {
         "statusCode": 200,
         "headers": {
             "Content-Type": "application/json",
             "Access-Control-Allow-Origin": os.environ.get("AMPLIFY_DOMAIN", "*"),
         },
-        "body": json.dumps({"message": "Scan complete", "risksFound": len(all_risks), "module": "cloud-infra"}),
+        "body": json.dumps({
+            "message":    "Scan complete",
+            "risksFound": len(all_risks),
+            "module":     "cloud-infra",
+            "durationMs": duration_ms,
+        }),
     }
+

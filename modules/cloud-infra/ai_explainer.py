@@ -1,6 +1,7 @@
 import json
 import os
 import logging
+import time
 from datetime import datetime, timezone
 
 import boto3
@@ -141,21 +142,64 @@ def lambda_handler(event, context):
     logger.info(f"{len(risks)} risk(s) need AI explanation")
 
     processed = 0
+    latencies_ms = []  # Track per-finding Bedrock latency for paper Table III
+
     for risk in risks:
-        prompt      = build_bedrock_prompt(risk)
+        prompt = build_bedrock_prompt(risk)
+
+        # Timed Bedrock call for benchmarking
+        _t0 = time.time()
         explanation = call_bedrock(bedrock, prompt)
+        latency_ms = int((time.time() - _t0) * 1000)
+
         if not explanation:
             continue
 
-        risk_text   = f"{risk.get('riskType', '')} {risk.get('riskReason', '')}"
-        category    = classify_risk_with_comprehend(comp, risk_text)
+        latencies_ms.append(latency_ms)
+        logger.info(f"Bedrock latency: {latency_ms}ms for '{risk.get('riskType', '')}'")
+
+        risk_text = f"{risk.get('riskType', '')} {risk.get('riskReason', '')}"
+        category  = classify_risk_with_comprehend(comp, risk_text)
 
         update_risk(table, risk, explanation, category)
         logger.info(f"Updated {risk['resourceId']} -- category: {category}")
         processed += 1
 
+    # Compute latency statistics for the paper (Table III)
+    avg_latency = int(sum(latencies_ms) / len(latencies_ms)) if latencies_ms else 0
+    max_latency = max(latencies_ms) if latencies_ms else 0
+    min_latency = min(latencies_ms) if latencies_ms else 0
+
+    # Write aggregate metric to CloudWatch for benchmarking
+    if avg_latency > 0:
+        try:
+            cw = boto3.client("cloudwatch", region_name=REGION)
+            cw.put_metric_data(
+                Namespace="CloudSentinel/Performance",
+                MetricData=[{
+                    "MetricName": "AvgBedrockLatencyMs",
+                    "Dimensions":  [{"Name": "Module", "Value": "ai-explainer"}],
+                    "Value":       avg_latency,
+                    "Unit":        "Milliseconds",
+                }],
+            )
+        except Exception as e:
+            logger.warning(f"CloudWatch metric write failed (non-fatal): {e}")
+
+    logger.info(
+        f"AI explain complete -- processed={processed} "
+        f"avg={avg_latency}ms max={max_latency}ms min={min_latency}ms"
+    )
+
     return {
         "statusCode": 200,
         "headers": {"Content-Type": "application/json"},
-        "body": json.dumps({"message": "AI explanation run complete", "processed": processed}),
+        "body": json.dumps({
+            "message":      "AI explanation run complete",
+            "processed":    processed,
+            "avgLatencyMs": avg_latency,
+            "maxLatencyMs": max_latency,
+            "minLatencyMs": min_latency,
+        }),
     }
+

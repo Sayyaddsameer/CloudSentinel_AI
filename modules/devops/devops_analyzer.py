@@ -5,6 +5,7 @@ import json
 import os
 import logging
 import re
+import time
 from datetime import datetime, timezone
 from urllib.request import Request, urlopen
 from urllib.error import URLError
@@ -369,6 +370,7 @@ def purge_module_risks(table, module):
         logger.error(f"Failed to purge old risks: {e}")
 
 def lambda_handler(event, context):
+    _start = time.time()
     logger.info("devops-analyzer invoked")
     ddb   = boto3.resource("dynamodb", region_name=REGION)
     table = ddb.Table(TABLE_NAME)
@@ -449,9 +451,24 @@ def lambda_handler(event, context):
 
     emit_scan_completed("devops", all_risks)
 
-    logger.info(f"devops scan done — {len(all_risks)} risk(s)")
+    # Record execution timing for benchmarking (paper Table II)
+    duration_ms = int((time.time() - _start) * 1000)
+    try:
+        cw = boto3.client("cloudwatch", region_name=REGION)
+        cw.put_metric_data(
+            Namespace="CloudSentinel/Performance",
+            MetricData=[{"MetricName": "ScanDurationMs", "Dimensions": [{"Name": "Module", "Value": "devops"}], "Value": duration_ms, "Unit": "Milliseconds"}],
+        )
+    except Exception as e:
+        logger.warning(f"CloudWatch metric write failed (non-fatal): {e}")
+
+    logger.info(f"devops scan done — {len(all_risks)} risk(s) in {duration_ms}ms")
     return {
         "statusCode": 200,
         "headers": CORS_HEADERS,
-        "body": json.dumps({"message": "DevOps scan complete", "risksFound": len(all_risks)}),
+        "body": json.dumps({
+            "message":    "DevOps scan complete",
+            "risksFound": len(all_risks),
+            "durationMs": duration_ms,
+        }),
     }

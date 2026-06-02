@@ -1,6 +1,7 @@
 import json
 import os
 import logging
+import time
 
 import boto3
 from boto3.dynamodb.conditions import Key
@@ -98,17 +99,41 @@ def lambda_handler(event, context):
     if priority_filter:
         items = [i for i in items if i.get("riskPriority", "").lower() == priority_filter.lower()]
 
-    # Sort: High first, then Medium, then Low; within each priority newest timestamp first.
+    # Sort: Critical first, then High, Medium, Low; newest within each priority.
     # Achieved with a stable two-pass sort (Python's sort is stable):
     #   Pass 1: sort by timestamp descending (newest first)
-    #   Pass 2: sort by priority ascending (High=0, Medium=1, Low=2)
-    priority_order = {"High": 0, "Medium": 1, "Low": 2}
+    #   Pass 2: sort by priority ascending (Critical=0, High=1, Medium=2, Low=3)
+    priority_order = {"Critical": 0, "High": 1, "Medium": 2, "Low": 3}
     items.sort(key=lambda x: x.get("riskTimestamp", ""), reverse=True)  # newest first
-    items.sort(key=lambda x: priority_order.get(x.get("riskPriority", "Low"), 2))  # high first
+    items.sort(key=lambda x: priority_order.get(x.get("riskPriority", "Low"), 3))  # critical first
 
-    logger.info(f"Returning {len(items)} deduplicated risks")
+    # --- Security Posture Score (0-100, novel metric for paper) ---
+    # Weighted penalty: Critical=-20, High=-10, Medium=-5, Low=-2
+    # Score starts at 100 and each finding deducts points (floor: 0)
+    weights = {"Critical": 20, "High": 10, "Medium": 5, "Low": 2}
+    penalty = sum(weights.get(r.get("riskPriority", "Low"), 2) for r in items)
+    posture_score = max(0, 100 - penalty)
+
+    # Per-severity counts
+    critical_count = sum(1 for r in items if r.get("riskPriority") == "Critical")
+    high_count     = sum(1 for r in items if r.get("riskPriority") == "High")
+    medium_count   = sum(1 for r in items if r.get("riskPriority") == "Medium")
+    low_count      = sum(1 for r in items if r.get("riskPriority") == "Low")
+
+    logger.info(
+        f"Returning {len(items)} risks | Score={posture_score} "
+        f"C={critical_count} H={high_count} M={medium_count} L={low_count}"
+    )
     return {
         "statusCode": 200,
         "headers": CORS_HEADERS,
-        "body": json.dumps({"risks": items, "count": len(items)}),
+        "body": json.dumps({
+            "risks":         items,
+            "count":         len(items),
+            "postureScore":  posture_score,
+            "criticalCount": critical_count,
+            "highCount":     high_count,
+            "mediumCount":   medium_count,
+            "lowCount":      low_count,
+        }),
     }
