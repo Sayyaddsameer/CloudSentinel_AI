@@ -73,7 +73,7 @@ resource "aws_cloudwatch_metric_alarm" "mobile_high_latency" {
   metric_name         = "Latency"
   namespace           = "AWS/ApiGateway"
   period              = 300
-  statistic           = "p95"
+  extended_statistic  = "p95"
   threshold           = 1000
   treat_missing_data  = "notBreaching"
   alarm_description   = "p95 API latency exceeded mobile threshold of 1000ms"

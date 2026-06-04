@@ -112,7 +112,7 @@ class TestRiskFieldsMobile(unittest.TestCase):
     def test_risk_schema_complete(self):
         import mobile_analyzer as ma
         risk = ma.build_risk(
-            "mobile", "Cognito", "us-east-1_testpool",
+            "Cognito User Pool", "us-east-1_testpool",
             "MFA Disabled", "Cognito user pool has MFA set to OFF", "High"
         )
         required = [
@@ -126,12 +126,12 @@ class TestRiskFieldsMobile(unittest.TestCase):
 
     def test_risk_status_open(self):
         import mobile_analyzer as ma
-        risk = ma.build_risk("mobile", "Lambda", "my-fn", "T", "R", "Medium")
+        risk = ma.build_risk("Lambda", "my-fn", "Overly Broad Role", "Grants lambda:*", "Medium")
         self.assertEqual(risk["status"], "OPEN")
 
     def test_risk_module_is_mobile(self):
         import mobile_analyzer as ma
-        risk = ma.build_risk("mobile", "Cognito", "pool", "T", "R", "High")
+        risk = ma.build_risk("Cognito User Pool", "pool", "MFA Not Enforced", "MFA is OFF", "High")
         self.assertEqual(risk["module"], "mobile")
 
 

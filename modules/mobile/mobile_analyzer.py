@@ -1,7 +1,8 @@
 import json
 import os
 import logging
-from datetime import datetime, timezone
+import time
+from datetime import datetime, timezone, timedelta
 
 import boto3
 from botocore.exceptions import ClientError
@@ -68,29 +69,39 @@ def scan_api_gateway(apigw, table):
             resources = apigw.get_resources(restApiId=api_id).get("items", [])
             for res in resources:
                 methods = res.get("resourceMethods", {})
-                for method, detail in methods.items():
+                for method in methods:
                     if method == "OPTIONS":
                         continue
-                    auth = detail.get("authorizationType", "NONE")
-                    if auth == "NONE":
-                        r = build_risk(
-                            "API Gateway", f"{api_name}/{res.get('path', '?')}",
-                            "API Route Missing Authorization",
-                            f"Method {method} on '{res.get('path')}' in API '{api_name}' "
-                            "has no authorization. Unauthenticated users can call this endpoint.",
-                            "High",
-                            remediation_steps=[
-                                "Add a Cognito User Pool Authorizer to the API Gateway method",
-                                "Or use an IAM authorizer for service-to-service calls",
-                                "Enable API keys for at minimum basic rate-limiting",
-                            ],
-                            alternative_solutions=[
-                                "Use AWS WAF with API Gateway to add IP-based or rate-limit rules",
-                                "Implement a Lambda authorizer for custom token validation",
-                            ],
+                    try:
+                        method_detail = apigw.get_method(
+                            restApiId=api_id,
+                            resourceId=res["id"],
+                            httpMethod=method,
                         )
-                        found.append(r)
-                        save_risk(table, r)
+                        auth = method_detail.get("authorizationType", "NONE")
+                        api_key_req = method_detail.get("apiKeyRequired", False)
+                        if auth == "NONE" and not api_key_req:
+                            r = build_risk(
+                                "API Gateway", f"{api_name}/{res.get('path', '?')}",
+                                "API Route Missing Authorization",
+                                f"Method {method} on '{res.get('path')}' in API '{api_name}' "
+                                "has no authorization. Unauthenticated users can call this endpoint.",
+                                "High",
+                                remediation_steps=[
+                                    "Add a Cognito User Pool Authorizer to the API Gateway method",
+                                    "Or use an IAM authorizer for service-to-service calls",
+                                    "Enable API keys for at minimum basic rate-limiting",
+                                ],
+                                alternative_solutions=[
+                                    "Use AWS WAF with API Gateway to add IP-based or rate-limit rules",
+                                    "Implement a Lambda authorizer for custom token validation",
+                                ],
+                            )
+                            found.append(r)
+                            save_risk(table, r)
+                    except ClientError as e:
+                        logger.warning(f"get_method {api_id}/{method}: {e}")
+                        continue
         except ClientError as e:
             logger.warning(f"get_resources for API {api_id}: {e}")
 
@@ -163,6 +174,58 @@ def scan_cognito_pools(cognito, table):
         except ClientError as e:
             logger.warning(f"describe_user_pool {pool_id}: {e}")
 
+    return found
+
+
+# ---------------------------------------------------------------------------
+# API Gateway — check p95 latency against mobile threshold
+# ---------------------------------------------------------------------------
+
+def scan_api_latency(apigw, cw, table, latency_threshold_ms):
+    found = []
+    try:
+        apis = apigw.get_rest_apis().get("items", [])
+    except ClientError as e:
+        logger.error(f"get_rest_apis (latency): {e}")
+        return found
+
+    now = datetime.now(timezone.utc)
+    start = now - timedelta(hours=1)
+
+    for api in apis:
+        api_name = api.get("name", api["id"])
+        try:
+            resp = cw.get_metric_statistics(
+                Namespace="AWS/ApiGateway",
+                MetricName="Latency",
+                Dimensions=[{"Name": "ApiName", "Value": api_name}],
+                StartTime=start,
+                EndTime=now,
+                Period=3600,
+                Statistics=["p95"],
+            )
+            datapoints = resp.get("Datapoints", [])
+            p95_latency = datapoints[0].get("p95", 0) if datapoints else 0
+            if p95_latency > latency_threshold_ms:
+                r = build_risk(
+                    "API Gateway", api_name,
+                    "High Mobile API Latency (p95)",
+                    f"p95 latency for '{api_name}' is {int(p95_latency)}ms, above the {latency_threshold_ms}ms mobile threshold.",
+                    "High",
+                    remediation_steps=[
+                        "Increase Lambda memory — this also increases CPU allocation",
+                        "Enable provisioned concurrency to eliminate cold starts",
+                        "Add DynamoDB DAX or ElastiCache to reduce read latency",
+                    ],
+                    alternative_solutions=[
+                        "Use CloudFront in front of API Gateway for edge caching",
+                        "Move to HTTP API v2 (lower latency than REST API)",
+                    ],
+                )
+                found.append(r)
+                save_risk(table, r)
+        except ClientError as e:
+            logger.warning(f"CloudWatch latency for {api_name}: {e}")
     return found
 
 
@@ -279,19 +342,41 @@ def lambda_handler(event, context):
     apigw   = boto3.client("apigateway",  region_name=REGION)
     cognito = boto3.client("cognito-idp", region_name=REGION)
     iam     = boto3.client("iam",         region_name=REGION)
+    cw      = boto3.client("cloudwatch",  region_name=REGION)
 
     purge_module_risks(table, "mobile")
+
+    _start = time.time()
 
     all_risks = []
     all_risks += scan_api_gateway(apigw, table)
     all_risks += scan_cognito_pools(cognito, table)
     all_risks += scan_iam_lambda_roles(iam, table)
+    all_risks += scan_api_latency(apigw, cw, table, latency_ms)
 
     emit_scan_completed("mobile", all_risks)
 
-    logger.info(f"mobile scan complete -- {len(all_risks)} risk(s) (latency threshold: {latency_ms}ms)")
+    duration_ms = int((time.time() - _start) * 1000)
+    try:
+        cw.put_metric_data(
+            Namespace="CloudSentinel/Performance",
+            MetricData=[{
+                "MetricName": "ScanDurationMs",
+                "Dimensions": [{"Name": "Module", "Value": "mobile"}],
+                "Value": duration_ms,
+                "Unit": "Milliseconds",
+            }],
+        )
+    except Exception as e:
+        logger.warning(f"CloudWatch metric write failed: {e}")
+
+    logger.info(f"mobile scan complete -- {len(all_risks)} risk(s) (latency threshold: {latency_ms}ms) in {duration_ms}ms")
     return {
         "statusCode": 200,
         "headers": CORS_HEADERS,
-        "body": json.dumps({"message": "Mobile scan complete", "risksFound": len(all_risks)}),
+        "body": json.dumps({
+            "message": "Mobile scan complete",
+            "risksFound": len(all_risks),
+            "durationMs": duration_ms,
+        }),
     }

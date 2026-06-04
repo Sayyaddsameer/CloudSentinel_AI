@@ -1,222 +1,226 @@
 # CloudSentinel AI
 
-**Multi-Cloud Security Intelligence Platform — Powered by AWS Serverless and AI**
+**Multi-Cloud Security Intelligence — AWS Serverless + AI**
 
 [![CI](https://github.com/Sayyaddsameer/CloudSentinel_AI/actions/workflows/ci.yml/badge.svg)](https://github.com/Sayyaddsameer/CloudSentinel_AI/actions/workflows/ci.yml)
 ![Python](https://img.shields.io/badge/Python-3.11-3776AB)
 ![AWS](https://img.shields.io/badge/AWS-Serverless-FF9900)
-![API Gateway](https://img.shields.io/badge/API_Gateway-Cognito_JWT-orange)
 ![License](https://img.shields.io/badge/License-Academic-blue)
 
 ---
 
-## Overview
+## What is this?
 
-CloudSentinel AI continuously scans AWS and GCP cloud environments for misconfigurations, IAM vulnerabilities, exposed resources, and compliance gaps. Instead of generic alerts, every detected risk comes with an AI-generated plain-English explanation and step-by-step remediation guide.
+CloudSentinel AI is our final year project. We built a platform that continuously scans cloud infrastructure for security misconfigurations and explains every finding in plain English using AI — not generic alerts, but actual explanations tailored to the specific resource that was flagged.
 
-The platform covers five specialized domains: Cloud Infrastructure, DevOps pipelines, Full-Stack APIs, Data Engineering, and Mobile Backends. A built-in AI chatbot lets users query their specific detected risks in real time without leaving the dashboard.
+The idea came from a frustration we all had: existing security tools dump a list of issues with no context. You get `S3 bucket public access not blocked` with no explanation of why that matters or what to actually do about it. If you are a junior developer who has never thought about security before, that is not helpful.
 
-**Key security properties:**
-- All API endpoints protected by Cognito JWT authorizer (no public access)
-- Cloud credentials never stored in frontend; GCP keys held in AWS Secrets Manager
-- Cross-account scanning via read-only IAM roles deployed through CloudFormation
-- Automated credential revocation on disconnect or session expiry
+We split the problem across five domains — each teammate owns one:
+- **Cloud Infrastructure** (Sameer) — AWS S3, EC2, IAM, GCP buckets and firewalls
+- **DevOps Intelligence** (Vivek) — GitHub Actions CI/CD pipelines
+- **Full-Stack APIs** (Gowrish) — API Gateway authentication, throttling, error rates
+- **Data Engineering** (Ayyan) — DynamoDB encryption, sensitive S3 buckets, Glue jobs
+- **Mobile Backend** (Ambica) — Cognito MFA, Lambda errors, mobile API latency
 
----
-
-## Platform Modules
-
-| Module | What It Scans | Key Detections |
-|--------|---------------|----------------|
-| Cloud Infrastructure | AWS S3, EC2, IAM, GCP GCS, GCP Firewall | Public buckets, open SSH/RDP ports, missing IAM password policy, GCP firewall/bucket exposure |
-| DevOps Intelligence | GitHub Actions CI/CD workflows | Hardcoded secrets, missing test step, missing rollback, no post-deploy monitoring |
-| Full-Stack Application | API Gateway, Lambda metrics | Unauthenticated endpoints, permissive CORS, missing rate limiting, high error rates |
-| Data Engineering | DynamoDB, S3, Glue jobs | Unencrypted tables, public data buckets, repeated ETL job failures |
-| Mobile Backend | Cognito, Lambda, API Routes | MFA disabled, weak password policy, over-permissioned Lambda roles, API auth gaps |
+Akash built the frontend.
 
 ---
 
-## Architecture
+## How it works
+
+When you connect your AWS account and trigger a scan, AWS Step Functions kicks off all five scanners simultaneously. Instead of running one after another (which would take around 10 minutes), they all run in parallel and finish in 2–3 minutes.
+
+Each scanner writes risk records into DynamoDB. An AI explainer Lambda runs on a schedule, picks up records that haven't been explained yet, and calls Amazon Bedrock (Claude 3 Haiku) to write a plain-English explanation and concrete remediation steps for each one. Amazon Comprehend classifies the risk type. If anything Critical or High comes up, Amazon SNS fires an email alert to whoever set up the account.
+
+The frontend is a static site hosted on AWS Amplify, authenticated with Amazon Cognito. Every module page has its own risk dashboard and an AI chatbot where you can ask follow-up questions about what was found.
+
+---
+
+## Architecture overview
 
 ```
-Browser (landing.html / dashboard / module pages)
-  |-- Amazon Cognito (sign-up, sign-in, forgot password, JWT tokens — 30-min expiry)
-  |-- Amazon API Gateway  [ALL routes require Cognito JWT — no NONE endpoints]
-        |-- POST /validate-connection --> cloudsentinel-validate-connection
-        |-- POST /scan-cloud-infra    --> cloudsentinel-cloud-scanner
-        |-- POST /scan-devops         --> cloudsentinel-devops-analyzer
-        |-- POST /scan-fullstack      --> cloudsentinel-fullstack-analyzer
-        |-- POST /scan-data-eng       --> cloudsentinel-data-eng-analyzer
-        |-- POST /scan-mobile         --> cloudsentinel-mobile-analyzer
-        |-- GET  /risks               --> cloudsentinel-risk-reader
-        |-- POST /chat                --> cloudsentinel-chatbot-handler
-        |-- POST /disconnect          --> cloudsentinel-disconnect-handler
+Browser (landing.html → sign in → dashboard)
+  └── Amazon Cognito  (JWT tokens, 30-min expiry, forgot password flow)
+  └── Amazon API Gateway  (ALL routes require a valid Cognito token)
+        ├── POST /validate-connection  →  cloudsentinel-validate-connection
+        ├── POST /scan-cloud-infra     →  cloudsentinel-cloud-scanner
+        ├── POST /scan-devops          →  cloudsentinel-devops-analyzer
+        ├── POST /scan-fullstack       →  cloudsentinel-fullstack-analyzer
+        ├── POST /scan-data-eng        →  cloudsentinel-data-eng-analyzer
+        ├── POST /scan-mobile          →  cloudsentinel-mobile-analyzer
+        ├── GET  /risks                →  cloudsentinel-risk-reader
+        ├── POST /generate-report      →  cloudsentinel-pdf-generator
+        ├── POST /chat                 →  cloudsentinel-chatbot-handler
+        └── POST /disconnect           →  cloudsentinel-disconnect-handler
 
-All scanners write risk records to:
-  Amazon DynamoDB (cloudsentinel-risks)  [Point-In-Time Recovery enabled]
-    |-- module-index GSI   (per-module queries)
-    |-- priority-index GSI (High/Medium/Low filtering)
-    |-- cloudsentinel-ai-explainer (EventBridge hourly) --> Amazon Bedrock (Claude 3 Haiku)
-    |-- cloudsentinel-notification-handler              --> Amazon SNS --> Email alerts
+Scan flow:
+  API Gateway → Step Functions (parallel) → 5 scanners → DynamoDB
+  EventBridge (hourly) → cloudsentinel-ai-explainer → Amazon Bedrock (Claude 3 Haiku)
+                                                     → Amazon Comprehend (risk classification)
+  High/Critical risks → cloudsentinel-notification-handler → Amazon SNS → Email
 
-GCP scanning (when GCP_SECRET_NAME is set):
-  cloud-scanner --> AWS Secrets Manager (GCP service-account JSON)
-    |-- Google Cloud Storage: scans bucket IAM policies for allUsers/allAuthenticatedUsers
-    |-- GCP Compute Engine:   scans firewall rules for open SSH/RDP (0.0.0.0/0)
+GCP scanning (optional, set GCP_SECRET_NAME):
+  cloud-scanner → Secrets Manager (GCP service account JSON key)
+    ├── Google Cloud Storage: checks bucket IAM for allUsers/allAuthenticatedUsers
+    └── GCP Compute Engine: checks firewall rules open to 0.0.0.0/0
 
-On disconnect or session expiry:
-  cloudsentinel-disconnect-handler
-    |-- Assumes cross-account scanner role --> cloudformation:DeleteStack
-    |-- AWS Secrets Manager: ForceDeleteWithoutRecovery (GCP keys)
-    |-- DynamoDB: batch delete all risk records for the module
+On disconnect / session expiry:
+  disconnect-handler → STS AssumeRole → CloudFormation DeleteStack
+                     → Secrets Manager ForceDeleteWithoutRecovery (GCP key)
+                     → DynamoDB batch delete (all risks for that module)
 ```
 
-Full architecture diagrams, sequence flows, and the risk data schema are in [ARCHITECTURE.md](./ARCHITECTURE.md).
+Full architecture with sequence diagrams and the risk data schema: [ARCHITECTURE.md](./ARCHITECTURE.md)
 
 ---
 
-## Tech Stack
+## Tech stack
 
-| Layer | Technology |
-|-------|-----------|
-| Frontend hosting | AWS S3 Static Website / AWS Amplify |
-| Authentication | Amazon Cognito (User Pools, JWT, Forgot Password flow) |
-| API security | Amazon API Gateway + Cognito JWT Authorizer |
-| Serverless compute | AWS Lambda (Python 3.11) |
-| AI reasoning | Amazon Bedrock (Claude 3 Haiku) |
-| Risk storage | Amazon DynamoDB (with GSIs) |
-| Secrets management | AWS Secrets Manager (GCP credentials) |
-| Cross-account access | AWS STS AssumeRole + CloudFormation (read-only scanner role) |
-| Alert delivery | Amazon SNS |
-| Artifact storage | Amazon S3 |
-| Monitoring | Amazon CloudWatch |
+| Layer | What we used |
+|-------|-------------|
+| Frontend | HTML/CSS/JS — hosted on AWS Amplify |
+| Auth | Amazon Cognito (JWT, forgot password, 30-min token expiry) |
+| API security | API Gateway + Cognito JWT authorizer on every route |
+| Compute | AWS Lambda (Python 3.11) |
+| AI explanations | Amazon Bedrock — Claude 3 Haiku |
+| Risk classification | Amazon Comprehend |
+| Storage | Amazon DynamoDB (with GSIs for module and priority filtering) |
+| PDF reports | AWS Lambda + fpdf2 (presigned S3 download URL) |
+| GCP credentials | AWS Secrets Manager |
+| Cross-account scanning | STS AssumeRole + CloudFormation (read-only scanner role) |
+| Alerts | Amazon SNS |
 | Scheduling | Amazon EventBridge |
-| Infrastructure as Code | Terraform >= 1.6 |
+| Metrics | Amazon CloudWatch (scan timing, AI latency) |
+| IaC | Terraform >= 1.6 |
 | CI/CD | GitHub Actions |
 
 ---
 
-## Repository Structure
+## What we scan
+
+| Module | Checks |
+|--------|--------|
+| Cloud Infrastructure | S3 public access, S3 encryption, EC2 open security groups, IAM password policy, GCP firewall, GCP bucket exposure, root account MFA |
+| DevOps | Hardcoded secrets in YAML, missing test step, no rollback, no post-deploy monitoring |
+| Full-Stack | Unauthenticated API endpoints, no throttling, 5XX error rate, high latency |
+| Data Engineering | DynamoDB encryption off, sensitive bucket names publicly accessible, repeated Glue job failures |
+| Mobile Backend | Cognito MFA disabled, weak password policy, Lambda error rate, API response time > 1 second |
+
+---
+
+## Security properties
+
+We tried to be thoughtful about this:
+
+- Every API endpoint requires a Cognito JWT — no endpoint is publicly accessible
+- Tokens expire in 30 minutes, enforced server-side by Cognito and API Gateway (not just a frontend timer)
+- GCP service account keys never touch the frontend — they go straight to Secrets Manager
+- Cross-account AWS scanning uses a read-only CloudFormation-deployed IAM role, not long-lived access keys
+- When you disconnect a provider or your session expires, we automatically delete the CloudFormation stack, purge the GCP secret, and clear all DynamoDB risk records for that module
+
+---
+
+## Repo structure
 
 ```
 CloudSentinel_AI/
-|-- .github/
-|   |-- workflows/ci.yml              # CI: unit tests (fail-fast) + Bandit + Terraform validate
-|-- docs/
-|   |-- cloud-infrastructure-and-ai/  # Architecture, AWS setup, research, specs
-|   |-- devops-intelligence/
-|   |-- frontend-portal/
-|   |-- fullstack-intelligence/
-|   |-- data-engineering-intelligence/
-|   |-- mobile-backend-intelligence/
-|-- infrastructure/
-|   |-- cloudformation/               # Scanner IAM role (cross-account)
-|   |-- iam/lambda_policy.json        # Lambda execution policy (least-privilege)
-|   |-- terraform/                    # Full IaC: all AWS + Security Hub resources
-|-- modules/
-|   |-- cloud-infra/                  # Cloud Infrastructure + AI + GCP scan Lambdas
-|   |-- devops/                       # DevOps Intelligence Lambda
-|   |-- fullstack/                    # Full-Stack Intelligence Lambda
-|   |-- data-eng/                     # Data Engineering Intelligence Lambda
-|   |-- mobile/                       # Mobile Backend Intelligence Lambda
-|   |-- frontend/                     # Frontend portal (HTML/CSS/JS)
-|       |-- landing.html              # Public landing page (dark/light mode)
-|       |-- index.html                # Sign in + forgot password flow
-|       |-- signup.html               # Account registration
-|       |-- dashboard.html            # Main dashboard with AI chatbot
-|       |-- cloud.html / devops.html / fullstack.html / data.html / mobile.html
-|       |-- terms.html / privacy.html # Legal pages
-|       |-- js/env.js                 # Runtime config (API URL, Cognito IDs)
-|       |-- js/auth.js                # Cognito auth (login, signup, forgot password)
-|       |-- js/session.js             # Session timer (login-time based, auto-revoke)
-|       |-- js/app.js                 # Shared utilities (API calls, disconnect API)
-|-- shared/schemas/                   # Risk record JSON schema
-|-- tests/                            # Unit tests for all 5 modules (pytest)
-|   |-- conftest.py                   # Shared fixtures and sys.path setup
-|-- pytest.ini                        # Pytest configuration
-|-- deploy_console.py                 # Full deployment without Terraform
-|-- ARCHITECTURE.md                   # Full architecture and design documentation
-|-- DEPLOYMENT.md                     # Step-by-step deployment guide
-|-- README.md
+├── .github/workflows/ci.yml          # CI: unit tests + Bandit security linting + Terraform validate
+├── docs/
+│   ├── cloud-infrastructure-and-ai/  # Sameer's architecture, AWS setup, research notes, specs
+│   ├── devops-intelligence/          # Vivek's docs
+│   ├── frontend-portal/              # Akash's docs
+│   ├── fullstack-intelligence/       # Gowrish's docs
+│   ├── data-engineering-intelligence/# Ayyan's docs
+│   └── mobile-backend-intelligence/  # Ambica's docs
+├── infrastructure/
+│   ├── cloudformation/               # Scanner IAM role template (deployed to client accounts)
+│   ├── iam/lambda_policy.json        # Least-privilege Lambda execution policy
+│   └── terraform/                    # Full IaC for all AWS resources
+├── modules/
+│   ├── cloud-infra/                  # Cloud scanner, AI explainer, chatbot, risk reader Lambdas
+│   ├── devops/                       # DevOps analyzer Lambda
+│   ├── fullstack/                    # Full-stack analyzer Lambda
+│   ├── data-eng/                     # Data engineering analyzer Lambda
+│   ├── mobile/                       # Mobile backend analyzer Lambda
+│   ├── reporting/                    # PDF report generator Lambda
+│   ├── benchmarking/                 # Benchmarking Lambda (for paper Table II/III data)
+│   └── frontend/                     # Static web portal
+│       ├── landing.html              # Public landing page (dark/light mode toggle)
+│       ├── index.html                # Sign in + forgot password
+│       ├── signup.html               # Account registration
+│       ├── dashboard.html            # Main dashboard with AI chatbot
+│       ├── cloud.html / devops.html / fullstack.html / data.html / mobile.html
+│       ├── js/env.js.example         # Config template (copy to env.js and fill in after deploy)
+│       ├── js/auth.js                # Cognito sign in / sign up / forgot password
+│       ├── js/session.js             # 30-min session timer, auto-disconnect on expiry
+│       └── js/app.js                 # Shared API helpers, disconnect flow
+├── shared/schemas/                   # Risk record JSON schema
+├── tests/                            # Unit tests for all 5 modules (pytest + moto)
+│   └── conftest.py                   # Shared fixtures, mocked AWS, sys.path setup
+├── pytest.ini
+├── deploy_console.py                 # Full deployment without Terraform (Python only)
+├── ARCHITECTURE.md                   # Full design doc
+├── DEPLOYMENT.md                     # Step-by-step setup guide
+└── README.md                         # This file
 ```
 
 ---
 
-## Getting Started
+## Getting started
 
-**Prerequisites:** AWS account with CLI configured, Python 3.11, Git.
+You need: an AWS account with CLI configured, Python 3.11, and Git. That's it.
 
-See [DEPLOYMENT.md](./DEPLOYMENT.md) for the complete guide.
-
-**Quick deploy (no Terraform):**
+**Quick deploy with Terraform (recommended for a clean environment):**
 ```bash
 git clone https://github.com/Sayyaddsameer/CloudSentinel_AI.git
-cd CloudSentinel_AI
+cd CloudSentinel_AI/infrastructure/terraform
+cp terraform.tfvars.example terraform.tfvars
+# Edit terraform.tfvars — at minimum set alert_email and environment
+terraform init && terraform apply
+```
+
+**Quick deploy without Terraform:**
+```bash
 pip install boto3
 python deploy_console.py
 ```
 
-**Quick deploy (Terraform):**
-```bash
-cd infrastructure/terraform
-cp terraform.tfvars.example terraform.tfvars
-# Fill in alert_email and environment
-terraform init && terraform apply
+**Access the portal after deploy:**
+```
+http://cloudsentinel-frontend-<your-account-id>.s3-website-us-east-1.amazonaws.com/landing.html
 ```
 
-**Access the platform:**
-```
-http://cloudsentinel-frontend-<account-id>.s3-website-us-east-1.amazonaws.com/landing.html
-```
+Full setup instructions including Bedrock model activation and GCP integration: [DEPLOYMENT.md](./DEPLOYMENT.md)
 
 ---
 
-## Security Architecture
-
-| Control | Implementation |
-|---------|---------------|
-| Authentication | Amazon Cognito User Pools — access tokens expire in **30 minutes** (enforced by Cognito, not client) |
-| API Authorization | All 9 endpoints use `COGNITO_USER_POOLS` authorizer — API Gateway rejects any missing or expired token |
-| Password Recovery | Cognito ForgotPassword + ConfirmForgotPassword (code sent to email) |
-| Session Management | 30-min token expiry enforced **server-side** by Cognito + API Gateway; client timer matches |
-| Credential Storage | GCP service account keys in AWS Secrets Manager only; never in frontend code or env vars |
-| Cross-account Access | Read-only IAM role deployed via CloudFormation; STS AssumeRole scoped to `cloudsentinel-scanner-role` |
-| Automated Revocation | On disconnect or session expiry: CFN stack deleted, GCP secret purged, DynamoDB risks cleared |
-| DynamoDB Backup | Point-In-Time Recovery (PITR) enabled — any-second restore up to 35 days |
-
----
-
-## Running Tests
+## Running tests
 
 ```bash
-# Install dependencies
 pip install boto3 "moto[all]" pytest pytest-cov
-
-# Run all unit tests
 pytest tests/ -v
-
-# Run with coverage report
 pytest tests/ -v --cov=modules --cov-report=term-missing
 ```
 
-The test suite covers all 5 Lambda modules with mocked AWS services (no real AWS credentials needed).
+No real AWS credentials needed — the test suite mocks all AWS services with moto.
 
 ---
 
 ## Team
 
-| Name | GitHub | Module |
-|------|--------|--------|
-| Sayyad Sameer | [@Sayyaddsameer](https://github.com/Sayyaddsameer) | Cloud Infrastructure, AI Layer, Platform Lead |
-| Kantipudi Vivek Vardhan | [@vivekkantipudi](https://github.com/vivekkantipudi) | DevOps Intelligence |
-| Janapareddy Dyns Gowrish | [@gowrishjanapareddy](https://github.com/gowrishjanapareddy) | Full-Stack Intelligence |
-| Bikkavolu Srivallisa Sai Veerabhadra Ayyan | [@23P31A0506](https://github.com/23P31A0506) | Data Engineering Intelligence |
-| Muramalla Ambica Sai Ram | [@AmbicaSairam](https://github.com/AmbicaSairam) | Mobile Backend Intelligence |
-| Bogavalli Akash | [@Akashbogavalli69](https://github.com/Akashbogavalli69) | Frontend Portal |
+This is a six-person academic project at Aditya University.
+
+| Name | Module |
+|------|--------|
+| Sayyad Sameer | Cloud Infrastructure + AI Layer + Platform Lead |
+| Kantipudi Vivek Vardhan | DevOps Intelligence |
+| Janapareddy Dyns Gowrish | Full-Stack Intelligence |
+| Bikkavolu Srivallisa Sai Veerabhadra Ayyan | Data Engineering Intelligence |
+| Muramalla Ambica Sai Ram | Mobile Backend Intelligence |
+| Bogavalli Akash | Frontend Portal |
 
 ---
 
 ## License
 
-Developed as part of an academic engineering initiative at Aditya University.
-All rights reserved by the contributing team members.
+Academic project — Aditya University. All rights reserved by the team members listed above.

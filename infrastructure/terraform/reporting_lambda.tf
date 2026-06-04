@@ -116,7 +116,7 @@ resource "aws_lambda_function" "pdf_generator" {
       REPORTS_BUCKET       = aws_s3_bucket.reports.bucket
       AWS_REGION           = var.aws_region
       PRESIGNED_URL_EXPIRY = "3600"
-      AMPLIFY_DOMAIN       = "https://${aws_amplify_app.frontend.default_domain}"
+      AMPLIFY_DOMAIN       = var.app_url != "" ? var.app_url : ""
     }
   }
 
@@ -180,17 +180,17 @@ resource "aws_lambda_permission" "pdf_generator_apigw" {
   action        = "lambda:InvokeFunction"
   function_name = aws_lambda_function.pdf_generator.function_name
   principal     = "apigateway.amazonaws.com"
-  source_arn    = "${aws_api_gateway_rest_api.cloudsentinel_api.execution_arn}/*/*"
+  source_arn    = "${aws_api_gateway_rest_api.api.execution_arn}/*/*"
 }
 
 resource "aws_api_gateway_resource" "generate_report" {
-  rest_api_id = aws_api_gateway_rest_api.cloudsentinel_api.id
-  parent_id   = aws_api_gateway_rest_api.cloudsentinel_api.root_resource_id
+  rest_api_id = aws_api_gateway_rest_api.api.id
+  parent_id   = aws_api_gateway_rest_api.api.root_resource_id
   path_part   = "generate-report"
 }
 
 resource "aws_api_gateway_method" "generate_report_post" {
-  rest_api_id   = aws_api_gateway_rest_api.cloudsentinel_api.id
+  rest_api_id   = aws_api_gateway_rest_api.api.id
   resource_id   = aws_api_gateway_resource.generate_report.id
   http_method   = "POST"
   authorization = "COGNITO_USER_POOLS"
@@ -198,7 +198,7 @@ resource "aws_api_gateway_method" "generate_report_post" {
 }
 
 resource "aws_api_gateway_integration" "generate_report" {
-  rest_api_id             = aws_api_gateway_rest_api.cloudsentinel_api.id
+  rest_api_id             = aws_api_gateway_rest_api.api.id
   resource_id             = aws_api_gateway_resource.generate_report.id
   http_method             = aws_api_gateway_method.generate_report_post.http_method
   integration_http_method = "POST"

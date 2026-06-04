@@ -216,6 +216,29 @@ def scan_security_groups(clients, table):
                         found.append(r)
                         save_risk(table, r)
                         break
+            # IPv6 check -- ::/0 is also fully open to the internet
+            for cidr6 in rule.get("Ipv6Ranges", []):
+                if cidr6.get("CidrIpv6") != "::/0":
+                    continue
+                for port, label in watch_ports.items():
+                    if from_p <= port <= to_p:
+                        r = build_risk(
+                            "cloud-infra", "EC2 Security Group", sg_name,
+                            f"Security Group Open {label} to Internet (IPv6)",
+                            f"Security group {sg_name} allows inbound {label} (port {port}) from ::/0 (all IPv6 addresses).",
+                            "High",
+                            remediation_steps=[
+                                f"Restrict port {port} to specific trusted IPv6 ranges",
+                                "Use AWS Systems Manager Session Manager instead of open SSH",
+                            ],
+                            alternative_solutions=[
+                                "Place EC2 instances behind a bastion host",
+                                "Enable AWS Client VPN for private access",
+                            ],
+                        )
+                        found.append(r)
+                        save_risk(table, r)
+                        break
 
     return found
 
@@ -546,9 +569,9 @@ def lambda_handler(event, context):
     if "gcp" in providers:
         all_risks += scan_gcp_resources(table)
 
-    all_risks += scan_azure_resources(table)  # Future scope (v2)
-
-    generate_graph_topology()  # Future scope (v2)
+    # Azure scanning is future scope (v2) — only call if provider explicitly requested
+    if "azure" in providers:
+        all_risks += scan_azure_resources(table)
 
     # Emit ScanCompleted event so EventBridge triggers notification_handler
     emit_scan_completed("cloud-infra", all_risks)

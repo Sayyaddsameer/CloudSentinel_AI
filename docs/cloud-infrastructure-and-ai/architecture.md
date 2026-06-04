@@ -1,11 +1,9 @@
-# Cloud Infrastructure Intelligence -- Architecture
+# Cloud Infrastructure Intelligence — Architecture
+## Sameer's module
 
-## Overview
+This is the main scanner module and the one I spent the most time on. It connects to an AWS account using a read-only cross-account IAM role that we deploy via a one-click CloudFormation URL — so the client doesn't need to manually create anything. GCP scanning is optional and uses a service account key stored in AWS Secrets Manager.
 
-The Cloud Infrastructure module is the primary scanner module of CloudSentinel AI.
-It connects to an AWS account via a read-only cross-account IAM role deployed
-through CloudFormation, and optionally to GCP via a service account key stored
-in AWS Secrets Manager.
+The Lambda functions in this module also include the AI explainer, chatbot, notification handler, and risk reader — basically everything that touches the core platform.
 
 ---
 

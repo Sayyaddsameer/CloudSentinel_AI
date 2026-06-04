@@ -73,8 +73,11 @@ def scan_all(table):
 
 
 def lambda_handler(event, context):
-    module = (event.get("queryStringParameters") or {}).get("module", "")
-    priority_filter = (event.get("queryStringParameters") or {}).get("priority", "")
+    qp             = event.get("queryStringParameters") or {}
+    module         = qp.get("module", "")
+    priority_filter = qp.get("priority", "")
+    # ?status=OPEN (default) hides RESOLVED risks; ?status=ALL shows everything
+    status_filter  = qp.get("status", "OPEN").upper()
 
     ddb   = boto3.resource("dynamodb", region_name=REGION)
     table = ddb.Table(TABLE_NAME)
@@ -95,6 +98,10 @@ def lambda_handler(event, context):
     # Deduplicate and remove false positives
     items = deduplicate(items)
     items = filter_ignored(items)
+
+    # Status filter: OPEN (default) = hide RESOLVED; ALL = show everything
+    if status_filter != "ALL":
+        items = [i for i in items if i.get("status", "OPEN").upper() != "RESOLVED"]
 
     if priority_filter:
         items = [i for i in items if i.get("riskPriority", "").lower() == priority_filter.lower()]

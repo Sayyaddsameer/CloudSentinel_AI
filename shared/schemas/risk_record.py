@@ -11,7 +11,7 @@ from datetime import datetime, timezone
 from typing import List
 
 
-VALID_PRIORITIES     = {"High", "Medium", "Low"}
+VALID_PRIORITIES     = {"Critical", "High", "Medium", "Low"}
 VALID_STATUSES       = {"OPEN", "IN_PROGRESS", "RESOLVED"}
 VALID_CLOUD_PROVIDERS = {"AWS", "GCP", "Azure"}
 

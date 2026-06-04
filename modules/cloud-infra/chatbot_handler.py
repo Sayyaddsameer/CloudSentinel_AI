@@ -15,10 +15,9 @@ BEDROCK_MODEL = os.environ.get("BEDROCK_MODEL_ID", "anthropic.claude-3-haiku-202
 CONTEXT_LIMIT = int(os.environ.get("CHATBOT_CONTEXT_RISKS", "20"))
 MAX_TOKENS    = int(os.environ.get("MAX_TOKENS", "600"))
 
-# Initialize clients outside the handler for connection reuse across invocations (reduces cold-starts)
-ddb   = boto3.resource("dynamodb", region_name=REGION)
-table = ddb.Table(TABLE_NAME)
-bedrock = boto3.client("bedrock-runtime", region_name=REGION)
+# NOTE: DynamoDB and Bedrock clients are created inside lambda_handler so that
+# unittest.mock.patch("boto3.client") applied in tests intercepts them correctly.
+# A module-level client escapes any mock that is set up after import time.
 
 # Use environment variable for CORS domain, fallback to * if not set to avoid breaking dev
 AMPLIFY_DOMAIN = os.environ.get("AMPLIFY_DOMAIN", "*")
@@ -183,6 +182,11 @@ def _graceful_fallback(risks: list, module: str) -> str:
 
 def lambda_handler(event, context):
     logger.info("chatbot-handler invoked")
+
+    # Initialize clients inside handler so test patches (mock boto3.client) work
+    ddb     = boto3.resource("dynamodb", region_name=REGION)
+    table   = ddb.Table(TABLE_NAME)
+    bedrock = boto3.client("bedrock-runtime", region_name=REGION)
 
     try:
         body = json.loads(event.get("body") or "{}")

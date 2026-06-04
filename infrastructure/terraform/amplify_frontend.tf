@@ -1,9 +1,10 @@
 # Amplify Frontend — Bogavalli Akash
 
 resource "aws_amplify_app" "portal" {
+  count        = var.github_token != "" ? 1 : 0
   name         = "${var.project}-portal"
   repository   = "https://github.com/Sayyaddsameer/CloudSentinel_AI"
-  access_token = var.github_token
+  access_token = var.github_token != "" ? var.github_token : null
 
   build_spec = <<-EOT
     version: 1
@@ -28,19 +29,22 @@ resource "aws_amplify_app" "portal" {
 }
 
 resource "aws_amplify_branch" "feature_frontend" {
-  app_id            = aws_amplify_app.portal.id
+  count             = var.github_token != "" ? 1 : 0
+  app_id            = aws_amplify_app.portal[0].id
   branch_name       = "feature/frontend"
   stage             = "DEVELOPMENT"
   enable_auto_build = true
 }
 
 resource "aws_amplify_branch" "develop" {
-  app_id            = aws_amplify_app.portal.id
+  count             = var.github_token != "" ? 1 : 0
+  app_id            = aws_amplify_app.portal[0].id
   branch_name       = "develop"
   stage             = "DEVELOPMENT"
   enable_auto_build = true
 }
 
 output "amplify_default_domain" {
-  value = "https://${aws_amplify_branch.develop.branch_name}.${aws_amplify_app.portal.default_domain}"
+  sensitive = true
+  value     = var.github_token != "" ? "https://${aws_amplify_branch.develop[0].branch_name}.${aws_amplify_app.portal[0].default_domain}" : "(Amplify not configured — set github_token to enable)"
 }

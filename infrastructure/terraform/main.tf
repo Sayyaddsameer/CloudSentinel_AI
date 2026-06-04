@@ -331,6 +331,13 @@ resource "aws_api_gateway_rest_api" "api" {
   tags = { Project = var.project }
 }
 
+resource "aws_api_gateway_authorizer" "cognito" {
+  name          = "${var.project}-cognito-authorizer"
+  type          = "COGNITO_USER_POOLS"
+  rest_api_id   = aws_api_gateway_rest_api.api.id
+  provider_arns = [aws_cognito_user_pool.users.arn]
+}
+
 resource "aws_api_gateway_deployment" "dev" {
   rest_api_id = aws_api_gateway_rest_api.api.id
   depends_on  = [

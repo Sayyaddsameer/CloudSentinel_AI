@@ -17,11 +17,9 @@ BEDROCK_MODEL = os.environ.get("BEDROCK_MODEL_ID", "anthropic.claude-3-haiku-202
 MAX_TOKENS  = int(os.environ.get("MAX_TOKENS", "400"))
 MAX_RISKS   = int(os.environ.get("MAX_RISKS_PER_RUN", "50"))
 
-# Initialize clients globally for reuse
-ddb      = boto3.resource("dynamodb", region_name=REGION)
-table    = ddb.Table(TABLE_NAME)
-bedrock  = boto3.client("bedrock-runtime", region_name=REGION)
-comp     = boto3.client("comprehend", region_name=REGION)
+# NOTE: clients are initialized inside lambda_handler (not globally) so that
+# unit-test patches applied via unittest.mock.patch("boto3.client") are effective.
+# A module-level client is created before any test patch is active and bypasses mocks.
 
 
 # ---------------------------------------------------------------------------
@@ -105,10 +103,13 @@ def fetch_open_risks(table):
     """Scan for OPEN risks that have no AI explanation yet."""
     try:
         response = table.scan(
-            FilterExpression=Attr("status").eq("OPEN") & Attr("aiExplanation").eq(""),
-            Limit=MAX_RISKS,
+            FilterExpression=(
+                Attr("status").eq("OPEN") &
+                (Attr("aiExplanation").eq("") | Attr("aiExplanation").not_exists())
+            )
         )
-        return response.get("Items", [])
+        items = response.get("Items", [])[:MAX_RISKS]
+        return items
     except ClientError as e:
         logger.error(f"DynamoDB scan failed: {e}")
         return []
@@ -137,6 +138,12 @@ def update_risk(table, risk, explanation, category):
 
 def lambda_handler(event, context):
     logger.info("ai-explainer started")
+
+    # Initialize clients here (not globally) so test mocks are effective
+    ddb     = boto3.resource("dynamodb", region_name=REGION)
+    table   = ddb.Table(TABLE_NAME)
+    bedrock = boto3.client("bedrock-runtime", region_name=REGION)
+    comp    = boto3.client("comprehend",       region_name=REGION)
 
     risks = fetch_open_risks(table)
     logger.info(f"{len(risks)} risk(s) need AI explanation")

@@ -1,10 +1,8 @@
-# CloudSentinel Test Files
-# ========================
-# This directory contains example files to create intentional security
-# risks in AWS and GitHub to test each CloudSentinel module.
-#
-# Each file is safe and creates ONLY test resources.
-# Always run cleanup commands after testing.
+# Sample Test Triggers
+
+These are files we use to intentionally create misconfigured AWS resources so we can test that each CloudSentinel module actually detects what it's supposed to detect. Run them, trigger a scan, check that the risks show up, then clean up.
+
+**Important:** Always run the cleanup commands after testing. These files create real AWS resources that cost money if left running.
 
 ## File Index
 

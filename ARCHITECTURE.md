@@ -1,64 +1,56 @@
-# CloudSentinel -- Architecture
+# CloudSentinel AI — Architecture
 
-> AI-Powered Multi-Cloud Engineering Risk Intelligence Platform
+> How we built it, why we made the decisions we did, and how everything connects.
 
 ---
 
 ## Table of Contents
 
-- [Problem Statement](#problem-statement)
-- [Project Overview](#project-overview)
-- [Objectives](#objectives)
+- [Why we built this](#why-we-built-this)
+- [What it does](#what-it-does)
 - [System Architecture](#system-architecture)
 - [Module Architectures](#module-architectures)
 - [Step Functions Orchestration](#step-functions-orchestration)
-- [AI Chatbot Architecture](#ai-chatbot-architecture)
-- [Risk Intelligence Model](#risk-intelligence-model)
-- [Risk Prioritization Logic](#risk-prioritization-logic)
-- [System Workflow](#system-workflow)
+- [AI Chatbot](#ai-chatbot)
+- [Risk Data Model](#risk-data-model)
+- [Risk Prioritization](#risk-prioritization)
+- [Full System Workflow](#full-system-workflow)
 - [Frontend Architecture](#frontend-architecture)
-- [Session and Security Model](#session-and-security-model)
-- [Platform Modules](#platform-modules)
-- [Technologies and Services](#technologies-and-services)
-- [Expected Outcomes](#expected-outcomes)
+- [Security and Session Model](#security-and-session-model)
+- [Module Summary](#module-summary)
+- [Technologies Used](#technologies-used)
+- [What we set out to achieve](#what-we-set-out-to-achieve)
 
 ---
 
-## Problem Statement
+## Why we built this
 
-When you are running infrastructure across multiple cloud services, things go wrong quietly. S3 buckets get misconfigured. Security groups accumulate open ports. CI/CD pipelines grow hardcoded secrets over time. Data buckets lose their encryption settings after an update. These issues rarely announce themselves — they show up later, usually at the worst possible moment.
+The biggest source of real cloud breaches is not sophisticated zero-day exploits. It is misconfigured infrastructure. S3 buckets left open, security groups with port 22 open to the world, CI/CD pipelines where someone committed an API key six months ago and it's still there. These are detectable. They just require someone to actually check.
 
-The harder problem is that existing monitoring tools generate a lot of noise but very little signal. You get an alert, you look at the resource, and you still do not know if it is actually dangerous or how urgent it is. If you are a backend developer and the alert is about a Glue job failure, you might not even know where to start.
+The problem with existing tools is that they either cost too much for a student or small team to use, or they dump a wall of alerts without any explanation of why something matters. If you're a mobile developer who suddenly sees `DynamoDB table SSEDescription.Status = DISABLED` flagged as a risk — that means nothing to you unless someone explains what SSE is, why it matters for your table specifically, and what you need to click to fix it.
 
-We built CloudSentinel because we wanted a tool that not only finds these issues but explains them in language that any engineer can act on, regardless of which part of the stack they work in.
-
----
-
-## Project Overview
-
-CloudSentinel is a fully serverless platform running on AWS. Each of the five engineering domains has its own Lambda-based scanner. When a scan runs, AWS Step Functions coordinates all five scanners in parallel — what would take around 10 minutes running sequentially finishes in 2–3 minutes this way.
-
-Detected risks get stored in DynamoDB. An AI explainer Lambda then picks up each risk record and calls Amazon Bedrock (Claude 3 Haiku) to write a plain-language explanation and remediation guide. Amazon Comprehend classifies the risk into a category. When High-priority risks are found, Amazon SNS sends an email alert to the account owner.
-
-The frontend is a static web portal on AWS Amplify, authenticated through Amazon Cognito. Each module has its own dashboard page showing risk cards. There is also an AI chatbot on every module page that lets you ask questions about what was detected and get contextual answers back from the same Claude model.
+We wanted a tool that finds these issues AND explains them in plain language using AI, with actual remediation steps — not just a link to the AWS docs.
 
 ---
 
-## Objectives
+## What it does
 
-- Detect infrastructure and operational risks across five engineering domains from a single platform
-- Support multi-cloud scanning across AWS and GCP environments
-- Generate AI-powered explanations for every detected risk using Amazon Bedrock
-- Prioritize risks by severity so teams can focus on what matters most
-- Deliver actionable remediation guidance with concrete steps and alternatives
-- Send real-time email notifications when High-priority risks are detected
-- Enable interactive troubleshooting through an AI assistant chatbot
+Six of us built this over a semester, each owning one domain:
+
+- **Sameer** — Cloud Infrastructure (AWS + GCP scanning, AI explainer, chatbot, platform)
+- **Vivek** — DevOps Intelligence (GitHub Actions CI/CD pipeline analysis)
+- **Gowrish** — Full-Stack Intelligence (API Gateway, throttling, error rates)
+- **Ayyan** — Data Engineering (DynamoDB, S3 data buckets, Glue ETL jobs)
+- **Ambica** — Mobile Backend (Cognito, Lambda, mobile API latency)
+- **Akash** — Frontend Portal (dashboard, module pages, session management)
+
+When you trigger a scan, all five scanners run simultaneously in parallel using AWS Step Functions. Instead of taking 10 minutes sequentially, it finishes in 2–3 minutes. Every detected risk gets stored in DynamoDB, then an AI explainer Lambda processes each one with Claude 3 Haiku to write a plain-English explanation and step-by-step fix. If anything Critical or High comes up, an SNS email goes out immediately.
 
 ---
 
 ## System Architecture
 
-The platform is composed of six integrated layers: presentation, authentication, API, compute, AI analysis, and data.
+The platform has six layers: frontend, auth, API, compute, AI, and data.
 
 ```mermaid
 flowchart TD
@@ -123,7 +115,7 @@ flowchart TD
     subgraph Notification Layer
         AIX --> NH[cloudsentinel-notification-handler]
         NH --> SNS[Amazon SNS\ncloudsentinel-alerts]
-        SNS --> Email[Email to user]
+        SNS --> Email[Email to account owner]
     end
 
     DDB --> S3[(Amazon S3\nArtifacts, Reports)]
@@ -150,9 +142,9 @@ flowchart TD
 
 ## Module Architectures
 
-### Cloud Infrastructure Intelligence
+### Cloud Infrastructure (Sameer)
 
-**Module:** Cloud Infrastructure and AI Layer -- Lambda: `cloudsentinel-cloud-scanner`
+This is the core scanner. It covers AWS and optionally GCP if a service account key is configured. Cross-account scanning works by assuming a read-only IAM role in the target account — the CloudFormation template in `infrastructure/cloudformation/` creates that role in the client's account.
 
 ```mermaid
 flowchart LR
@@ -162,6 +154,7 @@ flowchart LR
         Handler --> S3[scan_s3_buckets\nPublic access, Encryption]
         Handler --> SG[scan_security_groups\nOpen SSH/RDP to 0.0.0.0/0]
         Handler --> IAM[scan_iam_password_policy\nStrength, Existence]
+        Handler --> MFA[scan_root_mfa\nRoot account MFA]
         Handler --> Config[scan_aws_config_findings\nNon-compliant managed rules]
     end
 
@@ -177,6 +170,7 @@ flowchart LR
     S3 --> DDB[(DynamoDB)]
     SG --> DDB
     IAM --> DDB
+    MFA --> DDB
     Config --> DDB
     GCP --> DDB
     CrossAcct --> DDB
@@ -184,16 +178,16 @@ flowchart LR
 
 ---
 
-### DevOps Intelligence
+### DevOps Intelligence (Vivek)
 
-**Module:** DevOps Intelligence -- Lambda: `cloudsentinel-devops-analyzer`
+Vivek's module analyzes CI/CD pipeline configuration files — primarily GitHub Actions YAML. It supports two modes: manual (you POST the config) and webhook (GitHub pushes it on every commit). The webhook mode verifies the HMAC signature before processing, so we're not just accepting arbitrary payloads.
 
 ```mermaid
 flowchart LR
     Trigger([POST /scan-devops\nor GitHub Webhook]) --> Handler[lambda_handler]
 
     subgraph Pipeline Analysis
-        Handler --> Secrets[scan_environment_variables\nRegex: credentials, API keys, tokens]
+        Handler --> Secrets[scan_for_secrets\nRegex: credentials, API keys, tokens]
         Handler --> Tests[scan_for_test_steps\nLooks for pytest, test in CI steps]
         Handler --> Rollback[scan_for_rollback\nLooks for rollback step in pipeline]
         Handler --> Monitor[scan_for_monitoring\nLooks for health check, CloudWatch]
@@ -208,9 +202,11 @@ flowchart LR
 
 ---
 
-### Full-Stack Application Intelligence
+### Full-Stack Intelligence (Gowrish)
 
-**Module:** Full-Stack Application Intelligence -- Lambda: `cloudsentinel-fullstack-analyzer`
+Gowrish's module checks API Gateway configuration and CloudWatch metrics. The key thing it looks for is unauthenticated endpoints — any API method where `authorizationType == NONE` and `apiKeyRequired == false` is fully open to the internet.
+
+He also agreed with Ambica on the latency threshold: web gets 2000ms, mobile gets 1000ms, based on Google's Core Web Vitals research.
 
 ```mermaid
 flowchart LR
@@ -234,9 +230,9 @@ flowchart LR
 
 ---
 
-### Data Engineering Intelligence
+### Data Engineering (Ayyan)
 
-**Module:** Data Engineering Intelligence -- Lambda: `cloudsentinel-data-eng-analyzer`
+Ayyan's module focuses on protecting data. It uses bucket name analysis (not content inspection) to find potentially sensitive S3 buckets — this keeps the permissions minimal and avoids reading actual data. The threshold for Glue job failures is 2 in the last 5 runs, because a single failure is usually transient but repeated failures mean something is actually broken.
 
 ```mermaid
 flowchart LR
@@ -267,9 +263,11 @@ flowchart LR
 
 ---
 
-### Mobile Backend Intelligence
+### Mobile Backend (Ambica)
 
-**Module:** Mobile Backend Intelligence -- Lambda: `cloudsentinel-mobile-analyzer`
+Ambica's module is similar to Gowrish's full-stack scanner but tuned for mobile clients. The 1000ms latency threshold comes from Firebase Performance Monitoring's recommendation. She also added CORS detection because Flutter Web apps running in a browser are subject to the same preflight rules as any other browser client.
+
+The distinction between her error detection and Gowrish's: she looks at per-function Lambda errors, he looks at API Gateway 5XX. Together they catch more cases.
 
 ```mermaid
 flowchart LR
@@ -300,7 +298,7 @@ flowchart LR
 
 ## Step Functions Orchestration
 
-AWS Step Functions coordinates the full scan pipeline using an Express workflow. All five module scanners run in parallel, which reduces total scan time from ~10 minutes (sequential) to approximately 2-3 minutes.
+Running five scanners sequentially would take around 10 minutes. With Step Functions parallel execution it finishes in 2–3 minutes. Each scanner Lambda runs independently and writes to DynamoDB directly — failures in one don't stop the others.
 
 ```mermaid
 flowchart TD
@@ -321,7 +319,7 @@ flowchart TD
     C4 --> AIX
     C5 --> AIX
 
-    AIX --> Check{High risks\ndetected?}
+    AIX --> Check{Critical or High\nrisks detected?}
     Check -->|yes| Notify[NotifyUser\nSNS email alert]
     Check -->|no| Done([ScanComplete])
     Notify --> Done
@@ -331,97 +329,106 @@ flowchart TD
     style Notify fill:#D13212,color:#fff
 ```
 
-Each Lambda state has exponential backoff retry (3 attempts, 2x multiplier). Failures in individual scanners are caught and do not stop the rest of the workflow. X-Ray tracing and CloudWatch logs are enabled on the state machine.
+Each Lambda state has exponential backoff retry (3 attempts, 2x multiplier). X-Ray tracing and CloudWatch logs are enabled on the state machine.
 
 ---
 
-## AI Chatbot Architecture
+## AI Chatbot
+
+The chatbot isn't a generic cloud assistant — it has context. When you ask a question, the chatbot Lambda pulls your top 20 most recent risks from DynamoDB and injects them as context into the Bedrock prompt. So when you ask "why is this risky?" it can answer based on the specific resources that were actually flagged in your environment.
 
 ```mermaid
 sequenceDiagram
     participant U as User
-    participant FE as Chat Interface
+    participant FE as Chat Panel
     participant APIGW as API Gateway
     participant Lambda as chatbot-handler
     participant DDB as DynamoDB
     participant BR as Amazon Bedrock
 
-    U->>FE: Asks question about a risk
+    U->>FE: Types a question
     FE->>APIGW: POST /chat { question, module }
-    APIGW->>Lambda: Invoke with payload
-    Lambda->>DDB: Query top 20 risks for module
-    DDB-->>Lambda: Risk records with context
-    Lambda->>BR: InvokeModel - Claude 3 Haiku\n(question + risk context as prompt)
-    BR-->>Lambda: AI-generated answer
+    APIGW->>Lambda: Invoke
+    Lambda->>DDB: Fetch top 20 risks for module
+    DDB-->>Lambda: Risk records
+    Lambda->>BR: Claude 3 Haiku (question + risk context as prompt)
+    BR-->>Lambda: Answer
     Lambda-->>APIGW: { answer }
     APIGW-->>FE: Response
-    FE-->>U: Displayed in chat panel
+    FE-->>U: Shown in chat panel
 
-    Note over Lambda,BR: Example queries handled:\n"Why is this resource risky?"\n"Which risk should I fix first?"\n"What secure alternatives exist?"
+    Note over Lambda,BR: Example questions it handles:<br/>"Why is this risky?"<br/>"Which risk should I fix first?"<br/>"What's the safest way to fix this?"
 ```
 
 ---
 
-## Risk Intelligence Model
+## Risk Data Model
 
-Every detected issue is stored as a structured risk record in DynamoDB.
+Every detected issue is stored as a structured record in DynamoDB.
 
 ```json
 {
-  "resourceId":           "cloud-infra-s3-bucket-my-bucket",
-  "riskTimestamp":        "2024-01-15T10:30:00Z",
-  "scanId":               "scan-uuid",
-  "userId":               "user-uuid",
+  "resourceId":           "cloud-infra-s3-my-bucket",
+  "riskTimestamp":        "2025-06-01T10:30:00Z",
   "module":               "cloud-infra",
   "cloudProvider":        "AWS",
   "resource":             "S3 Bucket",
   "resourceName":         "my-bucket",
   "riskType":             "S3 Public Access Not Fully Blocked",
-  "riskReason":           "One or more Block Public Access settings are disabled on this bucket.",
+  "riskReason":           "One or more Block Public Access settings are disabled.",
   "riskPriority":         "High",
   "remediationSteps":     ["Enable all four Block Public Access settings", "Review bucket policy"],
-  "alternativeSolutions": ["Use pre-signed URLs", "Serve via CloudFront with OAC"],
-  "aiExplanation":        "Filled by ai-explainer Lambda via Amazon Bedrock",
-  "riskCategory":         "Filled by Amazon Comprehend",
+  "alternativeSolutions": ["Use pre-signed URLs for sharing", "Serve via CloudFront with OAC"],
+  "aiExplanation":        "filled by ai-explainer via Amazon Bedrock",
+  "riskCategory":         "filled by Amazon Comprehend",
+  "postureScore":         72,
   "status":               "OPEN",
   "notified":             false,
   "region":               "us-east-1"
 }
 ```
 
-### DynamoDB Table Structure
+### DynamoDB table design
 
 ```mermaid
 flowchart TD
-    T[(cloudsentinel-risks\nTable)] --> PK[Partition Key: resourceId]
+    T[(cloudsentinel-risks)] --> PK[Partition Key: resourceId]
     T --> SK[Sort Key: riskTimestamp]
     T --> GSI1[GSI: module-index\nPK: module, SK: riskTimestamp]
     T --> GSI2[GSI: priority-index\nPK: riskPriority, SK: riskTimestamp]
-    T --> GSI3[GSI: userId-module-index\nPK: userId, SK: module]
 
     GSI1 --> Q1[Module dashboard queries]
-    GSI2 --> Q2[High-priority risk summary]
-    GSI3 --> Q3[Notification handler queries\nby user and module]
+    GSI2 --> Q2[Priority-filtered summaries]
 ```
 
 **Status values:** `OPEN`, `IN_PROGRESS`, `RESOLVED`
-**Priority values:** `High`, `Medium`, `Low`
-**Module values:** `cloud-infra`, `devops`, `fullstack`, `data-eng`, `mobile`
+**Priority values:** `Critical`, `High`, `Medium`, `Low`
+**Modules:** `cloud-infra`, `devops`, `fullstack`, `data-eng`, `mobile`
 
 ---
 
-## Risk Prioritization Logic
+## Risk Prioritization
+
+Sameer introduced a Security Posture Score (0–100) to give a single number that represents overall account health — useful for the paper and also easier to explain to a non-technical audience than a list of individual risk counts.
+
+**Posture score formula:**
+```
+Score = 100 − (20 × Critical + 10 × High + 5 × Medium + 2 × Low)
+Minimum: 0
+```
+
+Individual risks are classified based on:
 
 ```mermaid
 flowchart TD
     Risk([Detected Issue]) --> Factors
 
     subgraph Evaluation Factors
-        Factors --> E[Exposure Level\nIs the resource publicly accessible?]
-        Factors --> I[Impact Severity\nWhat data or system is affected?]
-        Factors --> L[Likelihood of Exploitation\nIs this commonly exploited?]
-        Factors --> S[Resource Sensitivity\nDoes it hold PII or critical data?]
-        Factors --> O[Operational Importance\nIs this a production system?]
+        Factors --> E[Exposure Level\nIs it publicly accessible?]
+        Factors --> I[Impact\nWhat data or system is at risk?]
+        Factors --> L[Likelihood\nIs this commonly exploited?]
+        Factors --> S[Sensitivity\nDoes it hold personal data?]
+        Factors --> O[Operational importance\nIs this production?]
     end
 
     E --> Class[Risk Classification]
@@ -430,14 +437,15 @@ flowchart TD
     S --> Class
     O --> Class
 
-    Class --> H[High -- Immediate action required\nExamples: public S3 bucket, open SSH, no auth on API]
-    Class --> M[Medium -- Address soon\nExamples: weak password policy, missing encryption, no rate limiting]
-    Class --> Lo[Low -- Recommended improvement\nExamples: no bucket versioning, non-critical config gap]
+    Class --> Crit[Critical — fix immediately\nExamples: root MFA off, admin access keys exposed]
+    Class --> H[High — fix soon\nExamples: public S3 bucket, open SSH port, unauthenticated API]
+    Class --> M[Medium — address this sprint\nExamples: weak password policy, no encryption, missing rate limit]
+    Class --> Lo[Low — good practice\nExamples: no bucket versioning, non-critical config gap]
 ```
 
 ---
 
-## System Workflow
+## Full System Workflow
 
 ```mermaid
 sequenceDiagram
@@ -446,64 +454,54 @@ sequenceDiagram
     participant AG as API Gateway
     participant SFN as Step Functions
     participant Scan as Scan Lambda
-    participant Cloud as Cloud APIs
+    participant Cloud as AWS / GCP APIs
     participant AI as AI Explainer
     participant DDB as DynamoDB
     participant SNS as Amazon SNS
-    participant Chat as Chatbot
 
-    U->>P: Login via Cognito
+    U->>P: Sign in via Cognito
     U->>P: Connect module + give consent
     P->>AG: POST /scan-{module}
-    AG->>SFN: StartExecution (all 5 scanners)
-    SFN->>Scan: Invoke module Lambdas in parallel
-    Scan->>Cloud: Collect configuration metadata
-    Cloud-->>Scan: Infrastructure data
-    Scan->>Scan: Risk detection engine runs
-    Scan->>DDB: Write classified risk records (OPEN)
+    AG->>SFN: StartExecution (all 5 scanners in parallel)
+    SFN->>Scan: Invoke module Lambdas
+    Scan->>Cloud: Fetch configuration data
+    Cloud-->>Scan: Infrastructure metadata
+    Scan->>Scan: Run detection checks
+    Scan->>DDB: Write risk records (status: OPEN)
 
-    Note over AI,DDB: Step Functions triggers AI after all scans complete
-    AI->>DDB: Fetch OPEN risks without aiExplanation
+    Note over AI,DDB: After all scans finish
+    AI->>DDB: Fetch risks without aiExplanation
     AI->>AI: Build prompt per risk
-    AI->>AI: Invoke Amazon Bedrock
+    AI->>AI: Call Amazon Bedrock (Claude 3 Haiku)
     AI->>DDB: Update aiExplanation field
 
-    Note over SFN,SNS: If High risks detected
-    SFN->>SNS: Publish email notification
-    SNS-->>U: Email alert with risk summary
+    Note over SFN,SNS: If Critical or High risks found
+    SFN->>SNS: Publish email alert
+    SNS-->>U: Email with risk summary
 
     P->>AG: GET /risks?module=...
     AG->>DDB: Query module-index GSI
-    DDB-->>P: Risk records with AI explanations
-
-    U->>Chat: Ask question about a risk
-    Chat->>AG: POST /chat
-    AG->>Chat: Invoke chatbot-handler
-    Chat->>DDB: Fetch risk context
-    Chat->>AI: Invoke Bedrock with question and context
-    AI-->>Chat: AI answer
-    Chat-->>U: Contextual response in chat panel
+    DDB-->>P: Risk records with AI explanations displayed as cards
 ```
 
 ---
 
 ## Frontend Architecture
 
-**Module:** Frontend Portal -- Hosting: AWS Amplify
+Akash built the frontend as plain HTML/CSS/JS — no framework. It supports dark and light mode (Akash's addition), a configurable session timer, and stores scan history locally in the browser. The AI chatbot panel is embedded on every module page, not just the main dashboard.
 
 ```mermaid
 flowchart TD
     User([User]) --> Amplify[AWS Amplify\nStatic hosting]
 
-    Amplify --> Login[index.html - Login]
-    Amplify --> Signup[signup.html - Registration]
+    Amplify --> Login[index.html - Sign In]
+    Amplify --> Signup[signup.html - Register]
     Amplify --> Dash[dashboard.html - Main Hub]
-    Amplify --> History[history.html - Risk History]
     Amplify --> Modules[Module Pages\ncloud, devops, fullstack, data, mobile]
 
-    Login --> Cognito[Amazon Cognito\nInitiateAuth API]
+    Login --> Cognito[Amazon Cognito\nInitiateAuth]
     Signup --> Cognito
-    Cognito -->|AccessToken + IdToken| Dash
+    Cognito -->|JWT tokens| Dash
 
     Dash --> APIGW_R[GET /risks] --> RR[risk-reader Lambda]
     Dash --> APIGW_S[POST /scan-*] --> Scanner[module Lambda]
@@ -513,101 +511,96 @@ flowchart TD
     style Cognito fill:#D13212,color:#fff
 ```
 
-The frontend uses plain HTML, CSS, and JavaScript with no framework dependencies. It supports light and dark mode, a session idle timeout (30 minutes default, user-configurable), and stores scan history locally in the browser. The AI chatbot panel is embedded on every module page.
-
 ---
 
-## Session and Security Model
+## Security and Session Model
 
-The frontend implements a layered security approach:
+We tried to get the security properties right — not just functional auth, but actually secure.
 
 **Authentication:**
-- Amazon Cognito handles identity -- user pool with email-based sign-in
-- JWT tokens (Access + ID) stored in memory, refresh token in localStorage
-- Demo mode for local development -- any credentials are accepted when Cognito is not configured
+- Cognito User Pools with email-based sign-in
+- JWT tokens (Access + ID) stored in memory; refresh token in localStorage
+- 30-minute token expiry enforced server-side by Cognito AND API Gateway — not just a frontend timer
 
 **Session management:**
 - Idle timeout defaults to 30 minutes
-- Session countdown timer visible in navbar at all times
 - Activity events (mouse, keyboard, scroll) reset the timer
-- Warning modal appears at 60 seconds remaining
-- Session settings let users extend to 15 minutes up to 8 hours
-- Auto-logout redirects to login page with `reason=timeout` in URL
+- Warning modal at 60 seconds remaining
+- Users can adjust timeout between 15 minutes and 8 hours
+- On expiry: frontend calls `/disconnect`, which revokes all cloud credentials
 
 **Login security:**
-- Client-side rate limiting: 3 failed attempts = 60 second lockout, 5 attempts = 5 minute lockout, 10 attempts = 30 minute lockout
-- Attempt counter shown after the second failed attempt
-- Live countdown timer during lockout period
-- Email format validation before API call
+- Client-side rate limiting: 3 failed attempts = 60-second lockout, 5 = 5 minutes, 10 = 30 minutes
+- Failed attempt count shown after the second failure
+- Email format validated before any API call
 
 **Cloud connection security:**
-- AWS connections use CloudFormation or Terraform to deploy a read-only IAM role
-- The role uses an External ID to prevent confused deputy attacks
-- GCP connections use a service account JSON stored in AWS Secrets Manager
-- Users explicitly consent before access is granted
-- Disconnect option removes the cross-account role stack from the user's account
+- AWS: cross-account role deployed via CloudFormation — read-only, with an External ID to prevent confused deputy attacks
+- GCP: service account JSON key stored in AWS Secrets Manager — never touches the frontend
+- Disconnect: CloudFormation stack deleted, GCP secret force-purged, all DynamoDB risk records cleared
 
 ---
 
-## Platform Modules
+## Module Summary
 
-| Module | Lambda | Owner | Key Detections |
+| Module | Lambda | Owner | What it checks |
 |--------|--------|-------|----------------|
-| Cloud Infrastructure | `cloudsentinel-cloud-scanner` | Cloud Infrastructure and AI Layer | Public S3 buckets, open security groups, weak IAM, GCP firewall |
-| DevOps Intelligence | `cloudsentinel-devops-analyzer` | DevOps Intelligence | Hardcoded secrets, missing tests, no rollback, no monitoring |
-| Full-Stack Application | `cloudsentinel-fullstack-analyzer` | Full-Stack Intelligence | Unauthenticated APIs, no rate limiting, high 5XX, high latency |
-| Data Engineering | `cloudsentinel-data-eng-analyzer` | Data Engineering Intelligence | Public data buckets, missing encryption, DynamoDB SSE off, Glue failures |
-| Mobile Backend | `cloudsentinel-mobile-analyzer` | Mobile Backend Intelligence | High latency, error spikes, missing CORS, Lambda errors |
-| Frontend Portal | AWS Amplify (static) | Frontend Portal | Dashboard, risk cards, AI chatbot, scan history, session management |
+| Cloud Infrastructure | `cloudsentinel-cloud-scanner` | Sameer | S3, EC2, IAM, root MFA, GCP buckets and firewalls |
+| DevOps Intelligence | `cloudsentinel-devops-analyzer` | Vivek | Hardcoded secrets, missing tests, no rollback, no post-deploy monitoring |
+| Full-Stack | `cloudsentinel-fullstack-analyzer` | Gowrish | Unauthenticated APIs, no throttling, 5XX error rate, high latency |
+| Data Engineering | `cloudsentinel-data-eng-analyzer` | Ayyan | Sensitive public buckets, DynamoDB encryption off, Glue job failures |
+| Mobile Backend | `cloudsentinel-mobile-analyzer` | Ambica | High latency, Lambda errors, CORS gaps, Cognito MFA |
+| Frontend | AWS Amplify (static) | Akash | Dashboard, risk cards, chatbot, scan history, session timer |
 
 ---
 
-## Technologies and Services
-
-### Cloud Platforms
-
-| Platform | Status |
-|----------|--------|
-| Amazon Web Services (AWS) | Production |
-| Google Cloud Platform (GCP) | Production (GCS + Firewall scanning) |
-| Microsoft Azure | Planned for v2 |
+## Technologies Used
 
 ### AWS Services
 
-| Category | Service | Purpose |
-|----------|---------|---------|
-| AI / ML | Amazon Bedrock (Claude 3 Haiku) | Risk explanations, chatbot responses |
-| AI / ML | Amazon Comprehend | Risk category classification |
-| Orchestration | AWS Step Functions | Parallel scan coordination, AI trigger, SNS routing |
-| Alerting | Amazon SNS | Email notifications on High risk detection |
-| Hosting | AWS Amplify | Frontend portal |
-| Authentication | Amazon Cognito | User identity and session management |
-| API | Amazon API Gateway | Frontend to backend communication |
-| Compute | AWS Lambda (Python 3.11) | Risk detection, AI processing, API handling |
-| Database | Amazon DynamoDB | Structured risk record storage |
-| Storage | Amazon S3 | Logs, reports, scan artifacts |
-| Monitoring | Amazon CloudWatch | Metrics, logs, alarms |
-| Tracing | AWS X-Ray | End-to-end request tracing |
-| Events | Amazon EventBridge | Hourly AI explainer trigger, scan-complete events |
-| Security | AWS IAM | Role-based access control |
-| Security | AWS STS | Cross-account scanning credentials |
-| Security | AWS Secrets Manager | GCP credentials, webhook secrets |
-| Governance | AWS Config | Non-compliant resource detection |
-| IaC | Terraform | Full infrastructure deployment |
-| CI/CD | GitHub Actions | Automated testing and Bandit security scan |
+| Service | How we use it |
+|---------|--------------|
+| Amazon Bedrock (Claude 3 Haiku) | AI explanations + chatbot |
+| Amazon Comprehend | Risk category classification |
+| AWS Step Functions | Parallel scan coordination |
+| Amazon SNS | Email alerts on Critical/High risks |
+| AWS Amplify | Frontend hosting |
+| Amazon Cognito | Auth, JWT tokens, forgot password |
+| Amazon API Gateway | REST API, Cognito JWT authorizer on every route |
+| AWS Lambda (Python 3.11) | All compute |
+| Amazon DynamoDB | Risk records, GSI for module + priority queries |
+| Amazon S3 | Artifacts, PDF reports |
+| Amazon CloudWatch | Logs, metrics (scan timing, AI latency for paper) |
+| AWS X-Ray | Request tracing |
+| Amazon EventBridge | Hourly AI explainer trigger |
+| AWS STS | Cross-account scanning |
+| AWS Secrets Manager | GCP keys, webhook secrets |
+| AWS Config | Non-compliant resource findings |
+| AWS Security Hub | Compliance standards baseline |
+| Terraform | Full infrastructure as code |
+| GitHub Actions | CI: unit tests, Bandit, Terraform validate |
+
+### Cloud coverage
+
+| Cloud | Status |
+|-------|--------|
+| AWS | Full coverage across 5 domains |
+| GCP | Cloud Storage + Compute Engine firewall scanning |
+| Azure | Planned for v2 |
 
 ---
 
-## Expected Outcomes
+## What we set out to achieve
 
-The goal was to build something we would actually use ourselves. Whether that is checking an S3 bucket configuration before a deployment, verifying that a Glue job has not been silently failing, or asking the chatbot why a particular API endpoint was flagged — the platform should make that faster and clearer than looking it up manually.
+We wanted to build something we would actually use. Whether that's checking a bucket configuration before a deployment, figuring out why a Glue job stopped working, or asking the chatbot "is this actually dangerous or can I ignore it" — the platform should answer that faster and more clearly than going through the AWS console manually.
 
-More specifically, by the end of this project we wanted to have:
+Specifically:
 
-- A single portal where you can see risks across all five engineering domains without switching between services
-- AI explanations that are specific to the detected issue, not just generic documentation summaries
-- Email alerts that arrive quickly enough to be useful — not summaries delivered hours after the fact
-- Remediation steps that are actionable and tell you the exact setting or command to run
-- A chatbot that understands the context of your detected risks, not just generic cloud questions
+- A single portal covering all five domains without jumping between services
+- AI explanations specific to the actual resource flagged, not generic documentation summaries
+- Alerts that arrive fast enough to be actionable
+- Remediation steps that tell you the exact setting or command, not just "fix your configuration"
+- A chatbot that knows what's in your environment, not just what's in the AWS docs
+- A quantitative posture score so you can see progress as you fix things
 
-The combination of Step Functions orchestration, domain-specific scanners, Bedrock explanations, Comprehend classification, and SNS alerts is what makes this more than just another monitoring dashboard.
+The combination of Step Functions parallel scanning, domain-specific detection, Bedrock explanations, Comprehend classification, posture scoring, and PDF reporting is what makes this more than a monitoring dashboard.

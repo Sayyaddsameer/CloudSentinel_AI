@@ -409,10 +409,32 @@ def lambda_handler(event, context):
             pipeline_config = _fetch_workflow_from_github(repo_name) or {"jobs": {"build": {"steps": []}}}
     else:
         # Manual mode — pipeline_config provided directly in the body, or fetch via API
-        repo_name       = body.get("repo_name", os.environ.get("DEFAULT_GITHUB_REPO", ""))
+        repo_name = body.get("repo_name") or os.environ.get("DEFAULT_GITHUB_REPO", "")
         pipeline_config = body.get("pipeline_config")
-        
+
         if not pipeline_config:
+            if not repo_name:
+                # No repo and no inline config — can't scan, return informative risk
+                logger.warning("No repo_name provided and DEFAULT_GITHUB_REPO not set — skipping GitHub fetch")
+                no_repo_risk = build_risk(
+                    "(not configured)",
+                    "GitHub Repository Not Configured",
+                    "No GitHub repository was provided in the scan request and DEFAULT_GITHUB_REPO "
+                    "is not set. The DevOps scanner cannot analyse CI/CD pipelines without a repository.",
+                    "Medium",
+                    remediation_steps=[
+                        "Pass repo_name in the scan request body (e.g. 'owner/repo')",
+                        "Or set DEFAULT_GITHUB_REPO in the Lambda environment variables",
+                        "Or set github_pat_secret_arn in terraform.tfvars and re-deploy",
+                    ]
+                )
+                save_risk(table, no_repo_risk)
+                emit_scan_completed("devops", [no_repo_risk])
+                return {
+                    "statusCode": 200,
+                    "headers": CORS_HEADERS,
+                    "body": json.dumps({"message": "DevOps scan: no repository configured", "risksFound": 1}),
+                }
             if not get_github_pat():
                 logger.warning("GITHUB_PAT_SECRET_ARN not configured; generating risk instead of silent demo mode.")
                 all_risks = [build_risk(
@@ -435,7 +457,7 @@ def lambda_handler(event, context):
                     "headers": CORS_HEADERS,
                     "body": json.dumps({"message": "DevOps scan incomplete (PAT missing)", "risksFound": 1}),
                 }
-            
+
             pipeline_config = _fetch_workflow_from_github(repo_name) or {"jobs": {"build": {"steps": []}}}
 
     steps     = flatten_steps(pipeline_config)

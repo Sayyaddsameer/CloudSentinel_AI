@@ -1,6 +1,7 @@
 import json
 import os
 import logging
+import time
 from datetime import datetime, timezone, timedelta
 
 import boto3
@@ -135,12 +136,18 @@ def scan_throttling(apigw, table):
 
         for stage in stages:
             stage_name = stage.get("stageName", "")
-            burst = (stage.get("defaultRouteSettings") or {}).get("throttlingBurstLimit")
-            rate  = stage.get("defaultRouteSettings", {}).get("throttlingRateLimit") if stage.get("defaultRouteSettings") else None
 
-            # Also check the top-level method settings
+            # For REST APIs, throttling can be in three places:
+            burst = None
+            # Check defaultRouteSettings (HTTP API v2)
+            if stage.get("defaultRouteSettings"):
+                burst = stage["defaultRouteSettings"].get("throttlingBurstLimit")
+            # Also check REST API methodSettings catch-all
             if burst is None:
                 burst = stage.get("methodSettings", {}).get("*/*", {}).get("throttlingBurstLimit")
+            # Also check stage-level throttle (REST API)
+            if burst is None and stage.get("throttle"):
+                burst = stage["throttle"].get("burstLimit")
 
             if burst is None:
                 r = build_risk(
@@ -275,6 +282,7 @@ def purge_module_risks(table, module):
         logger.error(f"Failed to purge old risks: {e}")
 
 def lambda_handler(event, context):
+    _start = time.time()
     logger.info("fullstack-analyzer started")
     ddb   = boto3.resource("dynamodb", region_name=REGION)
     table = ddb.Table(TABLE_NAME)
@@ -290,9 +298,27 @@ def lambda_handler(event, context):
 
     emit_scan_completed("fullstack", all_risks)
 
-    logger.info(f"fullstack scan complete — {len(all_risks)} risk(s)")
+    duration_ms = int((time.time() - _start) * 1000)
+    try:
+        cw.put_metric_data(
+            Namespace="CloudSentinel/Performance",
+            MetricData=[{
+                "MetricName": "ScanDurationMs",
+                "Dimensions": [{"Name": "Module", "Value": "fullstack"}],
+                "Value": duration_ms,
+                "Unit": "Milliseconds",
+            }],
+        )
+    except Exception as e:
+        logger.warning(f"CloudWatch metric write failed: {e}")
+
+    logger.info(f"fullstack scan complete — {len(all_risks)} risk(s) in {duration_ms}ms")
     return {
         "statusCode": 200,
         "headers": CORS_HEADERS,
-        "body": json.dumps({"message": "Full-Stack scan complete", "risksFound": len(all_risks)}),
+        "body": json.dumps({
+            "message": "Full-Stack scan complete",
+            "risksFound": len(all_risks),
+            "durationMs": duration_ms,
+        }),
     }
