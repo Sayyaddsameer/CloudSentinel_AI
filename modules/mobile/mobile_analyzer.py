@@ -293,6 +293,205 @@ def scan_iam_lambda_roles(iam, table):
 
 
 # ---------------------------------------------------------------------------
+# Lambda — check function timeout, memory, and reserved concurrency
+# ---------------------------------------------------------------------------
+
+def scan_lambda_health(lambda_client, table):
+    found = []
+    try:
+        paginator = lambda_client.get_paginator("list_functions")
+        for page in paginator.paginate():
+            for fn in page.get("Functions", []):
+                name    = fn["FunctionName"]
+                timeout = fn.get("Timeout", 3)
+                memory  = fn.get("MemorySize", 128)
+
+                # Timeout check
+                if timeout >= 900 or timeout < 10:
+                    reason = (
+                        f"Lambda '{name}' has a timeout of {timeout}s. "
+                        + ("This is the maximum (no real timeout enforced), which can cause hung executions."
+                           if timeout >= 900
+                           else "This is too low for typical mobile backend workloads and may cause premature termination.")
+                    )
+                    r = build_risk(
+                        "Lambda", name,
+                        "Lambda Function Timeout Misconfigured",
+                        reason,
+                        "Medium",
+                        remediation_steps=[
+                            "Set a timeout between 10s and 29s for mobile-facing APIs",
+                            "Profile function execution time with AWS X-Ray to find a safe upper bound",
+                            "Use Step Functions for workflows that genuinely need longer execution",
+                        ],
+                        alternative_solutions=[
+                            "Enable Lambda Insights for continuous timeout monitoring",
+                            "Add CloudWatch alarms on the Lambda Errors metric for timeout detection",
+                        ],
+                    )
+                    found.append(r)
+                    save_risk(table, r)
+
+                # Memory check
+                if memory < 256:
+                    r = build_risk(
+                        "Lambda", name,
+                        "Lambda Function Low Memory Allocation",
+                        f"Lambda '{name}' has only {memory}MB of memory allocated. "
+                        "Low memory also reduces CPU allocation, increasing latency for mobile backends.",
+                        "Low",
+                        remediation_steps=[
+                            "Increase memory to at least 256MB for mobile-facing Lambda functions",
+                            "Use AWS Lambda Power Tuning to find the optimal memory/cost balance",
+                        ],
+                        alternative_solutions=[
+                            "Profile the function with AWS X-Ray to confirm memory pressure",
+                            "Consider Graviton2 (arm64) architecture for better price/performance",
+                        ],
+                    )
+                    found.append(r)
+                    save_risk(table, r)
+
+                # Reserved concurrency check
+                try:
+                    concurrency = lambda_client.get_function_concurrency(FunctionName=name)
+                    if "ReservedConcurrentExecutions" not in concurrency:
+                        r = build_risk(
+                            "Lambda", name,
+                            "Lambda Missing Reserved Concurrency",
+                            f"Lambda '{name}' has no reserved concurrency set. "
+                            "Without it the function can consume the entire account concurrency quota, "
+                            "starving other mobile backend functions during traffic spikes.",
+                            "Medium",
+                            remediation_steps=[
+                                "Set a reserved concurrency limit appropriate for the function's role",
+                                "Use provisioned concurrency for latency-sensitive mobile APIs",
+                                "Configure account-level concurrency limits in the Lambda console",
+                            ],
+                            alternative_solutions=[
+                                "Use SQS as a buffer in front of Lambda to smooth traffic bursts",
+                                "Implement exponential back-off with jitter in the mobile client",
+                            ],
+                        )
+                        found.append(r)
+                        save_risk(table, r)
+                except ClientError as e:
+                    logger.warning(f"get_function_concurrency for {name}: {e}")
+    except ClientError as e:
+        logger.error(f"list_functions paginator: {e}")
+    return found
+
+
+# ---------------------------------------------------------------------------
+# API Gateway — check for missing access logging on REST API stages
+# ---------------------------------------------------------------------------
+
+def scan_api_gateway_logging(apigw, table):
+    found = []
+    try:
+        apis = apigw.get_rest_apis().get("items", [])
+    except ClientError as e:
+        logger.error(f"get_rest_apis (logging): {e}")
+        return found
+
+    for api in apis:
+        api_id   = api["id"]
+        api_name = api.get("name", api_id)
+        try:
+            stages = apigw.get_stages(restApiId=api_id).get("item", [])
+            for stage in stages:
+                stage_name = stage.get("stageName", "unknown")
+                resource_label = f"{api_name}/{stage_name}"
+
+                # Check access log settings
+                access_log_settings = stage.get("accessLogSettings", {})
+                logging_disabled = not access_log_settings.get("destinationArn")
+
+                # Check method-level logging level
+                method_settings  = stage.get("methodSettings", {})
+                catch_all        = method_settings.get("*/*", {})
+                logging_level    = catch_all.get("loggingLevel", "OFF")
+                method_log_off   = logging_level == "OFF"
+
+                if logging_disabled or method_log_off:
+                    r = build_risk(
+                        "API Gateway", resource_label,
+                        "API Gateway Access Logging Disabled",
+                        f"Stage '{stage_name}' of API '{api_name}' has access logging disabled. "
+                        "Without logs, malicious or erroneous mobile requests cannot be investigated.",
+                        "Medium",
+                        remediation_steps=[
+                            "Enable access logging in API Gateway Stage settings",
+                            "Set log level to INFO or ERROR",
+                        ],
+                        alternative_solutions=[
+                            "Ship API Gateway access logs to CloudWatch Logs Insights for querying",
+                            "Enable AWS X-Ray tracing on the stage for distributed tracing",
+                        ],
+                    )
+                    found.append(r)
+                    save_risk(table, r)
+        except ClientError as e:
+            logger.warning(f"get_stages for API {api_id}: {e}")
+
+    return found
+
+
+# ---------------------------------------------------------------------------
+# API Gateway — detect elevated 4XX error rates via CloudWatch
+# ---------------------------------------------------------------------------
+
+def scan_4xx_error_rates(apigw, cw, table):
+    found = []
+    try:
+        apis = apigw.get_rest_apis().get("items", [])
+    except ClientError as e:
+        logger.error(f"get_rest_apis (4xx): {e}")
+        return found
+
+    now   = datetime.now(timezone.utc)
+    start = now - timedelta(hours=1)
+
+    for api in apis:
+        api_name = api.get("name", api["id"])
+        try:
+            resp = cw.get_metric_statistics(
+                Namespace="AWS/ApiGateway",
+                MetricName="4XXError",
+                Dimensions=[{"Name": "ApiName", "Value": api_name}],
+                StartTime=start,
+                EndTime=now,
+                Period=3600,
+                Statistics=["Sum"],
+            )
+            datapoints = resp.get("Datapoints", [])
+            total_4xx  = datapoints[0].get("Sum", 0) if datapoints else 0
+            if total_4xx > 50:
+                r = build_risk(
+                    "API Gateway", api_name,
+                    "4XX Error Rate Elevated",
+                    f"API '{api_name}' recorded {int(total_4xx)} 4XX errors in the last hour. "
+                    "This may indicate expired auth tokens, bad requests, or client-side issues "
+                    "degrading the mobile user experience.",
+                    "Medium",
+                    remediation_steps=[
+                        "Review API Gateway access logs for failed requests",
+                        "Check client authentication token expiry",
+                    ],
+                    alternative_solutions=[
+                        "Add a CloudWatch alarm on 4XXError to get proactive notifications",
+                        "Use AWS X-Ray to trace specific failing requests end-to-end",
+                    ],
+                )
+                found.append(r)
+                save_risk(table, r)
+        except ClientError as e:
+            logger.warning(f"CloudWatch 4XXError for {api_name}: {e}")
+
+    return found
+
+
+# ---------------------------------------------------------------------------
 # Entry point
 # ---------------------------------------------------------------------------
 
@@ -353,6 +552,11 @@ def lambda_handler(event, context):
     all_risks += scan_cognito_pools(cognito, table)
     all_risks += scan_iam_lambda_roles(iam, table)
     all_risks += scan_api_latency(apigw, cw, table, latency_ms)
+
+    lambda_client = boto3.client("lambda", region_name=REGION)
+    all_risks += scan_lambda_health(lambda_client, table)
+    all_risks += scan_api_gateway_logging(apigw, table)
+    all_risks += scan_4xx_error_rates(apigw, cw, table)
 
     emit_scan_completed("mobile", all_risks)
 

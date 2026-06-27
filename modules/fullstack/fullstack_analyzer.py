@@ -250,6 +250,160 @@ def scan_cloudwatch_metrics(apigw, cw, table):
 
 
 # ---------------------------------------------------------------------------
+# Check 5 — WAF association on API Gateway stages
+# ---------------------------------------------------------------------------
+
+def scan_waf_association(apigw, table):
+    found = []
+    try:
+        apis = apigw.get_rest_apis().get("items", [])
+    except ClientError as e:
+        logger.error(f"get_rest_apis (WAF check): {e}")
+        return found
+
+    for api in apis:
+        api_id   = api["id"]
+        api_name = api.get("name", api_id)
+        try:
+            stages = apigw.get_stages(restApiId=api_id).get("item", [])
+        except ClientError as e:
+            logger.warning(f"get_stages {api_name} (WAF check): {e}")
+            continue
+
+        for stage in stages:
+            stage_name  = stage.get("stageName", "")
+            waf_arn     = stage.get("webAclArn") or stage.get("wafWebAclArn", "")
+            if not waf_arn:
+                r = build_risk(
+                    api_name, f"stage:{stage_name}",
+                    "API Gateway Not Protected by WAF",
+                    f"Stage '{stage_name}' of API '{api_name}' has no WAF WebACL associated. "
+                    "The API is exposed to common web exploits and DDoS attacks.",
+                    "Medium",
+                    remediation_steps=[
+                        "Create a WAF WebACL and associate it with the API Gateway stage",
+                        "Add rate-based rules to prevent DDoS",
+                    ],
+                    alternative_solutions=[
+                        "Use AWS Shield Advanced for DDoS protection",
+                    ],
+                )
+                found.append(r)
+                save_risk(table, r)
+
+    return found
+
+
+# ---------------------------------------------------------------------------
+# Check 6 — API Gateway access & execution logging
+# ---------------------------------------------------------------------------
+
+def scan_api_logging(apigw, table):
+    found = []
+    try:
+        apis = apigw.get_rest_apis().get("items", [])
+    except ClientError as e:
+        logger.error(f"get_rest_apis (logging check): {e}")
+        return found
+
+    for api in apis:
+        api_id   = api["id"]
+        api_name = api.get("name", api_id)
+        try:
+            stages = apigw.get_stages(restApiId=api_id).get("item", [])
+        except ClientError as e:
+            logger.warning(f"get_stages {api_name} (logging check): {e}")
+            continue
+
+        for stage in stages:
+            stage_name = stage.get("stageName", "")
+
+            # Access logging check
+            access_log_settings = stage.get("accessLogSettings")
+            if not access_log_settings or not access_log_settings.get("destinationArn"):
+                r = build_risk(
+                    api_name, f"stage:{stage_name}",
+                    "API Gateway Access Logging Not Enabled",
+                    f"Stage '{stage_name}' of API '{api_name}' does not have access logging "
+                    "configured. API call records will not be captured for audit or forensics.",
+                    "Medium",
+                    remediation_steps=[
+                        "Enable access logging in Stage > Logs/Tracing > Access Logging",
+                        "Set CloudWatch log group ARN",
+                    ],
+                )
+                found.append(r)
+                save_risk(table, r)
+
+            # Execution logging check
+            method_settings    = stage.get("methodSettings", {})
+            catch_all_settings = method_settings.get("*/*", {})
+            logging_level      = catch_all_settings.get("loggingLevel", "OFF")
+            if logging_level == "OFF":
+                r = build_risk(
+                    api_name, f"stage:{stage_name}",
+                    "API Gateway Execution Logging Disabled",
+                    f"Stage '{stage_name}' of API '{api_name}' has execution logging set to OFF. "
+                    "Request/response details and integration errors will not be logged.",
+                    "Low",
+                    remediation_steps=[
+                        "Enable access logging in Stage > Logs/Tracing > Access Logging",
+                        "Set CloudWatch log group ARN",
+                    ],
+                )
+                found.append(r)
+                save_risk(table, r)
+
+    return found
+
+
+# ---------------------------------------------------------------------------
+# Check 7 — CloudWatch alarms for 5XX errors per API
+# ---------------------------------------------------------------------------
+
+def scan_cloudwatch_alarms(apigw, cw, table):
+    found = []
+    try:
+        apis = apigw.get_rest_apis().get("items", [])
+    except ClientError as e:
+        logger.error(f"get_rest_apis (alarm check): {e}")
+        return found
+
+    for api in apis:
+        api_name = api.get("name", api["id"])
+        try:
+            resp   = cw.describe_alarms_for_metric(
+                MetricName="5XXError",
+                Namespace="AWS/ApiGateway",
+                Dimensions=[{"Name": "ApiName", "Value": api_name}],
+            )
+            alarms = resp.get("MetricAlarms", [])
+        except ClientError as e:
+            logger.warning(f"describe_alarms_for_metric {api_name}: {e}")
+            alarms = []
+
+        if not alarms:
+            r = build_risk(
+                api_name, "",
+                "No Error Rate Alarm on API",
+                f"No CloudWatch alarm is configured for the '5XXError' metric on API '{api_name}'. "
+                "Elevated error rates will go undetected until users report issues.",
+                "Low",
+                remediation_steps=[
+                    "Create a CloudWatch alarm on the 5XXError metric for this API",
+                    "Set an appropriate threshold and link it to an SNS topic for notifications",
+                ],
+                alternative_solutions=[
+                    "Use AWS X-Ray and CloudWatch ServiceLens for end-to-end observability",
+                ],
+            )
+            found.append(r)
+            save_risk(table, r)
+
+    return found
+
+
+# ---------------------------------------------------------------------------
 # Entry point
 # ---------------------------------------------------------------------------
 
@@ -295,6 +449,9 @@ def lambda_handler(event, context):
     all_risks += scan_api_authentication(apigw, table)
     all_risks += scan_throttling(apigw, table)
     all_risks += scan_cloudwatch_metrics(apigw, cw, table)
+    all_risks += scan_waf_association(apigw, table)
+    all_risks += scan_api_logging(apigw, table)
+    all_risks += scan_cloudwatch_alarms(apigw, cw, table)
 
     emit_scan_completed("fullstack", all_risks)
 

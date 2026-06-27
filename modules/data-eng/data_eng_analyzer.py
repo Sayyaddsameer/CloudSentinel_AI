@@ -239,6 +239,120 @@ def scan_glue_jobs(glue, table):
 
 
 # ---------------------------------------------------------------------------
+# S3 — versioning & access logging
+# ---------------------------------------------------------------------------
+
+def scan_s3_versioning_logging(s3, table):
+    found = []
+    try:
+        buckets = s3.list_buckets().get("Buckets", [])
+    except ClientError as e:
+        logger.error(f"list_buckets (versioning/logging scan): {e}")
+        return found
+
+    for b in buckets:
+        name      = b["Name"]
+        sensitive = is_sensitive_name(name)
+        suffix    = " (sensitive bucket name detected)" if sensitive else ""
+
+        # --- Versioning ---
+        try:
+            ver_resp = s3.get_bucket_versioning(Bucket=name)
+            if ver_resp.get("Status") != "Enabled":
+                priority = "High" if sensitive else "Medium"
+                r = build_risk(
+                    "Data Storage", name,
+                    "Data Bucket Versioning Disabled",
+                    f"Bucket '{name}' does not have versioning enabled{suffix}. "
+                    "Without versioning, accidental deletions or overwrites cannot be recovered.",
+                    priority,
+                    remediation_steps=[
+                        "Enable versioning in S3 > Bucket > Properties > Bucket Versioning",
+                    ],
+                    alternative_solutions=[
+                        "Enable S3 Object Lock for WORM (write-once-read-many) protection on critical buckets",
+                        "Set up cross-region replication as an additional durability layer",
+                    ],
+                )
+                found.append(r)
+                save_risk(table, r)
+        except ClientError as e:
+            logger.warning(f"get_bucket_versioning {name}: {e}")
+
+        # --- Access Logging ---
+        try:
+            log_resp = s3.get_bucket_logging(Bucket=name)
+            if "LoggingEnabled" not in log_resp:
+                priority = "High" if sensitive else "Low"
+                r = build_risk(
+                    "Data Storage", name,
+                    "Data Bucket Access Logging Disabled",
+                    f"Bucket '{name}' does not have server access logging enabled{suffix}. "
+                    "Access logs are essential for auditing and incident investigation.",
+                    priority,
+                    remediation_steps=[
+                        "Enable server access logging for audit trail",
+                        "In S3 console: Bucket > Properties > Server access logging > Enable",
+                    ],
+                    alternative_solutions=[
+                        "Use AWS CloudTrail S3 data events as an alternative audit mechanism",
+                    ],
+                )
+                found.append(r)
+                save_risk(table, r)
+        except ClientError as e:
+            logger.warning(f"get_bucket_logging {name}: {e}")
+
+    return found
+
+
+# ---------------------------------------------------------------------------
+# DynamoDB — Point-in-Time Recovery (PITR)
+# ---------------------------------------------------------------------------
+
+def scan_dynamodb_pitr(dynamodb_client, table):
+    found = []
+    paginator = dynamodb_client.get_paginator("list_tables")
+    table_names = []
+    try:
+        for page in paginator.paginate():
+            table_names.extend(page.get("TableNames", []))
+    except ClientError as e:
+        logger.error(f"list_tables (PITR scan): {e}")
+        return found
+
+    for t_name in table_names:
+        try:
+            resp = dynamodb_client.describe_continuous_backups(TableName=t_name)
+            cb   = resp.get("ContinuousBackupsDescription", {})
+            cb_status   = cb.get("ContinuousBackupsStatus", "DISABLED")
+            pitr_desc   = cb.get("PointInTimeRecoveryDescription", {})
+            pitr_status = pitr_desc.get("PointInTimeRecoveryStatus", "DISABLED")
+
+            if cb_status != "ENABLED" or pitr_status != "ENABLED":
+                r = build_risk(
+                    "DynamoDB Table", t_name,
+                    "DynamoDB Point-in-Time Recovery Not Enabled",
+                    f"Table '{t_name}' does not have Point-in-Time Recovery (PITR) enabled "
+                    f"(ContinuousBackupsStatus={cb_status}, PointInTimeRecoveryStatus={pitr_status}). "
+                    "Without PITR, accidental writes or deletes cannot be rolled back.",
+                    "Medium",
+                    remediation_steps=[
+                        "Enable PITR in DynamoDB > Table > Backups > Point-in-time recovery",
+                    ],
+                    alternative_solutions=[
+                        "Schedule on-demand DynamoDB backups via AWS Backup as a supplemental measure",
+                    ],
+                )
+                found.append(r)
+                save_risk(table, r)
+        except ClientError as e:
+            logger.warning(f"describe_continuous_backups {t_name}: {e}")
+
+    return found
+
+
+# ---------------------------------------------------------------------------
 # Entry point
 # ---------------------------------------------------------------------------
 
@@ -284,6 +398,8 @@ def lambda_handler(event, context):
     all_risks += scan_s3_data_buckets(s3, table)
     all_risks += scan_dynamodb_tables(ddb_client, table)
     all_risks += scan_glue_jobs(glue, table)
+    all_risks += scan_s3_versioning_logging(s3, table)
+    all_risks += scan_dynamodb_pitr(ddb_client, table)
 
     emit_scan_completed("data-eng", all_risks)
 

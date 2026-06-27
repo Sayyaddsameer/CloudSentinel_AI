@@ -336,6 +336,12 @@ MANAGED_CONFIG_RULES = [
     "s3-bucket-public-read-prohibited",
     "restricted-ssh",
     "iam-password-policy",
+    "cloudtrail-enabled",
+    "ebs-optimized-instance",
+    "rds-instance-public-access-check",
+    "iam-root-access-key-check",
+    "mfa-enabled-for-iam-console-access",
+    "s3-bucket-server-side-encryption-enabled",
 ]
 
 
@@ -500,6 +506,300 @@ def generate_graph_topology():
     return None
 
 # ---------------------------------------------------------------------------
+# AWS -- IAM Users: Access Key Rotation & Console MFA
+# ---------------------------------------------------------------------------
+
+def scan_iam_users(clients, table):
+    """Check IAM users for:
+    - Access keys older than 90 days (High)
+    - Console access (LoginProfile) without MFA (High)
+    """
+    iam = clients["iam"]
+    found = []
+    KEY_MAX_AGE_DAYS = 90
+
+    try:
+        users = iam.list_users().get("Users", [])
+    except ClientError as e:
+        logger.warning(f"list_users: {e}")
+        return found
+
+    for user in users:
+        username = user["UserName"]
+
+        # --- Access key age check ---
+        try:
+            keys = iam.list_access_keys(UserName=username).get("AccessKeyMetadata", [])
+            for key in keys:
+                if key.get("Status") != "Active":
+                    continue
+                age_days = (datetime.now(timezone.utc) - key["CreateDate"]).days
+                if age_days > KEY_MAX_AGE_DAYS:
+                    r = build_risk(
+                        "cloud-infra", "IAM User", username,
+                        "IAM Access Key Not Rotated",
+                        f"Access key {key['AccessKeyId']} for user '{username}' is {age_days} days old "
+                        f"(threshold: {KEY_MAX_AGE_DAYS} days).",
+                        "High",
+                        remediation_steps=[
+                            f"Rotate or delete the old access key for IAM user '{username}'",
+                            "Create a new access key, update applications, then deactivate the old key",
+                            "Enable IAM Access Analyzer to monitor key usage",
+                        ],
+                        alternative_solutions=[
+                            "Use IAM roles instead of long-lived access keys wherever possible",
+                            "Enforce key rotation via AWS Config rule 'access-keys-rotated'",
+                        ],
+                    )
+                    found.append(r)
+                    save_risk(table, r)
+        except ClientError as e:
+            logger.warning(f"list_access_keys for '{username}': {e}")
+
+        # --- Console access without MFA check ---
+        has_console = False
+        try:
+            iam.get_login_profile(UserName=username)
+            has_console = True
+        except ClientError as e:
+            if e.response["Error"]["Code"] != "NoSuchEntity":
+                logger.warning(f"get_login_profile for '{username}': {e}")
+
+        if has_console:
+            try:
+                mfa_devices = iam.list_mfa_devices(UserName=username).get("MFADevices", [])
+                if not mfa_devices:
+                    r = build_risk(
+                        "cloud-infra", "IAM User", username,
+                        "IAM User Console Access Without MFA",
+                        f"IAM user '{username}' has AWS Console access but no MFA device configured.",
+                        "High",
+                        remediation_steps=[
+                            f"Require MFA for IAM user '{username}' via IAM > Users > Security credentials",
+                            "Attach an IAM policy that enforces MFA (aws:MultiFactorAuthPresent condition)",
+                            "Consider migrating users to AWS IAM Identity Center (SSO) with MFA enforced",
+                        ],
+                        alternative_solutions=[
+                            "Enable the 'mfa-enabled-for-iam-console-access' AWS Config rule",
+                            "Use AWS Organizations SCP to deny console access without MFA",
+                        ],
+                    )
+                    found.append(r)
+                    save_risk(table, r)
+            except ClientError as e:
+                logger.warning(f"list_mfa_devices for '{username}': {e}")
+
+    return found
+
+
+# ---------------------------------------------------------------------------
+# AWS -- S3 Versioning & Access Logging
+# ---------------------------------------------------------------------------
+
+def scan_s3_logging_versioning(clients, table):
+    """Check each S3 bucket for:
+    - Versioning not enabled (Medium)
+    - Access logging not enabled (Low)
+    """
+    s3 = clients["s3"]
+    found = []
+
+    try:
+        buckets = s3.list_buckets().get("Buckets", [])
+    except ClientError as e:
+        logger.warning(f"list_buckets (versioning/logging scan): {e}")
+        return found
+
+    for b in buckets:
+        name = b["Name"]
+
+        # --- Versioning check ---
+        try:
+            versioning = s3.get_bucket_versioning(Bucket=name)
+            if versioning.get("Status") != "Enabled":
+                r = build_risk(
+                    "cloud-infra", "S3 Bucket", name,
+                    "S3 Bucket Versioning Disabled",
+                    f"S3 bucket '{name}' does not have versioning enabled. "
+                    "Accidental deletions or overwrites cannot be recovered.",
+                    "Medium",
+                    remediation_steps=[
+                        f"Enable versioning on bucket '{name}' via S3 > Bucket > Properties > Bucket Versioning",
+                        "Enable MFA Delete for additional protection on versioned objects",
+                    ],
+                    alternative_solutions=[
+                        "Use S3 Replication with versioning for cross-region durability",
+                    ],
+                )
+                found.append(r)
+                save_risk(table, r)
+        except ClientError as e:
+            logger.warning(f"get_bucket_versioning for '{name}': {e}")
+
+        # --- Access logging check ---
+        try:
+            logging_cfg = s3.get_bucket_logging(Bucket=name)
+            if "LoggingEnabled" not in logging_cfg:
+                r = build_risk(
+                    "cloud-infra", "S3 Bucket", name,
+                    "S3 Bucket Access Logging Disabled",
+                    f"S3 bucket '{name}' does not have server access logging enabled. "
+                    "Access activity cannot be audited.",
+                    "Low",
+                    remediation_steps=[
+                        f"Enable server access logging on bucket '{name}' via S3 > Bucket > Properties > Server access logging",
+                        "Specify a target bucket and prefix for log delivery",
+                    ],
+                    alternative_solutions=[
+                        "Use AWS CloudTrail data events for S3 object-level API logging",
+                    ],
+                )
+                found.append(r)
+                save_risk(table, r)
+        except ClientError as e:
+            logger.warning(f"get_bucket_logging for '{name}': {e}")
+
+    return found
+
+
+# ---------------------------------------------------------------------------
+# AWS -- CloudTrail Enabled
+# ---------------------------------------------------------------------------
+
+def scan_cloudtrail(clients, table):
+    """Check whether CloudTrail is enabled and actively logging (Critical if not)."""
+    found = []
+    try:
+        cloudtrail = boto3.client("cloudtrail", region_name=REGION)
+        trails = cloudtrail.describe_trails(includeShadowTrails=False).get("trailList", [])
+        if not trails:
+            r = build_risk(
+                "cloud-infra", "CloudTrail", "account-level",
+                "CloudTrail Not Enabled",
+                "No CloudTrail trails are configured in this region. "
+                "All API activity is unaudited and cannot be investigated after a security incident.",
+                "Critical",
+                remediation_steps=[
+                    "Create a CloudTrail trail in the AWS console: CloudTrail > Create trail",
+                    "Enable logging to an S3 bucket with server-side encryption",
+                    "Enable CloudWatch Logs integration for real-time alerting",
+                ],
+                alternative_solutions=[
+                    "Use an organization-level trail in AWS Organizations to cover all member accounts",
+                ],
+            )
+            found.append(r)
+            save_risk(table, r)
+        else:
+            for trail in trails:
+                trail_arn = trail.get("TrailARN", trail.get("Name", "unknown"))
+                try:
+                    status = cloudtrail.get_trail_status(Name=trail_arn)
+                    if not status.get("IsLogging", False):
+                        r = build_risk(
+                            "cloud-infra", "CloudTrail", trail.get("Name", trail_arn),
+                            "CloudTrail Not Enabled",
+                            f"CloudTrail trail '{trail.get('Name', trail_arn)}' exists but is not actively logging. "
+                            "API events are not being captured.",
+                            "Critical",
+                            remediation_steps=[
+                                f"Start logging for trail '{trail.get('Name')}' via the CloudTrail console or CLI: "
+                                "aws cloudtrail start-logging --name <trail-name>",
+                                "Verify the S3 bucket policy allows CloudTrail to write logs",
+                            ],
+                            alternative_solutions=[
+                                "Set up an EventBridge rule to alert when CloudTrail logging is stopped",
+                            ],
+                        )
+                        found.append(r)
+                        save_risk(table, r)
+                except ClientError as e:
+                    logger.warning(f"get_trail_status for '{trail_arn}': {e}")
+    except ClientError as e:
+        logger.warning(f"describe_trails: {e}")
+
+    return found
+
+
+# ---------------------------------------------------------------------------
+# AWS -- EBS Volume Encryption
+# ---------------------------------------------------------------------------
+
+def scan_ebs_encryption(clients, table):
+    """Check all EBS volumes for encryption-at-rest (Medium if unencrypted)."""
+    ec2 = clients["ec2"]
+    found = []
+
+    try:
+        paginator = ec2.get_paginator("describe_volumes")
+        for page in paginator.paginate():
+            for volume in page.get("Volumes", []):
+                if not volume.get("Encrypted", False):
+                    vol_id = volume["VolumeId"]
+                    r = build_risk(
+                        "cloud-infra", "EBS Volume", vol_id,
+                        "EBS Volume Not Encrypted",
+                        f"EBS volume '{vol_id}' is not encrypted at rest. "
+                        "Data stored on this volume is vulnerable if the underlying hardware is compromised.",
+                        "Medium",
+                        remediation_steps=[
+                            f"Create an encrypted snapshot of volume '{vol_id}' and restore it as an encrypted volume",
+                            "Enable EBS default encryption for the account: EC2 > Settings > EBS Encryption",
+                            "Replace the unencrypted volume with an encrypted one and update the instance attachment",
+                        ],
+                        alternative_solutions=[
+                            "Enable EBS default encryption to ensure all future volumes are encrypted automatically",
+                            "Use KMS customer-managed keys (CMK) for additional control over encryption",
+                        ],
+                    )
+                    found.append(r)
+                    save_risk(table, r)
+    except ClientError as e:
+        logger.warning(f"describe_volumes: {e}")
+
+    return found
+
+
+# ---------------------------------------------------------------------------
+# AWS -- RDS Public Accessibility
+# ---------------------------------------------------------------------------
+
+def scan_rds_public(clients, table):
+    """Check RDS DB instances for public accessibility (High if publicly accessible)."""
+    found = []
+    try:
+        rds = boto3.client("rds", region_name=REGION)
+        paginator = rds.get_paginator("describe_db_instances")
+        for page in paginator.paginate():
+            for instance in page.get("DBInstances", []):
+                if instance.get("PubliclyAccessible", False):
+                    db_id = instance["DBInstanceIdentifier"]
+                    engine = instance.get("Engine", "unknown")
+                    r = build_risk(
+                        "cloud-infra", "RDS Instance", db_id,
+                        "RDS Instance Publicly Accessible",
+                        f"RDS instance '{db_id}' (engine: {engine}) is publicly accessible from the internet. "
+                        "Database endpoints should never be exposed publicly.",
+                        "High",
+                        remediation_steps=[
+                            f"Modify the RDS instance '{db_id}': disable 'Publicly Accessible' in the connectivity settings",
+                            "Place the RDS instance in a private subnet with no internet gateway route",
+                            "Use a bastion host or AWS Systems Manager Session Manager for database access",
+                        ],
+                        alternative_solutions=[
+                            "Use RDS Proxy to manage connections without exposing the database endpoint",
+                            "Enable VPC security groups to restrict inbound access to known application IPs only",
+                        ],
+                    )
+                    found.append(r)
+                    save_risk(table, r)
+    except ClientError as e:
+        logger.warning(f"describe_db_instances: {e}")
+
+    return found
+
+
+# ---------------------------------------------------------------------------
 # Entry point
 # ---------------------------------------------------------------------------
 
@@ -564,7 +864,13 @@ def lambda_handler(event, context):
         all_risks += scan_s3_buckets(clients, table)
         all_risks += scan_security_groups(clients, table)
         all_risks += scan_iam_password_policy(clients, table)
-        # all_risks += scan_aws_config_findings(clients, table)  # Removed: Config is often stale
+        all_risks += scan_iam_users(clients, table)
+        all_risks += scan_s3_logging_versioning(clients, table)
+        all_risks += scan_cloudtrail(clients, table)
+        all_risks += scan_ebs_encryption(clients, table)
+        all_risks += scan_rds_public(clients, table)
+        # Re-enable Config with expanded rules
+        all_risks += scan_aws_config_findings(clients, table)
 
     if "gcp" in providers:
         all_risks += scan_gcp_resources(table)

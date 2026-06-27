@@ -33,8 +33,14 @@ GITHUB_API_BASE      = "https://api.github.com"
 # Regex patterns for secret detection
 SECRET_PATTERNS = [
     re.compile(r'(?i)(password|passwd|secret|token|api_key|apikey)\s*[:=]\s*["\']?\S{8,}'),
-    re.compile(r'AKIA[0-9A-Z]{16}'),                   # AWS access key ID format
+    re.compile(r'AKIA[0-9A-Z]{16}'),                   # AWS access key ID
     re.compile(r'(?i)aws_secret_access_key\s*=\s*\S+'),
+    re.compile(r'ghp_[A-Za-z0-9]{36}'),                # GitHub PAT
+    re.compile(r'ghs_[A-Za-z0-9]{36}'),                # GitHub Actions token
+    re.compile(r'sk-[A-Za-z0-9]{32,}'),                # OpenAI / Stripe keys
+    re.compile(r'-----BEGIN (RSA|EC|OPENSSH) PRIVATE KEY-----'),  # Private keys
+    re.compile(r'(?i)bearer\s+[A-Za-z0-9\-._~+/]{20,}'),         # Bearer tokens
+    re.compile(r'(?i)(client_secret|consumer_secret)\s*[:=]\s*\S{8,}'),
 ]
 
 CORS_HEADERS = {
@@ -338,6 +344,115 @@ def generate_github_pr_for_remediation(repo_name, risk):
 
 
 # ---------------------------------------------------------------------------
+# Pipeline security scans — third-party actions & permissions
+# ---------------------------------------------------------------------------
+
+# Regex to match a full 40-character hex SHA commit pin
+_SHA_PIN_RE = re.compile(r'^[0-9a-f]{40}$')
+
+# Trusted action namespace prefixes that don't require SHA pinning
+_TRUSTED_NAMESPACES = ("actions/", "aws-actions/", "docker/")
+
+
+def scan_for_unverified_actions(repo_name, pipeline_config):
+    """
+    High — third-party GitHub Actions not pinned to a full commit SHA.
+
+    Iterates all jobs' steps looking for ``uses:`` values that are neither:
+    * from a trusted first-party namespace (actions/, aws-actions/, docker/)
+    * pinned to a full 40-character hex SHA (e.g. ``uses: owner/action@<sha>``)
+    """
+    risks = []
+    jobs = pipeline_config.get("jobs", {})
+    for job_name, job in jobs.items():
+        for step in job.get("steps", []):
+            uses = (step.get("uses") or "").strip()
+            if not uses:
+                continue
+
+            # Skip trusted first-party namespaces
+            if any(uses.startswith(ns) for ns in _TRUSTED_NAMESPACES):
+                continue
+
+            # Check whether the reference is pinned to a full SHA
+            ref = uses.split("@", 1)[-1] if "@" in uses else ""
+            if _SHA_PIN_RE.match(ref):
+                continue
+
+            # Unverified / unpinned third-party action found
+            step_name = step.get("name") or uses
+            risks.append(build_risk(
+                repo_name,
+                "Unverified Third-Party Action in Pipeline",
+                f"Step '{step_name}' in job '{job_name}' uses a third-party action "
+                f"('{uses}') that is not pinned to a full commit SHA.",
+                "High",
+                remediation_steps=[
+                    "Pin third-party actions to a specific commit SHA (uses: action/name@sha)",
+                    "Audit all third-party actions before use",
+                    "Use only verified actions from trusted publishers",
+                ],
+            ))
+    return risks
+
+
+def scan_for_admin_permissions(repo_name, pipeline_config):
+    """
+    Medium — pipeline or individual jobs grant overly broad permissions.
+
+    Checks both the top-level ``permissions`` key and each job's ``permissions``
+    for values of ``write-all``, ``*``, or ``admin``.
+    """
+    BROAD_VALUES = {"write-all", "*", "admin"}
+
+    def _is_broad(perms):
+        """Return True if *perms* (str or dict) is considered overly broad."""
+        if isinstance(perms, str):
+            return perms.strip().lower() in BROAD_VALUES
+        if isinstance(perms, dict):
+            return any(str(v).strip().lower() in BROAD_VALUES for v in perms.values())
+        return False
+
+    risks = []
+
+    # Top-level permissions
+    top_perms = pipeline_config.get("permissions")
+    if top_perms is not None and _is_broad(top_perms):
+        risks.append(build_risk(
+            repo_name,
+            "Pipeline Has Overly Broad Permissions",
+            "The workflow's top-level 'permissions' key grants overly broad access "
+            f"(value: {top_perms!r}). This allows any job to read/write all repository scopes.",
+            "Medium",
+            remediation_steps=[
+                "Replace 'permissions: write-all' with the minimal set of scopes required",
+                "Define permissions per-job rather than at the workflow level",
+                "Follow the principle of least privilege for each GitHub Actions workflow",
+            ],
+        ))
+
+    # Per-job permissions
+    for job_name, job in pipeline_config.get("jobs", {}).items():
+        job_perms = job.get("permissions")
+        if job_perms is not None and _is_broad(job_perms):
+            risks.append(build_risk(
+                repo_name,
+                "Pipeline Has Overly Broad Permissions",
+                f"Job '{job_name}' has overly broad permissions "
+                f"(value: {job_perms!r}). Granting write-all or wildcard scopes exposes the "
+                "repository to supply-chain attacks if the job is compromised.",
+                "Medium",
+                remediation_steps=[
+                    "Replace 'permissions: write-all' with the minimal set of scopes required",
+                    "Define permissions per-job rather than at the workflow level",
+                    "Follow the principle of least privilege for each GitHub Actions workflow",
+                ],
+            ))
+
+    return risks
+
+
+# ---------------------------------------------------------------------------
 # Entry point — dual mode: GitHub Webhook OR manual JSON
 # ---------------------------------------------------------------------------
 
@@ -466,6 +581,8 @@ def lambda_handler(event, context):
     all_risks += scan_for_test_steps(repo_name, steps)
     all_risks += scan_for_rollback(repo_name, steps)
     all_risks += scan_for_monitoring(repo_name, steps)
+    all_risks += scan_for_unverified_actions(repo_name, pipeline_config)
+    all_risks += scan_for_admin_permissions(repo_name, pipeline_config)
 
     for r in all_risks:
         save_risk(table, r)
