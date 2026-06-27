@@ -2,6 +2,7 @@ import json
 import os
 import logging
 import time
+import re
 from datetime import datetime, timezone
 
 import boto3
@@ -17,6 +18,16 @@ BEDROCK_MODEL = os.environ.get("BEDROCK_MODEL_ID", "anthropic.claude-3-haiku-202
 MAX_TOKENS  = int(os.environ.get("MAX_TOKENS", "400"))
 MAX_RISKS   = int(os.environ.get("MAX_RISKS_PER_RUN", "50"))
 
+# --- LLM provider selection ---------------------------------------------------
+# Groq is used by default for the reasoning layer (no model-access/billing gate,
+# does not train on submitted data, brief retention). Amazon Bedrock (Claude 3
+# Haiku) is an interchangeable alternative: set LLM_PROVIDER=bedrock to use it.
+import urllib.request
+LLM_PROVIDER = os.environ.get("LLM_PROVIDER", "groq").lower()
+GROQ_API_KEY = os.environ.get("GROQ_API_KEY", "")
+GROQ_MODEL   = os.environ.get("GROQ_MODEL", "llama-3.3-70b-versatile")
+GROQ_URL     = os.environ.get("GROQ_URL", "https://api.groq.com/openai/v1/chat/completions")
+
 # NOTE: clients are initialized inside lambda_handler (not globally) so that
 # unit-test patches applied via unittest.mock.patch("boto3.client") are effective.
 # A module-level client is created before any test patch is active and bypasses mocks.
@@ -26,23 +37,36 @@ MAX_RISKS   = int(os.environ.get("MAX_RISKS_PER_RUN", "50"))
 # Bedrock -- generate a developer-friendly explanation for a risk
 # ---------------------------------------------------------------------------
 
-def build_bedrock_prompt(risk):
+def build_bedrock_prompt(risk, strict=False):
+    """Grounded prompt. Strict rules forbid inventing IPs/ARNs/resource names and
+    require a fixed three-section output that validate_output() can check."""
+    rules = (
+        "You are a senior cloud security auditor. Use ONLY the facts in the finding data below. "
+        "Do NOT invent IP addresses, ARNs, port numbers, resource names, or dates. "
+        "Reference the exact resource name from the finding. "
+        "Reply in plain text (no markdown) as exactly three labelled sections, 130-250 words total:\n"
+        "IMPACT: <paragraph>\nTECHNICAL CONTEXT: <paragraph>\nPRIORITY JUSTIFICATION: <one sentence>\n\n"
+    )
+    if strict:
+        rules = "STRICT MODE. " + rules + "If a detail is not in the finding data, omit it. Invent nothing.\n\n"
     return (
-        "You are a cloud security expert writing for a junior developer.\n\n"
-        f"Resource type: {risk.get('resource', '')}\n"
-        f"Resource name: {risk.get('resourceName', '')}\n"
-        f"Risk: {risk.get('riskType', '')}\n"
-        f"Why it is risky: {risk.get('riskReason', '')}\n"
-        f"Priority: {risk.get('riskPriority', '')}\n\n"
-        "In under 200 words, explain: what this risk means, why it is dangerous, "
-        "and one concrete step to fix it. Write in plain English."
+        rules +
+        "--- FINDING DATA ---\n"
+        f"Resource type : {risk.get('resource', '')}\n"
+        f"Resource name : {risk.get('resourceName', '')}\n"
+        f"Finding       : {risk.get('riskType', '')}\n"
+        f"Why it failed : {risk.get('riskReason', '')}\n"
+        f"Priority      : {risk.get('riskPriority', '')}\n"
+        "--- END FINDING DATA ---\n"
+        "Write the IMPACT, TECHNICAL CONTEXT, and PRIORITY JUSTIFICATION now."
     )
 
 
-def call_bedrock(bedrock_client, prompt):
+def call_bedrock(bedrock_client, prompt, temperature=0.1):
     body = json.dumps({
         "anthropic_version": "bedrock-2023-05-31",
         "max_tokens": MAX_TOKENS,
+        "temperature": temperature,
         "messages": [{"role": "user", "content": prompt}],
     })
     try:
@@ -57,6 +81,68 @@ def call_bedrock(bedrock_client, prompt):
     except Exception as e:
         logger.error(f"Bedrock invoke failed: {e}")
         return ""
+
+
+def call_groq(prompt, temperature=0.1):
+    """Call Groq's OpenAI-compatible chat endpoint (stdlib only, no extra deps)."""
+    body = json.dumps({
+        "model": GROQ_MODEL,
+        "max_tokens": MAX_TOKENS,
+        "temperature": temperature,
+        "messages": [{"role": "user", "content": prompt}],
+    }).encode("utf-8")
+    req = urllib.request.Request(
+        GROQ_URL, data=body, method="POST",
+        headers={"Content-Type": "application/json",
+                 "Authorization": f"Bearer {GROQ_API_KEY}"},
+    )
+    try:
+        with urllib.request.urlopen(req, timeout=30) as resp:
+            result = json.loads(resp.read())
+        return result["choices"][0]["message"]["content"].strip()
+    except Exception as e:
+        logger.error(f"Groq invoke failed: {e}")
+        return ""
+
+
+def call_llm(prompt, bedrock_client=None, temperature=0.1):
+    """Provider-agnostic reasoning call. Default: Groq.
+    Set LLM_PROVIDER=bedrock to route through Amazon Bedrock (Claude 3 Haiku) instead."""
+    if LLM_PROVIDER == "bedrock":
+        return call_bedrock(bedrock_client, prompt, temperature)
+    return call_groq(prompt, temperature)
+
+
+SAFE_FALLBACK = ("IMPACT: Automated analysis is temporarily unavailable for this finding. "
+    "TECHNICAL CONTEXT: Refer to the remediation steps below for guidance. "
+    "PRIORITY JUSTIFICATION: This finding has been flagged for manual review.")
+
+
+def validate_output(text, risk):
+    """Anti-hallucination guardrail. Rejects outputs that omit the required sections,
+    are the wrong length, fail to reference the real resource, or invent IP addresses
+    or ARNs not present in the finding. Returns (is_valid, reason)."""
+    if not text:
+        return False, "empty"
+    for header in ("IMPACT:", "TECHNICAL CONTEXT:", "PRIORITY JUSTIFICATION:"):
+        if header not in text:
+            return False, "missing section " + header
+    wc = len(text.split())
+    if wc < 80:
+        return False, "too short"
+    if wc > 400:
+        return False, "too long"
+    rname = str(risk.get("resourceName", "")).strip()
+    if rname and rname not in text:
+        return False, "resource name not referenced"
+    src = json.dumps(risk)
+    bad_ips = [ip for ip in re.findall(r"\d{1,3}(?:\.\d{1,3}){3}", text) if ip not in src]
+    if bad_ips:
+        return False, "invented IP " + str(bad_ips)
+    bad_arns = [a for a in re.findall(r"arn:aws:[a-z0-9\-]+:[a-z0-9\-]*:\d+:[^\s]+", text) if a not in src]
+    if bad_arns:
+        return False, "invented ARN " + str(bad_arns)
+    return True, "ok"
 
 
 # ---------------------------------------------------------------------------
@@ -149,21 +235,30 @@ def lambda_handler(event, context):
     logger.info(f"{len(risks)} risk(s) need AI explanation")
 
     processed = 0
-    latencies_ms = []  # Track per-finding Bedrock latency for paper Table III
+    latencies_ms = []          # per-finding LLM latency (paper Q2)
+    first_pass_valid = 0       # passed the guardrail on attempt 1
+    rescued = 0                # passed only after the strict retry (temp 0.05)
+    fallback_used = 0          # both attempts failed the guardrail
 
     for risk in risks:
-        prompt = build_bedrock_prompt(risk)
-
-        # Timed Bedrock call for benchmarking
         _t0 = time.time()
-        explanation = call_bedrock(bedrock, prompt)
+        explanation = call_llm(build_bedrock_prompt(risk), bedrock, temperature=0.1)
         latency_ms = int((time.time() - _t0) * 1000)
 
-        if not explanation:
-            continue
+        valid, reason = validate_output(explanation, risk)
+        if valid:
+            first_pass_valid += 1
+        else:
+            logger.info(f"guardrail rejected attempt 1 ({reason}); retrying strict")
+            retry = call_llm(build_bedrock_prompt(risk, strict=True), bedrock, temperature=0.05)
+            rvalid, _ = validate_output(retry, risk)
+            if rvalid:
+                explanation = retry; rescued += 1
+            else:
+                explanation = SAFE_FALLBACK; fallback_used += 1
 
         latencies_ms.append(latency_ms)
-        logger.info(f"Bedrock latency: {latency_ms}ms for '{risk.get('riskType', '')}'")
+        logger.info(f"LLM ({LLM_PROVIDER}) latency: {latency_ms}ms for '{risk.get('riskType', '')}'")
 
         risk_text = f"{risk.get('riskType', '')} {risk.get('riskReason', '')}"
         category  = classify_risk_with_comprehend(comp, risk_text)
@@ -204,6 +299,9 @@ def lambda_handler(event, context):
         "body": json.dumps({
             "message":      "AI explanation run complete",
             "processed":    processed,
+            "firstPassValid": first_pass_valid,
+            "rescued":      rescued,
+            "fallback":     fallback_used,
             "avgLatencyMs": avg_latency,
             "maxLatencyMs": max_latency,
             "minLatencyMs": min_latency,

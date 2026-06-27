@@ -15,9 +15,17 @@ BEDROCK_MODEL = os.environ.get("BEDROCK_MODEL_ID", "anthropic.claude-3-haiku-202
 CONTEXT_LIMIT = int(os.environ.get("CHATBOT_CONTEXT_RISKS", "20"))
 MAX_TOKENS    = int(os.environ.get("MAX_TOKENS", "600"))
 
-# NOTE: DynamoDB and Bedrock clients are created inside lambda_handler so that
-# unittest.mock.patch("boto3.client") applied in tests intercepts them correctly.
-# A module-level client escapes any mock that is set up after import time.
+# --- LLM provider: Groq by default; Amazon Bedrock (Claude 3 Haiku) interchangeable ---
+import urllib.request
+LLM_PROVIDER = os.environ.get("LLM_PROVIDER", "groq").lower()
+GROQ_API_KEY = os.environ.get("GROQ_API_KEY", "")
+GROQ_MODEL   = os.environ.get("GROQ_MODEL", "llama-3.3-70b-versatile")
+GROQ_URL     = os.environ.get("GROQ_URL", "https://api.groq.com/openai/v1/chat/completions")
+
+# Initialize clients outside the handler for connection reuse across invocations (reduces cold-starts)
+ddb   = boto3.resource("dynamodb", region_name=REGION)
+table = ddb.Table(TABLE_NAME)
+bedrock = boto3.client("bedrock-runtime", region_name=REGION)
 
 # Use environment variable for CORS domain, fallback to * if not set to avoid breaking dev
 AMPLIFY_DOMAIN = os.environ.get("AMPLIFY_DOMAIN", "*")
@@ -134,6 +142,35 @@ def call_bedrock(bedrock_client, prompt):
         return str(e), False
 
 
+def call_groq(prompt):
+    """Groq OpenAI-compatible chat call (stdlib only). Returns (text, used_ai)."""
+    body = json.dumps({
+        "model": GROQ_MODEL,
+        "max_tokens": MAX_TOKENS,
+        "messages": [{"role": "user", "content": prompt}],
+    }).encode("utf-8")
+    req = urllib.request.Request(
+        GROQ_URL, data=body, method="POST",
+        headers={"Content-Type": "application/json",
+                 "Authorization": f"Bearer {GROQ_API_KEY}",
+                 "User-Agent": "python-requests/2.31.0"},
+    )
+    try:
+        with urllib.request.urlopen(req, timeout=30) as resp:
+            result = json.loads(resp.read())
+        return result["choices"][0]["message"]["content"].strip(), True
+    except Exception as e:
+        logger.error(f"Groq invoke failed: {e}")
+        return str(e), False
+
+
+def call_llm(prompt, bedrock_client=None):
+    """Default: Groq. Set LLM_PROVIDER=bedrock to use Amazon Bedrock (Claude 3 Haiku)."""
+    if LLM_PROVIDER == "bedrock":
+        return call_bedrock(bedrock_client, prompt)
+    return call_groq(prompt)
+
+
 def _graceful_fallback(risks: list, module: str) -> str:
     """
     Structured fallback returned when Bedrock is unavailable.
@@ -183,11 +220,6 @@ def _graceful_fallback(risks: list, module: str) -> str:
 def lambda_handler(event, context):
     logger.info("chatbot-handler invoked")
 
-    # Initialize clients inside handler so test patches (mock boto3.client) work
-    ddb     = boto3.resource("dynamodb", region_name=REGION)
-    table   = ddb.Table(TABLE_NAME)
-    bedrock = boto3.client("bedrock-runtime", region_name=REGION)
-
     try:
         body = json.loads(event.get("body") or "{}")
     except json.JSONDecodeError:
@@ -210,7 +242,7 @@ def lambda_handler(event, context):
 
     # Try Bedrock first; fall back to rule-based if not available
     prompt  = build_chat_prompt(question, risks, module)
-    answer, used_ai = call_bedrock(bedrock, prompt)
+    answer, used_ai = call_llm(prompt, bedrock)
 
     if not used_ai:
         logger.info("Bedrock unavailable -- using graceful fallback")
