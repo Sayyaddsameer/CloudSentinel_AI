@@ -159,8 +159,12 @@ def call_groq(prompt):
         with urllib.request.urlopen(req, timeout=30) as resp:
             result = json.loads(resp.read())
         return result["choices"][0]["message"]["content"].strip(), True
+    except urllib.error.HTTPError as e:
+        body_text = e.read().decode("utf-8", "replace")
+        logger.error(f"Groq HTTP {e.code}: {body_text}")
+        return body_text, False
     except Exception as e:
-        logger.error(f"Groq invoke failed: {e}")
+        logger.error(f"Groq invoke failed: {type(e).__name__}: {e}")
         return str(e), False
 
 
@@ -189,7 +193,7 @@ def _graceful_fallback(risks: list, module: str) -> str:
     low    = [r for r in risks if r.get("riskPriority") == "Low"]
 
     header = (
-        "⚠️ **AI assistant temporarily unavailable** — the Bedrock model could not be "
+        "⚠️ **AI assistant temporarily unavailable** — the AI model could not be "
         "reached. Here is a data-driven summary of your current security posture instead:\n\n"
     )
 
@@ -213,7 +217,7 @@ def _graceful_fallback(risks: list, module: str) -> str:
         + f"(Total: {len(risks)})\n\n"
         + (f"**Top risks:**\n{top_lines}\n\n" if top_lines else "")
         + "Please retry your question in a moment — the AI assistant will respond "
-        + "with a full explanation when Bedrock becomes available again."
+        + "with a full explanation when the AI service becomes available again."
     )
 
 
@@ -245,7 +249,7 @@ def lambda_handler(event, context):
     answer, used_ai = call_llm(prompt, bedrock)
 
     if not used_ai:
-        logger.info("Bedrock unavailable -- using graceful fallback")
+        logger.info("AI provider unavailable -- using graceful fallback")
         answer = _graceful_fallback(risks, module)
 
     return {
