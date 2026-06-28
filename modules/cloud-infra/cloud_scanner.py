@@ -12,8 +12,8 @@ from shared.schemas.risk_record import build_risk_record
 logger = logging.getLogger()
 logger.setLevel(logging.INFO)
 
-TABLE_NAME = os.environ["DYNAMODB_TABLE"]
-REGION = os.environ.get("AWS_REGION", "us-east-1")
+TABLE_NAME      = os.environ["DYNAMODB_TABLE"]
+LAMBDA_REGION   = os.environ.get("AWS_REGION", "us-east-1")  # where THIS Lambda lives
 TARGET_ROLE_ARN = os.environ.get("TARGET_ROLE_ARN", "")
 GCP_SECRET_NAME = os.environ.get("GCP_SECRET_NAME", "")
 
@@ -22,10 +22,14 @@ GCP_SECRET_NAME = os.environ.get("GCP_SECRET_NAME", "")
 # STS helper -- if TARGET_ROLE_ARN is set, all clients use assumed-role creds
 # ---------------------------------------------------------------------------
 
-def get_aws_clients(role_arn=None):
+def get_aws_clients(role_arn=None, scan_region=None):
+    """Build boto3 clients scoped to scan_region (the user's chosen region).
+    Falls back to the Lambda's own deployment region only if scan_region is not provided.
+    """
+    target_region = scan_region or LAMBDA_REGION
     effective_role = role_arn or TARGET_ROLE_ARN
     if effective_role:
-        sts = boto3.client("sts", region_name=REGION)
+        sts = boto3.client("sts", region_name=LAMBDA_REGION)
         creds = sts.assume_role(
             RoleArn=effective_role,
             RoleSessionName="cloudsentinel-scan",
@@ -36,11 +40,12 @@ def get_aws_clients(role_arn=None):
             "aws_access_key_id":     creds["AccessKeyId"],
             "aws_secret_access_key": creds["SecretAccessKey"],
             "aws_session_token":     creds["SessionToken"],
-            "region_name":           REGION,
+            "region_name":           target_region,
         }
-        logger.info(f"Using assumed role: {effective_role}")
+        logger.info(f"Assumed role {effective_role}, scanning region {target_region}")
     else:
-        kwargs = {"region_name": REGION}
+        kwargs = {"region_name": target_region}
+        logger.info(f"Scanning own account, region {target_region}")
 
     return {
         "s3":     boto3.client("s3",     **kwargs),
@@ -66,7 +71,7 @@ def build_risk(*args, **kwargs):
 def _write_cloudwatch_metric(metric_name, value_ms, module="cloud-infra"):
     """Write a duration metric to CloudWatch namespace CloudSentinel/Performance."""
     try:
-        cw = boto3.client("cloudwatch", region_name=REGION)
+        cw = boto3.client("cloudwatch", region_name=LAMBDA_REGION)
         cw.put_metric_data(
             Namespace="CloudSentinel/Performance",
             MetricData=[{
@@ -401,7 +406,7 @@ def scan_gcp_resources(table):
 
     # Fetch service account JSON from Secrets Manager
     try:
-        sm = boto3.client("secretsmanager", region_name=REGION)
+        sm = boto3.client("secretsmanager", region_name=LAMBDA_REGION)
         secret = sm.get_secret_value(SecretId=GCP_SECRET_NAME)
         sa_info = json.loads(secret["SecretString"])
         project_id = sa_info.get("project_id", "")
@@ -670,7 +675,7 @@ def scan_cloudtrail(clients, table):
     """Check whether CloudTrail is enabled and actively logging (Critical if not)."""
     found = []
     try:
-        cloudtrail = boto3.client("cloudtrail", region_name=REGION)
+        cloudtrail = boto3.client("cloudtrail", region_name=LAMBDA_REGION)
         trails = cloudtrail.describe_trails(includeShadowTrails=False).get("trailList", [])
         if not trails:
             r = build_risk(
@@ -768,7 +773,7 @@ def scan_rds_public(clients, table):
     """Check RDS DB instances for public accessibility (High if publicly accessible)."""
     found = []
     try:
-        rds = boto3.client("rds", region_name=REGION)
+        rds = boto3.client("rds", region_name=LAMBDA_REGION)
         paginator = rds.get_paginator("describe_db_instances")
         for page in paginator.paginate():
             for instance in page.get("DBInstances", []):
@@ -836,22 +841,26 @@ def purge_module_risks(table, module):
 def lambda_handler(event, context):
     _start = time.time()
     logger.info("cloud-scanner started")
-    ddb = boto3.resource("dynamodb", region_name=REGION)
+    ddb = boto3.resource("dynamodb", region_name=LAMBDA_REGION)
     table = ddb.Table(TABLE_NAME)
 
     # Accept targetRoleArn and providers from request body
     target_role_arn = None
+    scan_region     = None
     providers = ["aws", "gcp"]  # default to both if not specified
     try:
         body = json.loads(event.get("body") or "{}")
         target_role_arn = body.get("targetRoleArn") or None
+        scan_region     = body.get("scanRegion") or None   # user-selected region from frontend
         if "providers" in body:
             providers = body["providers"]
     except Exception:
         pass
 
+    if scan_region:
+        logger.info(f"Scanning user-selected region: {scan_region}")
     if target_role_arn:
-        logger.info(f"Cross-account scan requested for role: {target_role_arn}")
+        logger.info(f"Cross-account scan for role: {target_role_arn}")
 
     # Purge old risks before scanning
     purge_module_risks(table, "cloud-infra")
@@ -859,7 +868,7 @@ def lambda_handler(event, context):
     all_risks = []
 
     if "aws" in providers:
-        clients = get_aws_clients(role_arn=target_role_arn)
+        clients = get_aws_clients(role_arn=target_role_arn, scan_region=scan_region)
         all_risks += scan_root_mfa(clients, table)           # Critical severity check
         all_risks += scan_s3_buckets(clients, table)
         all_risks += scan_security_groups(clients, table)
@@ -890,7 +899,7 @@ def lambda_handler(event, context):
     # Fire-and-forget: trigger ai-explainer immediately so explanations
     # are ready by the time the user refreshes (no need to wait for EventBridge schedule).
     try:
-        boto3.client("lambda", region_name=REGION).invoke(
+        boto3.client("lambda", region_name=LAMBDA_REGION).invoke(
             FunctionName=f"cloudsentinel-ai-explainer",
             InvocationType="Event",   # async — does not block the scan response
             Payload=json.dumps({"source": "cloud-scanner", "module": "cloud-infra"}),

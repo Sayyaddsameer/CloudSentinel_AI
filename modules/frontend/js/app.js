@@ -180,10 +180,14 @@ async function triggerScan(module, extraParams = {}) {
   const activeKeys = Object.keys(conn);
   const providers = [...new Set(activeKeys.map(k => k.startsWith('aws') ? 'aws' : k))];
 
-  const scanPayload = { 
-    ...(roleArn ? { targetRoleArn: roleArn } : {}), 
+  // User-selected region saved when they connected their account — never hardcoded
+  const scanRegion = localStorage.getItem('cs_aws_region') || null;
+
+  const scanPayload = {
+    ...(roleArn    ? { targetRoleArn: roleArn }    : {}),
+    ...(scanRegion ? { scanRegion }                 : {}),
     providers,
-    ...extraParams 
+    ...extraParams
   };
 
   const res = await apiFetch(`${API_BASE}/scan-${module}`, {
