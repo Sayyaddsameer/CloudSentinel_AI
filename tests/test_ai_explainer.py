@@ -139,27 +139,27 @@ class TestLambdaHandler:
         assert ":ex" in call_kwargs["ExpressionAttributeValues"]
         assert call_kwargs["ExpressionAttributeValues"][":cat"] == "SECURITY"
 
-    def test_handler_skips_risk_when_bedrock_fails(self, ai_explainer):
+    def test_handler_uses_fallback_when_groq_fails(self, ai_explainer):
+        """When Groq is unavailable the handler uses a template fallback and still
+        persists an explanation — processed stays 1 (not 0)."""
         table   = self._make_table([self._OPEN_RISK])
-        bedrock = MagicMock()
         comp    = MagicMock()
-
-        # Bedrock returns empty string (failure path)
-        bedrock.invoke_model.side_effect = Exception("model unavailable")
+        comp.detect_key_phrases.return_value = {"KeyPhrases": []}
 
         with patch("boto3.resource") as mock_resource, \
-             patch("boto3.client") as mock_client:
+             patch("boto3.client") as mock_client, \
+             patch("urllib.request.urlopen", side_effect=Exception("connection refused")):
 
             mock_resource.return_value.Table.return_value = table
-            mock_client.side_effect = lambda svc, **kw: bedrock if "bedrock" in svc else comp
+            mock_client.return_value = comp
 
             resp = ai_explainer.lambda_handler({}, MagicMock())
 
         assert resp["statusCode"] == 200
         body = json.loads(resp["body"])
-        # Risk skipped — nothing written back
-        assert body["processed"] == 0
-        table.update_item.assert_not_called()
+        # Fallback explanation is written even when Groq is down
+        assert body["processed"] == 1
+        table.update_item.assert_called_once()
 
     def test_handler_returns_200_when_no_open_risks(self, ai_explainer):
         table = self._make_table([])

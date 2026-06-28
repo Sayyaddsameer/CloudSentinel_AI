@@ -417,22 +417,22 @@ class TestChatbotHandlerE2E:
         return table
 
     @mock_aws
-    def test_chatbot_returns_200_with_bedrock_success(self):
+    def test_chatbot_returns_200_with_groq_success(self):
         _create_risks_table(boto3.client("dynamodb", region_name=REGION))
         self._seed_table()
 
         ch = _fresh_module("chatbot_handler")
 
-        bedrock_response_body = json.dumps({
-            "content": [{"text": "Your IAM account has no password policy set. Remediate by..."}]
+        groq_response = json.dumps({
+            "choices": [{"message": {"content": "Your IAM account has no password policy set. Remediate by enabling it in the console."}}],
+            "usage": {"prompt_tokens": 50, "completion_tokens": 30}
         }).encode()
-        mock_bedrock = MagicMock()
-        mock_bedrock.invoke_model.return_value = {
-            "body": MagicMock(read=lambda: bedrock_response_body)
-        }
+        mock_resp = MagicMock()
+        mock_resp.__enter__ = lambda s: s
+        mock_resp.__exit__ = MagicMock(return_value=False)
+        mock_resp.read.return_value = groq_response
 
-        with patch("boto3.client", side_effect=lambda svc, **kw:
-                   mock_bedrock if "bedrock" in svc else boto3.client(svc, **kw)):
+        with patch("urllib.request.urlopen", return_value=mock_resp):
             resp = ch.lambda_handler(
                 _apigw_event(body={"question": "What are my risks?", "module": "cloud-infra"}),
                 MagicMock(),

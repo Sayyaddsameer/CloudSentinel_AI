@@ -289,25 +289,39 @@ function awsStep2() {
   document.getElementById('aws-step-2').style.display='';
   setWizardStep(2);
 
-  /* Build CloudFormation URL -- values injected from env.js at deploy time */
+  /* Default the region picker to the client's last choice (or us-east-1) */
+  const sel = document.getElementById('aws-target-region');
+  if (sel) {
+    const saved = localStorage.getItem('cs_aws_region');
+    if (saved) sel.value = saved;
+  }
+  updateCfnLinks();
+
+  document.getElementById('cfn-instructions').style.display = selectedMethod==='cfn' ? '' : 'none';
+  document.getElementById('tf-instructions').style.display  = selectedMethod==='tf'  ? '' : 'none';
+}
+
+/* Build the CloudFormation deep-link + CLI snippet from the CLIENT-selected
+ * region (not the platform's ENV_REGION). Re-runs whenever the region
+ * dropdown changes, and remembers the choice for the disconnect step. */
+function updateCfnLinks() {
   const TEMPLATE_URL = window.ENV_CFN_TEMPLATE_URL || '';
   const LAMBDA_ROLE  = window.ENV_LAMBDA_ROLE_ARN  || '';
-  const REGION       = window.ENV_REGION            || 'us-east-1';
+  const sel    = document.getElementById('aws-target-region');
+  const REGION = (sel && sel.value) || window.ENV_REGION || 'us-east-1';
+  localStorage.setItem('cs_aws_region', REGION);   /* remembered for disconnect */
   if (!TEMPLATE_URL) { showToast('CloudFormation template URL not configured. Set ENV_CFN_TEMPLATE_URL in env.js.', 'error'); return; }
   const cfnParams = LAMBDA_ROLE
     ? `&param_CloudSentinelLambdaRoleArn=${encodeURIComponent(LAMBDA_ROLE)}&param_ExternalId=cloudsentinel`
     : '';
   const cfnUrl = `https://${REGION}.console.aws.amazon.com/cloudformation/home?region=${REGION}#/stacks/create/review?templateURL=${encodeURIComponent(TEMPLATE_URL)}&stackName=CloudSentinel-Scanner${cfnParams}`;
-  document.getElementById('cfn-link').href = cfnUrl;
+  const link = document.getElementById('cfn-link');
+  if (link) link.href = cfnUrl;
 
-  /* Update CLI command snippet dynamically */
   const cliCmd = document.getElementById('cfn-cli-cmd');
   if (cliCmd) {
     cliCmd.textContent = `aws cloudformation create-stack \\\n  --stack-name CloudSentinel-Scanner \\\n  --template-url ${TEMPLATE_URL} \\\n  --capabilities CAPABILITY_NAMED_IAM \\\n  --region ${REGION}`;
   }
-
-  document.getElementById('cfn-instructions').style.display = selectedMethod==='cfn' ? '' : 'none';
-  document.getElementById('tf-instructions').style.display  = selectedMethod==='tf'  ? '' : 'none';
 }
 
 function awsStep3() {
@@ -441,7 +455,7 @@ async function performDisconnect() {
     } else if (awsStatus === 'already_deleted') {
       showToast('AWS access already removed.', 'success');
     } else if (awsStatus === 'instructions') {
-      const REGION = window.ENV_REGION || 'us-east-1';
+      const REGION = localStorage.getItem('cs_aws_region') || window.ENV_REGION || 'us-east-1';
       showToast(
         `Could not auto-delete stack. Run: aws cloudformation delete-stack --stack-name CloudSentinel-Scanner --region ${REGION}`,
         'warning', 12000

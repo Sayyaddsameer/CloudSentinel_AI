@@ -94,7 +94,9 @@ def call_groq(prompt, temperature=0.1):
     req = urllib.request.Request(
         GROQ_URL, data=body, method="POST",
         headers={"Content-Type": "application/json",
-                 "Authorization": f"Bearer {GROQ_API_KEY}"},
+                 "Authorization": f"Bearer {GROQ_API_KEY}",
+                 "User-Agent": "python-requests/2.31.0",
+                 "Accept": "application/json"},
     )
     try:
         with urllib.request.urlopen(req, timeout=30) as resp:
@@ -136,7 +138,7 @@ def validate_output(text, risk):
     if rname and rname not in text:
         return False, "resource name not referenced"
     src = json.dumps(risk)
-    bad_ips = [ip for ip in re.findall(r"\d{1,3}(?:\.\d{1,3}){3}", text) if ip not in src]
+    bad_ips = [ip for ip in re.findall(r"\b\d{1,3}(?:\.\d{1,3}){3}\b", text) if ip not in src]
     if bad_ips:
         return False, "invented IP " + str(bad_ips)
     bad_arns = [a for a in re.findall(r"arn:aws:[a-z0-9\-]+:[a-z0-9\-]*:\d+:[^\s]+", text) if a not in src]
@@ -186,19 +188,25 @@ def classify_risk_with_comprehend(comprehend_client, risk_text):
 # ---------------------------------------------------------------------------
 
 def fetch_open_risks(table):
-    """Scan for OPEN risks that have no AI explanation yet."""
+    """Paginate through ALL DynamoDB pages and return every OPEN risk
+    that has no AI explanation yet — processed in one Lambda invocation."""
+    items = []
+    filter_expr = (
+        Attr("status").eq("OPEN") &
+        (Attr("aiExplanation").eq("") | Attr("aiExplanation").not_exists())
+    )
     try:
-        response = table.scan(
-            FilterExpression=(
-                Attr("status").eq("OPEN") &
-                (Attr("aiExplanation").eq("") | Attr("aiExplanation").not_exists())
+        resp = table.scan(FilterExpression=filter_expr)
+        items.extend(resp.get("Items", []))
+        while "LastEvaluatedKey" in resp:
+            resp = table.scan(
+                FilterExpression=filter_expr,
+                ExclusiveStartKey=resp["LastEvaluatedKey"]
             )
-        )
-        items = response.get("Items", [])[:MAX_RISKS]
-        return items
+            items.extend(resp.get("Items", []))
     except ClientError as e:
         logger.error(f"DynamoDB scan failed: {e}")
-        return []
+    return items
 
 
 def update_risk(table, risk, explanation, category):
@@ -241,6 +249,7 @@ def lambda_handler(event, context):
     fallback_used = 0          # both attempts failed the guardrail
 
     for risk in risks:
+        time.sleep(2.1)   # Groq free tier: 30 RPM → 2s min gap; 2.1s avoids 429s
         _t0 = time.time()
         explanation = call_llm(build_bedrock_prompt(risk), bedrock, temperature=0.1)
         latency_ms = int((time.time() - _t0) * 1000)

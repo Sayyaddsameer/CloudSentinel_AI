@@ -13,8 +13,11 @@ from shared.schemas.risk_record import build_risk_record
 logger = logging.getLogger()
 logger.setLevel(logging.INFO)
 
-TABLE_NAME = os.environ["DYNAMODB_TABLE"]
-REGION     = os.environ.get("AWS_REGION", "us-east-1")
+TABLE_NAME  = os.environ["DYNAMODB_TABLE"]
+# SCAN_REGION: where AWS services (API GW, Cognito etc.) live
+REGION      = os.environ.get("SCAN_REGION") or os.environ.get("AWS_REGION", "us-east-1")
+# DDB_REGION: where the DynamoDB table lives (may differ from scan region)
+DDB_REGION  = os.environ.get("DDB_REGION") or os.environ.get("AWS_REGION", "ap-south-1")
 
 # Thresholds — web APIs. Ambica uses 1000ms for mobile; I use 2000ms here.
 LATENCY_THRESHOLD_MS = int(os.environ.get("LATENCY_THRESHOLD_MS", "2000"))

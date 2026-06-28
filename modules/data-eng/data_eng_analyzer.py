@@ -13,7 +13,9 @@ logger = logging.getLogger()
 logger.setLevel(logging.INFO)
 
 TABLE_NAME  = os.environ["DYNAMODB_TABLE"]
-REGION      = os.environ.get("AWS_REGION", "us-east-1")
+# SCAN_REGION overrides the Lambda-injected AWS_REGION so we can scan a
+# different region (e.g. us-east-1 resources from an ap-south-1 Lambda).
+REGION      = os.environ.get("SCAN_REGION") or os.environ.get("AWS_REGION", "us-east-1")
 GLUE_FAIL_THRESHOLD = int(os.environ.get("GLUE_FAIL_THRESHOLD", "2"))
 GLUE_RUNS_WINDOW    = int(os.environ.get("GLUE_RUNS_WINDOW", "5"))
 
