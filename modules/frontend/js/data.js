@@ -130,24 +130,7 @@ async function confirmDataConnect() {
 
   const roleArn = `arn:aws:iam::${accountId}:role/cloudsentinel-scanner-role`;
 
-  // ── Validate via STS before accepting connection ────────────────────────
-  if (btn) { btn.disabled = true; btn.textContent = 'Validating AWS access…'; }
-  try {
-    const result = await validateAwsConnection(MODULE, accountId, roleArn);
-    if (!result.valid) {
-      showToast(result.error || 'Could not connect: CloudSentinel IAM role not found.', 'error', 10000);
-      if (btn) { btn.disabled = false; btn.textContent = 'Connect & Scan'; }
-      return;
-    }
-    const alias = result.accountAlias ? ` (${result.accountAlias})` : '';
-    showToast(`AWS account ${result.accountId}${alias} verified!`, 'success');
-  } catch (err) {
-    showToast('Validation failed: ' + err.message, 'error', 8000);
-    if (btn) { btn.disabled = false; btn.textContent = 'Connect & Scan'; }
-    return;
-  }
-
-  if (btn) { btn.disabled = false; btn.textContent = 'Connect & Scan'; }
+  if (btn) { btn.disabled = true; btn.textContent = 'Connecting…'; }
   closeModal('modal-data');
   setConnection(MODULE, 'aws-data', { accountId, roleArn, connectedAt: new Date().toISOString() });
 

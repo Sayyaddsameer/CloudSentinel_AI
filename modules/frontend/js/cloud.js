@@ -322,6 +322,12 @@ function updateCfnLinks() {
   if (cliCmd) {
     cliCmd.textContent = `aws cloudformation create-stack \\\n  --stack-name CloudSentinel-Scanner \\\n  --template-url ${TEMPLATE_URL} \\\n  --capabilities CAPABILITY_NAMED_IAM \\\n  --region ${REGION}`;
   }
+
+  /* Keep the Disconnect (delete-stack) command in the same region */
+  const disc = document.getElementById('disconnect-cli-cmd');
+  if (disc) {
+    disc.textContent = `aws cloudformation delete-stack \\\n  --stack-name CloudSentinel-Scanner \\\n  --region ${REGION}`;
+  }
 }
 
 function awsStep3() {
@@ -360,25 +366,13 @@ async function confirmAwsConnect() {
   const roleArn    = roleArnEl ? roleArnEl.value.trim() : `arn:aws:iam::${accountId}:role/cloudsentinel-scanner-role`;
   const confirmBtn = document.getElementById('btn-confirm-aws');
 
-  if (confirmBtn) { confirmBtn.disabled = true; confirmBtn.textContent = 'Validating AWS access…'; }
-
-  // ── Validate via STS before accepting connection ────────────────────────
-  try {
-    const result = await validateAwsConnection(MODULE, accountId, roleArn);
-    if (!result.valid) {
-      showToast(result.error || 'Could not connect: CloudSentinel IAM role not found.', 'error', 10000);
-      if (confirmBtn) { confirmBtn.disabled = false; confirmBtn.textContent = 'Connect Account'; }
-      return;
-    }
-    const alias = result.accountAlias ? ` (${result.accountAlias})` : '';
-    showToast(`AWS account ${result.accountId}${alias} verified!`, 'success');
-  } catch (err) {
-    showToast('Validation failed: ' + err.message, 'error', 8000);
-    if (confirmBtn) { confirmBtn.disabled = false; confirmBtn.textContent = 'Connect Account'; }
+  // Basic client-side check — 12-digit AWS account ID
+  if (!/^\d{12}$/.test(accountId)) {
+    showToast('Please enter a valid 12-digit AWS account ID.', 'error', 6000);
     return;
   }
 
-  if (confirmBtn) { confirmBtn.disabled = false; confirmBtn.textContent = 'Connect Account'; }
+  if (confirmBtn) { confirmBtn.disabled = true; confirmBtn.textContent = 'Connecting…'; }
   closeModal('modal-aws');
   setConnection(MODULE, 'aws', {
     accountId,

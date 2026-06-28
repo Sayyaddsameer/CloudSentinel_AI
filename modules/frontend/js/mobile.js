@@ -122,24 +122,7 @@ async function confirmMobileConnect() {
     return;
   }
 
-  // ── Validate via STS before accepting connection ────────────────────────
-  if (btn) { btn.disabled = true; btn.textContent = 'Validating AWS access…'; }
-  try {
-    const roleArn = `arn:aws:iam::${accountId}:role/cloudsentinel-scanner-role`;
-    const result  = await validateAwsConnection(MODULE, accountId, roleArn);
-    if (!result.valid) {
-      showToast(result.error || 'Could not connect: CloudSentinel IAM role not found.', 'error', 10000);
-      if (btn) { btn.disabled = false; btn.textContent = 'Connect & Monitor'; }
-      return;
-    }
-    showToast(`AWS account ${result.accountId} verified!`, 'success');
-  } catch (err) {
-    showToast('Validation failed: ' + err.message, 'error', 8000);
-    if (btn) { btn.disabled = false; btn.textContent = 'Connect & Monitor'; }
-    return;
-  }
-
-  if (btn) { btn.disabled = false; btn.textContent = 'Connect & Monitor'; }
+  if (btn) { btn.disabled = true; btn.textContent = 'Connecting…'; }
   closeModal('modal-mobile');
   setConnection(MODULE, 'aws-mobile', {
     apiUrl,
