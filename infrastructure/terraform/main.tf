@@ -118,6 +118,30 @@ variable "bedrock_model_id" {
   default     = "anthropic.claude-3-haiku-20240307-v1:0"
 }
 
+variable "groq_api_key" {
+  description = "Groq Cloud API key for LLM inference (ai-explainer + chatbot). Get one free at console.groq.com. Stored only in terraform.tfvars — never committed."
+  type        = string
+  sensitive   = true
+  default     = ""
+}
+
+variable "llm_provider" {
+  description = "LLM backend to use: 'groq' (default, free tier) or 'bedrock' (requires Bedrock model access)"
+  type        = string
+  default     = "groq"
+
+  validation {
+    condition     = contains(["groq", "bedrock"], var.llm_provider)
+    error_message = "llm_provider must be 'groq' or 'bedrock'."
+  }
+}
+
+variable "groq_model" {
+  description = "Groq model ID to use when llm_provider = 'groq'"
+  type        = string
+  default     = "llama-3.3-70b-versatile"
+}
+
 variable "max_tokens" {
   description = "Maximum number of tokens per Bedrock response"
   type        = number

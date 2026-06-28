@@ -33,10 +33,22 @@ app_url = "https://your-app.amplifyapp.com"
 notification_threshold = "High"
 
 # ---------------------------------------------------------------------------
-# AI and Bedrock
+# AI / LLM provider
 # ---------------------------------------------------------------------------
 
-# Amazon Bedrock model ID used by the AI explainer and chatbot Lambda functions.
+# Which LLM backend to use for ai-explainer and chatbot.
+# "groq"    → free-tier Groq API (recommended, no GPU setup needed)
+# "bedrock" → Amazon Bedrock (requires model access enabled in your account)
+llm_provider = "groq"
+
+# Groq API key — get one free at https://console.groq.com/keys
+# IMPORTANT: put the real value in terraform.tfvars (gitignored), NOT here.
+groq_api_key = ""
+
+# Groq model to use. llama-3.3-70b-versatile is the default free-tier model.
+groq_model = "llama-3.3-70b-versatile"
+
+# Amazon Bedrock model ID (only used when llm_provider = "bedrock").
 # Must be enabled in your account via the Bedrock Model Access console.
 bedrock_model_id = "anthropic.claude-3-haiku-20240307-v1:0"
 

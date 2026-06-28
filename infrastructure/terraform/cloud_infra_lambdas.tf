@@ -68,6 +68,9 @@ resource "aws_lambda_function" "ai_explainer" {
   environment {
     variables = {
       DYNAMODB_TABLE    = aws_dynamodb_table.risks.name
+      LLM_PROVIDER      = var.llm_provider
+      GROQ_API_KEY      = var.groq_api_key
+      GROQ_MODEL        = var.groq_model
       BEDROCK_MODEL_ID  = var.bedrock_model_id
       MAX_TOKENS        = tostring(var.max_tokens)
       MAX_RISKS_PER_RUN = tostring(var.max_risks_per_run)
@@ -108,6 +111,9 @@ resource "aws_lambda_function" "chatbot_handler" {
   environment {
     variables = {
       DYNAMODB_TABLE        = aws_dynamodb_table.risks.name
+      LLM_PROVIDER          = var.llm_provider
+      GROQ_API_KEY          = var.groq_api_key
+      GROQ_MODEL            = var.groq_model
       BEDROCK_MODEL_ID      = var.bedrock_model_id
       MAX_TOKENS            = tostring(var.max_tokens)
       CHATBOT_CONTEXT_RISKS = tostring(var.chatbot_context_risks)
