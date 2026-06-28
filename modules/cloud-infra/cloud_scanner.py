@@ -887,6 +887,18 @@ def lambda_handler(event, context):
     _write_cloudwatch_metric("ScanDurationMs", duration_ms, module="cloud-infra")
     logger.info(f"Scan complete -- {len(all_risks)} risk(s) in {duration_ms}ms")
 
+    # Fire-and-forget: trigger ai-explainer immediately so explanations
+    # are ready by the time the user refreshes (no need to wait for EventBridge schedule).
+    try:
+        boto3.client("lambda", region_name=REGION).invoke(
+            FunctionName=f"cloudsentinel-ai-explainer",
+            InvocationType="Event",   # async — does not block the scan response
+            Payload=json.dumps({"source": "cloud-scanner", "module": "cloud-infra"}),
+        )
+        logger.info("ai-explainer triggered asynchronously")
+    except Exception as e:
+        logger.warning(f"Could not trigger ai-explainer: {e}")  # non-fatal
+
     return {
         "statusCode": 200,
         "headers": {
