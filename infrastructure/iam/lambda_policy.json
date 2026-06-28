@@ -109,7 +109,8 @@
         "cloudwatch:GetMetricStatistics",
         "cloudwatch:GetMetricData",
         "cloudwatch:ListMetrics",
-        "cloudwatch:DescribeAlarms"
+        "cloudwatch:DescribeAlarms",
+        "cloudwatch:PutMetricData"
       ],
       "Resource": "*"
     },
@@ -137,7 +138,8 @@
       "Effect": "Allow",
       "Action": [
         "lambda:ListFunctions",
-        "lambda:GetFunction"
+        "lambda:GetFunction",
+        "lambda:InvokeFunction"
       ],
       "Resource": "*"
     },
