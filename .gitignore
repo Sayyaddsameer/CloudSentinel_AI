@@ -58,3 +58,9 @@ layer_tmp/
 scripts/
 PRESENTATION_SCRIPT.md
 Team053_CloudSentinel_AI_IEEE.docx
+
+# Test output files
+*_out.json
+*_payload.json
+fix_groq_env.py
+invoke_policy.json
