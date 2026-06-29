@@ -495,8 +495,8 @@ def lambda_handler(event, context):
 
     purge_module_risks(table, "devops")
 
-    # GitHub Webhook mode — verify signature if secret is configured
-    gh_event = (event.get("headers") or {}).get("X-GitHub-Event", "")
+    # ── GitHub Webhook mode — verify signature if secret is configured ──────
+    gh_event   = (event.get("headers") or {}).get("X-GitHub-Event", "")
     sig_header = (event.get("headers") or {}).get("X-Hub-Signature-256", "")
 
     if gh_event == "push" or sig_header:
@@ -523,80 +523,121 @@ def lambda_handler(event, context):
         if not pipeline_config:
             pipeline_config = _fetch_workflow_from_github(repo_name) or {"jobs": {"build": {"steps": []}}}
     else:
-        # Manual mode — pipeline_config provided directly in the body, or fetch via API
-        repo_name = body.get("repo_name") or os.environ.get("DEFAULT_GITHUB_REPO", "")
-        pipeline_config = body.get("pipeline_config")
+        # ── Manual scan mode ─────────────────────────────────────────────────
+        # Priority: repoList from request > single repo_name > DEFAULT_GITHUB_REPO env
+        repo_list   = body.get("repoList") or []        # ["owner/repo1", "owner/repo2", ...]
+        request_pat = body.get("githubToken") or None   # PAT sent by browser for this scan only
 
-        if not pipeline_config:
+        # Fall back to legacy single-repo mode
+        if not repo_list:
+            single = body.get("repo_name") or os.environ.get("DEFAULT_GITHUB_REPO", "")
+            if single:
+                repo_list = [single]
+
+        if not repo_list:
+            logger.warning("No repos provided and DEFAULT_GITHUB_REPO not set — cannot scan")
+            no_repo_risk = build_risk(
+                "(not configured)",
+                "GitHub Repository Not Configured",
+                "No repositories were provided in the scan request. "
+                "Connect at least one GitHub repository from the DevOps module.",
+                "Medium",
+                remediation_steps=[
+                    "Open DevOps Intelligence → Connect GitHub",
+                    "Enter your GitHub org/username and Personal Access Token",
+                    "Select the repositories you want to analyze",
+                ]
+            )
+            save_risk(table, no_repo_risk)
+            emit_scan_completed("devops", [no_repo_risk])
+            return {
+                "statusCode": 200,
+                "headers": CORS_HEADERS,
+                "body": json.dumps({"message": "DevOps scan: no repository configured", "risksFound": 1}),
+            }
+
+        logger.info(f"Scanning {len(repo_list)} repo(s): {repo_list}")
+
+        def _fetch_with_pat(path, pat):
+            """Inline GitHub API GET using the PAT sent in the scan request."""
+            import urllib.request as _ureq
+            url = f"{GITHUB_API_BASE}{path}"
+            req = _ureq.Request(url, headers={
+                "Authorization":       f"token {pat}",
+                "Accept":              "application/vnd.github+json",
+                "X-GitHub-Api-Version": "2022-11-28",
+            })
+            try:
+                with _ureq.urlopen(req, timeout=15) as r:
+                    return json.loads(r.read())
+            except Exception as e:
+                logger.warning(f"GitHub API call failed {path}: {e}")
+                return None
+
+        all_risks = []
+        for repo_name in repo_list:
+            repo_name = repo_name.strip()
             if not repo_name:
-                # No repo and no inline config — can't scan, return informative risk
-                logger.warning("No repo_name provided and DEFAULT_GITHUB_REPO not set — skipping GitHub fetch")
-                no_repo_risk = build_risk(
-                    "(not configured)",
-                    "GitHub Repository Not Configured",
-                    "No GitHub repository was provided in the scan request and DEFAULT_GITHUB_REPO "
-                    "is not set. The DevOps scanner cannot analyse CI/CD pipelines without a repository.",
-                    "Medium",
-                    remediation_steps=[
-                        "Pass repo_name in the scan request body (e.g. 'owner/repo')",
-                        "Or set DEFAULT_GITHUB_REPO in the Lambda environment variables",
-                        "Or set github_pat_secret_arn in terraform.tfvars and re-deploy",
-                    ]
-                )
-                save_risk(table, no_repo_risk)
-                emit_scan_completed("devops", [no_repo_risk])
-                return {
-                    "statusCode": 200,
-                    "headers": CORS_HEADERS,
-                    "body": json.dumps({"message": "DevOps scan: no repository configured", "risksFound": 1}),
-                }
-            if not get_github_pat():
-                logger.warning("GITHUB_PAT_SECRET_ARN not configured; generating risk instead of silent demo mode.")
-                all_risks = [build_risk(
-                    repo_name,
-                    "GitHub Integration Not Configured",
-                    "GitHub webhook and API integration requires GITHUB_PAT_SECRET_ARN. "
-                    "Falling back to demo mode would mask real security gaps in your repositories.",
-                    "High",
-                    remediation_steps=[
-                        "Create a GitHub PAT with repo scope",
-                        "Store it in AWS Secrets Manager",
-                        "Set github_pat_secret_arn in terraform.tfvars and deploy"
-                    ]
-                )]
-                for r in all_risks:
-                    save_risk(table, r)
-                emit_scan_completed("devops", all_risks)
-                return {
-                    "statusCode": 200,
-                    "headers": CORS_HEADERS,
-                    "body": json.dumps({"message": "DevOps scan incomplete (PAT missing)", "risksFound": 1}),
-                }
+                continue
+            logger.info(f"  Scanning {repo_name}")
 
-            pipeline_config = _fetch_workflow_from_github(repo_name) or {"jobs": {"build": {"steps": []}}}
+            if request_pat:
+                # Fetch workflow files directly with the request PAT
+                workflow_dir = _fetch_with_pat(f"/repos/{repo_name}/contents/.github/workflows", request_pat)
+                pipeline_config = {"jobs": {"build": {"steps": []}}}
+                if isinstance(workflow_dir, list):
+                    for f in workflow_dir:
+                        name = f.get("name", "")
+                        if not (name.endswith(".yml") or name.endswith(".yaml")):
+                            continue
+                        file_meta = _fetch_with_pat(
+                            f"/repos/{repo_name}/contents/.github/workflows/{name}", request_pat
+                        )
+                        if not file_meta:
+                            continue
+                        try:
+                            raw_yaml = base64.b64decode(file_meta.get("content", "")).decode("utf-8")
+                        except Exception:
+                            continue
+                        if yaml:
+                            try:
+                                parsed = yaml.safe_load(raw_yaml)
+                                if parsed and isinstance(parsed, dict):
+                                    for job_key, job_val in parsed.get("jobs", {}).items():
+                                        pipeline_config["jobs"][f"{name}/{job_key}"] = job_val
+                            except Exception:
+                                pass
+                        else:
+                            for line in raw_yaml.splitlines():
+                                line = line.strip()
+                                if line.startswith("run:"):
+                                    pipeline_config["jobs"]["build"]["steps"].append({"run": line[4:].strip()})
+            else:
+                # Fall back to Secrets Manager PAT (legacy path)
+                pipeline_config = _fetch_workflow_from_github(repo_name) or \
+                                   {"jobs": {"build": {"steps": []}}}
 
-    steps     = flatten_steps(pipeline_config)
-    all_risks = []
-    all_risks += scan_for_secrets(repo_name, steps)
-    all_risks += scan_for_test_steps(repo_name, steps)
-    all_risks += scan_for_rollback(repo_name, steps)
-    all_risks += scan_for_monitoring(repo_name, steps)
-    all_risks += scan_for_unverified_actions(repo_name, pipeline_config)
-    all_risks += scan_for_admin_permissions(repo_name, pipeline_config)
+            steps = flatten_steps(pipeline_config)
+            all_risks += scan_for_secrets(repo_name, steps)
+            all_risks += scan_for_test_steps(repo_name, steps)
+            all_risks += scan_for_rollback(repo_name, steps)
+            all_risks += scan_for_monitoring(repo_name, steps)
+            all_risks += scan_for_unverified_actions(repo_name, pipeline_config)
+            all_risks += scan_for_admin_permissions(repo_name, pipeline_config)
 
     for r in all_risks:
         save_risk(table, r)
-        generate_github_pr_for_remediation(repo_name, r)  # Future scope
 
     emit_scan_completed("devops", all_risks)
 
-    # Record execution timing for benchmarking (paper Table II)
     duration_ms = int((time.time() - _start) * 1000)
     try:
         cw = boto3.client("cloudwatch", region_name=REGION)
         cw.put_metric_data(
             Namespace="CloudSentinel/Performance",
-            MetricData=[{"MetricName": "ScanDurationMs", "Dimensions": [{"Name": "Module", "Value": "devops"}], "Value": duration_ms, "Unit": "Milliseconds"}],
+            MetricData=[{"MetricName": "ScanDurationMs",
+                         "Dimensions": [{"Name": "Module", "Value": "devops"}],
+                         "Value": duration_ms, "Unit": "Milliseconds"}],
         )
     except Exception as e:
         logger.warning(f"CloudWatch metric write failed (non-fatal): {e}")
@@ -611,3 +652,4 @@ def lambda_handler(event, context):
             "durationMs": duration_ms,
         }),
     }
+

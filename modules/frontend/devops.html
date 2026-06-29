@@ -125,38 +125,62 @@
   </div>
 </div>
 
-<!-- GitHub Connect Modal -->
+<!-- GitHub Connect Modal (2-step: credentials → repo picker) -->
 <div class="modal-overlay" id="modal-github">
-  <div class="modal">
+  <div class="modal" style="max-width:560px">
     <div class="modal-header">
-      <div><div class="modal-title">Connect GitHub</div><div class="modal-subtitle">Grant read-only access to analyze pipeline configs</div></div>
+      <div>
+        <div class="modal-title">Connect GitHub</div>
+        <div class="modal-subtitle" id="gh-modal-subtitle">Enter your credentials to fetch repositories</div>
+      </div>
       <span class="modal-close" onclick="closeModal('modal-github')">X</span>
     </div>
     <div class="modal-body">
-      <div class="info-box">
-        <span class="info-icon">[lock]</span>
-        <div>CloudSentinel only reads <code>.github/workflows/</code> files. We never access your source code, push changes, or access private data beyond CI configuration.</div>
-      </div>
-      <div class="form-group">
-        <label class="form-label">GitHub Organization or Username</label>
-        <input class="form-input" id="github-org" placeholder="your-org-or-username">
-      </div>
-      <div class="form-group">
-        <label class="form-label">Personal Access Token (repo scope)</label>
-        <div class="input-group">
-          <input class="form-input" id="github-token" type="password" placeholder="ghp_xxxxxxxxxxxxxxxxxxxx">
-          <span class="input-icon" id="toggle-gh-token">show</span>
+
+      <!-- Step 1: Credentials -->
+      <div id="gh-step-1">
+        <div class="info-box mb-3">
+          <span class="info-icon">[lock]</span>
+          <div>CloudSentinel only reads <code>.github/workflows/</code> files. We never access your source code, push changes, or store your token.</div>
         </div>
-        <span class="form-hint">Generate at github.com/settings/tokens -- needs <code>repo</code> scope (read-only)</span>
+        <div class="form-group">
+          <label class="form-label">GitHub Organization or Username</label>
+          <input class="form-input" id="github-org" placeholder="your-org-or-username" autocomplete="off">
+        </div>
+        <div class="form-group">
+          <label class="form-label">Personal Access Token</label>
+          <div class="input-group">
+            <input class="form-input" id="github-token" type="password" placeholder="ghp_xxxxxxxxxxxxxxxxxxxx" autocomplete="off">
+            <span class="input-icon" id="toggle-gh-token">show</span>
+          </div>
+          <span class="form-hint">Generate at github.com/settings/tokens — needs <code>repo</code> scope (read-only)</span>
+        </div>
       </div>
-      <label class="checkbox-group">
-        <input type="checkbox" id="github-consent">
-        <span class="form-hint">I authorize CloudSentinel to read my GitHub Actions workflow files for security analysis.</span>
-      </label>
+
+      <!-- Step 2: Repo picker (hidden until token validated) -->
+      <div id="gh-step-2" style="display:none">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:.75rem">
+          <div class="form-label" style="margin:0">Select repositories to scan</div>
+          <div style="display:flex;gap:.5rem">
+            <button class="btn btn-outline btn-sm" onclick="toggleAllRepos(true)">Select All</button>
+            <button class="btn btn-outline btn-sm" onclick="toggleAllRepos(false)">None</button>
+          </div>
+        </div>
+        <div id="gh-repo-list" style="max-height:280px;overflow-y:auto;display:flex;flex-direction:column;gap:.4rem;border:1px solid var(--border);border-radius:8px;padding:.75rem">
+          <!-- populated by JS -->
+        </div>
+        <div class="form-hint mt-2" id="gh-repo-count"></div>
+        <label class="checkbox-group mt-3">
+          <input type="checkbox" id="github-consent">
+          <span class="form-hint">I authorize CloudSentinel to read my GitHub Actions workflow files for security analysis.</span>
+        </label>
+      </div>
+
     </div>
     <div class="modal-footer">
+      <button class="btn btn-outline" id="gh-btn-back" style="display:none" onclick="ghGoBack()">&#8592; Back</button>
       <button class="btn btn-outline" onclick="closeModal('modal-github')">Cancel</button>
-      <button class="btn btn-primary" onclick="confirmGithubConnect()">Connect &amp; Analyze</button>
+      <button class="btn btn-primary" id="gh-btn-next" onclick="ghNextStep()">Fetch Repositories &rarr;</button>
     </div>
   </div>
 </div>
