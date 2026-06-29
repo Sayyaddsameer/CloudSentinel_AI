@@ -40,6 +40,8 @@
 
   function clearSession() {
     localStorage.removeItem('cs_user');
+    localStorage.removeItem('cs_global_aws');   // clear dashboard global connection
+    localStorage.removeItem('cs_global_gcp');   // clear dashboard global GCP connection
   }
 
   function getUser() {
