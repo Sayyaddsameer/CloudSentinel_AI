@@ -490,22 +490,26 @@ ul { list-style: none; }
   backdrop-filter: blur(6px); z-index: 500;
   display: flex; align-items: center; justify-content: center; padding: 1rem;
   opacity: 0; pointer-events: none; transition: opacity .25s;
+  overflow-y: auto;              /* lets modal scroll on very small screens */
 }
 .modal-overlay.open { opacity: 1; pointer-events: all; }
 .modal {
   background: var(--surface-2); border: 1px solid var(--border-hover);
   border-radius: var(--radius-xl); width: 100%; max-width: 540px;
+  max-height: 90vh;              /* never taller than viewport */
+  display: flex; flex-direction: column;  /* so body can scroll independently */
   padding: 2rem; box-shadow: 0 8px 48px rgba(0,0,0,.5);
   animation: scaleIn .25s cubic-bezier(.34,1.56,.64,1);
+  overflow: hidden;
 }
 [data-theme="light"] .modal { box-shadow: 0 8px 48px rgba(26,32,53,.15); }
-.modal-header { display: flex; align-items: flex-start; justify-content: space-between; margin-bottom: 1.5rem; gap: 1rem; }
+.modal-header { display: flex; align-items: flex-start; justify-content: space-between; margin-bottom: 1.5rem; gap: 1rem; flex-shrink: 0; }
 .modal-title { font-size: 1.125rem; font-weight: 700; color: var(--text); }
 .modal-subtitle { font-size: .85rem; color: var(--text-2); margin-top: .25rem; }
 .modal-close { color: var(--text-3); font-size: 1.2rem; cursor: pointer; padding: .25rem; transition: color .15s; }
 .modal-close:hover { color: var(--text); }
-.modal-body { display: flex; flex-direction: column; gap: 1.25rem; }
-.modal-footer { display: flex; align-items: center; justify-content: flex-end; gap: .75rem; margin-top: 1.75rem; flex-wrap: wrap; }
+.modal-body { display: flex; flex-direction: column; gap: 1.25rem; overflow-y: auto; flex: 1; }
+.modal-footer { display: flex; align-items: center; justify-content: flex-end; gap: .75rem; margin-top: 1.75rem; flex-wrap: wrap; flex-shrink: 0; }
 
 /* ─── Toast ───────────────────────────────────────────────── */
 #toast-container { position: fixed; bottom: 1.5rem; right: 1.5rem; z-index: 1000; display: flex; flex-direction: column; gap: .625rem; }
@@ -979,7 +983,7 @@ ul { list-style: none; }
   .dashboard-welcome { flex-direction: column; align-items: flex-start; padding: 1.5rem; gap: 1rem; }
   .welcome-stats { gap: 1rem; flex-wrap: wrap; width: 100%; }
   #chatbot-panel { width: calc(100vw - 2rem); right: 1rem; height: calc(100vh - 6rem); max-height: 560px; }
-  .modal { padding: 1.5rem; margin: 1rem; width: calc(100% - 2rem); }
+  .modal { padding: 1.5rem; margin: auto 1rem; width: calc(100% - 2rem); max-height: 95vh; }
   .auth-card { padding: 1.5rem; margin: 1rem; }
   .session-pill .session-label { display: none; }
 
