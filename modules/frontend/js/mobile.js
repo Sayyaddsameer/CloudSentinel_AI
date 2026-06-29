@@ -34,8 +34,16 @@ document.addEventListener('DOMContentLoaded', () => {
 
   document.getElementById('btn-connect-mobile')?.addEventListener('click', () => {
     resetMobModal();
+    // Skip Step 1 if global AWS is already connected
+    const gAws = (() => { try { return JSON.parse(localStorage.getItem('cs_global_aws') || 'null'); } catch { return null; } })();
     openModal('modal-mobile');
+    if (gAws) {
+      document.getElementById('mobile-account-id').value = gAws.accountId;
+      document.getElementById('mobile-region').value     = gAws.region;
+      _mobShowStep2WithBanner(gAws);
+    }
   });
+
 });
 
 /* ── View switcher ─────────────────────────────────────────── */
@@ -140,7 +148,28 @@ function resetMobModal() {
   document.getElementById('mob-btn-next').onclick       = mobNextStep;
   document.getElementById('mob-modal-sub').textContent  = 'Step 1 of 2 — AWS Account access';
   document.getElementById('mobile-consent').checked     = false;
+  document.getElementById('mob-global-banner')?.remove();
 }
+
+function _mobShowStep2WithBanner(gAws) {
+  document.getElementById('mob-step-1').style.display   = 'none';
+  document.getElementById('mob-step-2').style.display   = '';
+  document.getElementById('mob-btn-back').style.display = '';
+  document.getElementById('mob-modal-sub').textContent  = 'Step 2 of 2 — API endpoint for live testing';
+  document.getElementById('mob-btn-next').textContent   = 'Connect & Monitor';
+  document.getElementById('mob-btn-next').onclick       = confirmMobileConnect;
+
+  const step2 = document.getElementById('mob-step-2');
+  if (!document.getElementById('mob-global-banner')) {
+    const banner = document.createElement('div');
+    banner.id = 'mob-global-banner';
+    banner.className = 'info-box mb-3';
+    banner.style.borderColor = 'var(--low)';
+    banner.innerHTML = `<span class="info-icon">&#10003;</span><div>Using your globally connected AWS account &middot; <strong>${gAws.accountId}</strong> &middot; <strong>${gAws.region}</strong>. Enter your API URL and consent below.</div>`;
+    step2.prepend(banner);
+  }
+}
+
 
 function mobGoBack() {
   document.getElementById('mob-step-1').style.display   = '';

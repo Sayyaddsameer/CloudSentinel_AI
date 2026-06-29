@@ -20,13 +20,15 @@ let allRisks = [];
 document.addEventListener('DOMContentLoaded', () => {
   initPage(MODULE);
 
-  // Pre-fill from cloud-infra connection if already done
+  // Pre-fill from cloud-infra connection or global AWS
+  const globalAws = (() => { try { return JSON.parse(localStorage.getItem('cs_global_aws') || 'null'); } catch { return null; } })();
   const cloudConn = getConnections('cloud-infra');
-  const savedRegion = cloudConn?.aws?.region || localStorage.getItem('cs_aws_region') || 'us-east-1';
+  const savedRegion = cloudConn?.aws?.region || globalAws?.region || localStorage.getItem('cs_aws_region') || 'us-east-1';
   const regionEl = document.getElementById('fs-region');
   if (regionEl) regionEl.value = savedRegion;
   const acctEl = document.getElementById('fs-account-id');
-  if (acctEl && cloudConn?.aws?.accountId) acctEl.value = cloudConn.aws.accountId;
+  if (acctEl && (cloudConn?.aws?.accountId || globalAws?.accountId))
+    acctEl.value = cloudConn?.aws?.accountId || globalAws?.accountId;
 
   const conns = getConnections(MODULE);
   if (Object.keys(conns).length) showRisksView(conns);
@@ -34,7 +36,14 @@ document.addEventListener('DOMContentLoaded', () => {
 
   document.getElementById('btn-connect-apigw').addEventListener('click', () => {
     resetFsModal();
+    // If global AWS already connected, skip Step 1 straight to Step 2
+    const gAws = (() => { try { return JSON.parse(localStorage.getItem('cs_global_aws') || 'null'); } catch { return null; } })();
     openModal('modal-apigw');
+    if (gAws) {
+      document.getElementById('fs-account-id').value = gAws.accountId;
+      document.getElementById('fs-region').value     = gAws.region;
+      _fsShowStep2WithBanner(gAws);
+    }
   });
 });
 
@@ -139,7 +148,30 @@ function resetFsModal() {
   document.getElementById('fs-btn-next').onclick       = fsNextStep;
   document.getElementById('fs-modal-sub').textContent  = 'Step 1 of 2 — AWS Account access';
   document.getElementById('apigw-consent').checked     = false;
+  // Remove any banner from a previous open
+  document.getElementById('fs-global-banner')?.remove();
 }
+
+function _fsShowStep2WithBanner(gAws) {
+  // Inject a banner at top of step-2 showing the global account being used
+  document.getElementById('fs-step-1').style.display   = 'none';
+  document.getElementById('fs-step-2').style.display   = '';
+  document.getElementById('fs-btn-back').style.display = '';
+  document.getElementById('fs-modal-sub').textContent  = 'Step 2 of 2 — API endpoint for live testing';
+  document.getElementById('fs-btn-next').textContent   = 'Connect & Scan';
+  document.getElementById('fs-btn-next').onclick       = confirmApigwConnect;
+
+  const step2 = document.getElementById('fs-step-2');
+  if (!document.getElementById('fs-global-banner')) {
+    const banner = document.createElement('div');
+    banner.id = 'fs-global-banner';
+    banner.className = 'info-box mb-3';
+    banner.style.borderColor = 'var(--low)';
+    banner.innerHTML = `<span class="info-icon">&#10003;</span><div>Using your globally connected AWS account &middot; <strong>${gAws.accountId}</strong> &middot; <strong>${gAws.region}</strong>. Enter your API URL and consent below.</div>`;
+    step2.prepend(banner);
+  }
+}
+
 
 function fsGoBack() {
   document.getElementById('fs-step-1').style.display   = '';

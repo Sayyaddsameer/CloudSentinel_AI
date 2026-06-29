@@ -173,22 +173,39 @@ async function fetchRisks(module) {
 async function triggerScan(module, extraParams = {}) {
   if (!API_BASE) throw new Error('API is not configured.');
 
-  const conn = getConnections(module);
-  const roleArn = conn?.aws?.roleArn || conn?.['aws-data']?.roleArn || conn?.['aws-mobile']?.roleArn || null;
-  
-  // Identify connected providers (e.g. 'aws', 'gcp')
-  const activeKeys = Object.keys(conn);
-  const providers = [...new Set(activeKeys.map(k => k.startsWith('aws') ? 'aws' : k))];
+  const conn      = getConnections(module);
+  const globalAws = (() => { try { return JSON.parse(localStorage.getItem('cs_global_aws') || 'null'); } catch { return null; } })();
 
-  // User-selected region saved when they connected their account — never hardcoded
-  const scanRegion = localStorage.getItem('cs_aws_region') || null;
+  // roleArn: module-level first, then fall back to global AWS connection
+  const roleArn =
+    conn?.aws?.roleArn        ||
+    conn?.['aws-data']?.roleArn ||
+    conn?.['aws-mobile']?.roleArn ||
+    globalAws?.roleArn        ||
+    null;
+
+  // scanRegion: module-level first, then global AWS, then cs_aws_region key
+  const scanRegion =
+    conn?.aws?.region         ||
+    conn?.['aws-data']?.region  ||
+    conn?.['aws-mobile']?.region ||
+    globalAws?.region          ||
+    localStorage.getItem('cs_aws_region') ||
+    null;
+
+  // Identify connected providers
+  const activeKeys = Object.keys(conn);
+  const providers  = activeKeys.length
+    ? [...new Set(activeKeys.map(k => k.startsWith('aws') ? 'aws' : k))]
+    : (globalAws ? ['aws'] : []);
 
   const scanPayload = {
-    ...(roleArn    ? { targetRoleArn: roleArn }    : {}),
-    ...(scanRegion ? { scanRegion }                 : {}),
+    ...(roleArn    ? { targetRoleArn: roleArn } : {}),
+    ...(scanRegion ? { scanRegion }              : {}),
     providers,
-    ...extraParams
+    ...extraParams,
   };
+
 
   const res = await apiFetch(`${API_BASE}/scan-${module}`, {
     method: 'POST',

@@ -127,33 +127,74 @@
 </div>
 
 <div class="modal-overlay" id="modal-data">
-  <div class="modal">
+  <div class="modal" style="max-width:560px">
     <div class="modal-header">
-      <div><div class="modal-title">Connect AWS Data Environment</div><div class="modal-subtitle">Read-only access to scan your data infrastructure</div></div>
+      <div><div class="modal-title">Connect AWS Data Environment</div><div class="modal-subtitle" id="data-modal-sub">Step 1 of 2 — AWS Account access</div></div>
       <span class="modal-close" onclick="closeModal('modal-data')">X</span>
     </div>
     <div class="modal-body">
-      <div class="info-box">
-        <span class="info-icon">[lock]</span>
-        <div>CloudSentinel will only read <strong>bucket metadata</strong> (public access settings, encryption config) and <strong>Glue job run history</strong>. We never read the contents of your data files.</div>
+
+      <!-- Step 1 -->
+      <div id="data-step-1">
+        <div class="info-box mb-3" style="border-color:var(--accent)">
+          <span class="info-icon">&#9888;</span>
+          <div>
+            CloudSentinel needs <strong>read-only access</strong> to scan S3 bucket metadata, DynamoDB tables, and Glue job history.
+            Deploy the scanner stack once — same stack as Cloud Infrastructure module.
+            <br><br>
+            <strong>Already connected Cloud Infrastructure?</strong> No new stack needed — same role is reused.
+          </div>
+        </div>
+        <div style="margin-bottom:1rem">
+          <a id="data-cfn-link" href="#" target="_blank" class="btn btn-outline w-full" style="justify-content:center">
+            &#9654; Deploy CloudSentinel Scanner Stack (if not done)
+          </a>
+          <div class="form-hint" style="text-align:center;margin-top:.4rem">Opens AWS CloudFormation — takes ~30 seconds</div>
+        </div>
+        <div class="form-group">
+          <label class="form-label">AWS Account ID</label>
+          <input class="form-input" id="data-account-id" placeholder="{your 12-digit account ID}" maxlength="12" autocomplete="off">
+          <span class="form-hint">12-digit number — top-right of AWS console</span>
+        </div>
+        <div class="form-group">
+          <label class="form-label">AWS Region (where your data services are)</label>
+          <select class="form-input" id="data-region">
+            <option value="us-east-1">us-east-1 — US East (N. Virginia)</option>
+            <option value="us-east-2">us-east-2 — US East (Ohio)</option>
+            <option value="us-west-1">us-west-1 — US West (N. California)</option>
+            <option value="us-west-2">us-west-2 — US West (Oregon)</option>
+            <option value="ap-south-1">ap-south-1 — Asia Pacific (Mumbai)</option>
+            <option value="ap-southeast-1">ap-southeast-1 — Asia Pacific (Singapore)</option>
+            <option value="ap-southeast-2">ap-southeast-2 — Asia Pacific (Sydney)</option>
+            <option value="ap-northeast-1">ap-northeast-1 — Asia Pacific (Tokyo)</option>
+            <option value="ap-northeast-2">ap-northeast-2 — Asia Pacific (Seoul)</option>
+            <option value="eu-west-1">eu-west-1 — Europe (Ireland)</option>
+            <option value="eu-west-2">eu-west-2 — Europe (London)</option>
+            <option value="eu-central-1">eu-central-1 — Europe (Frankfurt)</option>
+            <option value="eu-north-1">eu-north-1 — Europe (Stockholm)</option>
+            <option value="sa-east-1">sa-east-1 — South America (São Paulo)</option>
+            <option value="ca-central-1">ca-central-1 — Canada (Central)</option>
+          </select>
+        </div>
       </div>
-      <div class="form-group">
-        <label class="form-label">AWS Account ID</label>
-        <input class="form-input" id="data-account-id" placeholder="123456789012" maxlength="12">
-        <span class="form-hint">Deploy the CloudSentinel-Scanner CloudFormation stack first if not already done</span>
+
+      <!-- Step 2 -->
+      <div id="data-step-2" style="display:none">
+        <div class="info-box mb-3">
+          <span class="info-icon">[lock]</span>
+          <div>CloudSentinel reads only <strong>bucket metadata</strong> (public access settings, encryption, versioning), <strong>DynamoDB table settings</strong> (encryption, PITR), and <strong>Glue job run history</strong>. File contents are never accessed.</div>
+        </div>
+        <label class="checkbox-group">
+          <input type="checkbox" id="data-consent">
+          <span class="form-hint">I consent to CloudSentinel performing read-only scans of my AWS data services (S3, DynamoDB, Glue) metadata.</span>
+        </label>
       </div>
-      <div class="form-group">
-        <label class="form-label">AWS Region (where your data services are)</label>
-        <input class="form-input" id="data-region" placeholder="us-east-1">
-      </div>
-      <label class="checkbox-group">
-        <input type="checkbox" id="data-consent">
-        <span class="form-hint">I consent to CloudSentinel performing read-only scans of my AWS data services (S3, DynamoDB, Glue) metadata.</span>
-      </label>
+
     </div>
     <div class="modal-footer">
+      <button class="btn btn-outline" id="data-btn-back" style="display:none" onclick="dataGoBack()">&larr; Back</button>
       <button class="btn btn-outline" onclick="closeModal('modal-data')">Cancel</button>
-      <button class="btn btn-primary" onclick="confirmDataConnect()">Connect &amp; Scan</button>
+      <button class="btn btn-primary" id="data-btn-next" onclick="dataNextStep()">Next &rarr;</button>
     </div>
   </div>
 </div>
@@ -176,6 +217,7 @@
 <script src="js/auth.js"></script>
 <script src="js/app.js"></script>
 <script src="js/session.js"></script>
+<script src="js/global-connect.js"></script>
 <script src="js/data.js"></script>
 </body>
 </html>

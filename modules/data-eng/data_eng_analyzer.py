@@ -13,9 +13,10 @@ logger = logging.getLogger()
 logger.setLevel(logging.INFO)
 
 TABLE_NAME  = os.environ["DYNAMODB_TABLE"]
-# SCAN_REGION overrides the Lambda-injected AWS_REGION so we can scan a
-# different region (e.g. us-east-1 resources from an ap-south-1 Lambda).
-REGION      = os.environ.get("SCAN_REGION") or os.environ.get("AWS_REGION", "us-east-1")
+# REGION: internal Lambda deployment region (for STS calls + DynamoDB)
+REGION      = os.environ.get("AWS_REGION", "ap-south-1")
+# DDB_REGION: where the CloudSentinel DynamoDB table lives
+DDB_REGION  = os.environ.get("DDB_REGION") or REGION
 GLUE_FAIL_THRESHOLD = int(os.environ.get("GLUE_FAIL_THRESHOLD", "2"))
 GLUE_RUNS_WINDOW    = int(os.environ.get("GLUE_RUNS_WINDOW", "5"))
 
@@ -386,13 +387,53 @@ def purge_module_risks(table, module):
     except Exception as e:
         logger.error(f"Failed to purge old risks: {e}")
 
+def get_clients(scan_region, role_arn=None):
+    """
+    Build boto3 clients scoped to scan_region.
+    If role_arn provided, assume cross-account scanner role first.
+    """
+    if role_arn:
+        sts = boto3.client("sts", region_name=REGION)
+        creds = sts.assume_role(
+            RoleArn=role_arn,
+            RoleSessionName="cloudsentinel-data-scan",
+            DurationSeconds=900,
+        )["Credentials"]
+        session_kwargs = dict(
+            aws_access_key_id=creds["AccessKeyId"],
+            aws_secret_access_key=creds["SecretAccessKey"],
+            aws_session_token=creds["SessionToken"],
+        )
+        logger.info(f"Assumed role {role_arn}, scanning region {scan_region}")
+    else:
+        session_kwargs = {}
+        logger.info(f"Scanning own account, region {scan_region}")
+
+    s3         = boto3.client("s3",       region_name=scan_region, **session_kwargs)
+    ddb_client = boto3.client("dynamodb", region_name=scan_region, **session_kwargs)
+    glue       = boto3.client("glue",     region_name=scan_region, **session_kwargs)
+    return s3, ddb_client, glue
+
+
 def lambda_handler(event, context):
     logger.info("data-eng-analyzer started")
-    ddb          = boto3.resource("dynamodb", region_name=REGION)
-    table        = ddb.Table(TABLE_NAME)
-    s3           = boto3.client("s3",       region_name=REGION)
-    ddb_client   = boto3.client("dynamodb", region_name=REGION)
-    glue         = boto3.client("glue",     region_name=REGION)
+
+    body        = json.loads((event.get("body") or "{}"))
+    role_arn    = body.get("targetRoleArn") or None
+    scan_region = body.get("scanRegion") or os.environ.get("SCAN_REGION") or os.environ.get("AWS_REGION", "us-east-1")
+
+    ddb   = boto3.resource("dynamodb", region_name=DDB_REGION)
+    table = ddb.Table(TABLE_NAME)
+
+    try:
+        s3, ddb_client, glue = get_clients(scan_region, role_arn)
+    except Exception as e:
+        logger.error(f"Cannot assume role / build clients: {e}")
+        return {
+            "statusCode": 403,
+            "headers": CORS_HEADERS,
+            "body": json.dumps({"error": f"Cannot access AWS account: {e}"}),
+        }
 
     purge_module_risks(table, "data-eng")
 
@@ -405,7 +446,7 @@ def lambda_handler(event, context):
 
     emit_scan_completed("data-eng", all_risks)
 
-    logger.info(f"data-eng scan complete — {len(all_risks)} risk(s)")
+    logger.info(f"data-eng scan complete — {len(all_risks)} risk(s) (region={scan_region})")
     return {
         "statusCode": 200,
         "headers": CORS_HEADERS,
