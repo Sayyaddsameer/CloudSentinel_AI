@@ -26,6 +26,7 @@ logger.setLevel(logging.INFO)
 
 TABLE_NAME           = os.environ["DYNAMODB_TABLE"]
 REGION               = os.environ.get("AWS_REGION", "us-east-1")
+AI_EXPLAINER_FN      = os.environ.get("AI_EXPLAINER_FUNCTION_NAME", "cloudsentinel-ai-explainer")
 WEBHOOK_SECRET_ARN   = os.environ.get("WEBHOOK_SECRET_ARN", "")
 GITHUB_PAT_SECRET_ARN = os.environ.get("GITHUB_PAT_SECRET_ARN", "")
 GITHUB_API_BASE      = "https://api.github.com"
@@ -629,6 +630,17 @@ def lambda_handler(event, context):
         save_risk(table, r)
 
     emit_scan_completed("devops", all_risks)
+
+    # Trigger AI explainer immediately
+    try:
+        boto3.client("lambda", region_name=REGION).invoke(
+            FunctionName=AI_EXPLAINER_FN,
+            InvocationType="Event",
+            Payload=json.dumps({"source": "devops-scanner", "module": "devops"}),
+        )
+        logger.info("ai-explainer triggered for devops")
+    except Exception as e:
+        logger.warning(f"Could not trigger ai-explainer (non-fatal): {e}")
 
     duration_ms = int((time.time() - _start) * 1000)
     try:

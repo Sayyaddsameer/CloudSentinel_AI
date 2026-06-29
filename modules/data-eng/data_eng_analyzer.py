@@ -13,10 +13,9 @@ logger = logging.getLogger()
 logger.setLevel(logging.INFO)
 
 TABLE_NAME  = os.environ["DYNAMODB_TABLE"]
-# REGION: internal Lambda deployment region (for STS calls + DynamoDB)
 REGION      = os.environ.get("AWS_REGION", "ap-south-1")
-# DDB_REGION: where the CloudSentinel DynamoDB table lives
 DDB_REGION  = os.environ.get("DDB_REGION") or REGION
+AI_EXPLAINER_FN = os.environ.get("AI_EXPLAINER_FUNCTION_NAME", "cloudsentinel-ai-explainer")
 GLUE_FAIL_THRESHOLD = int(os.environ.get("GLUE_FAIL_THRESHOLD", "2"))
 GLUE_RUNS_WINDOW    = int(os.environ.get("GLUE_RUNS_WINDOW", "5"))
 
@@ -445,6 +444,17 @@ def lambda_handler(event, context):
     all_risks += scan_dynamodb_pitr(ddb_client, table)
 
     emit_scan_completed("data-eng", all_risks)
+
+    # Trigger AI explainer immediately
+    try:
+        boto3.client("lambda", region_name=REGION).invoke(
+            FunctionName=AI_EXPLAINER_FN,
+            InvocationType="Event",
+            Payload=json.dumps({"source": "data-eng-scanner", "module": "data-eng"}),
+        )
+        logger.info("ai-explainer triggered for data-eng")
+    except Exception as e:
+        logger.warning(f"Could not trigger ai-explainer (non-fatal): {e}")
 
     logger.info(f"data-eng scan complete — {len(all_risks)} risk(s) (region={scan_region})")
     return {

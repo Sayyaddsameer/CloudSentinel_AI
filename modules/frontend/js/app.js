@@ -212,7 +212,29 @@ async function triggerScan(module, extraParams = {}) {
     body: JSON.stringify(scanPayload),
   });
   if (!res.ok) throw new Error(`Scan failed (${res.status})`);
-  return res.json();
+  const result = await res.json();
+
+  // Fire AI explainer immediately after every scan — non-blocking
+  triggerAiExplainer(module);
+
+  return result;
+}
+
+/**
+ * triggerAiExplainer — invokes the AI explainer Lambda immediately after a scan.
+ * Fire-and-forget: errors are logged but never thrown so they cannot break the scan flow.
+ */
+async function triggerAiExplainer(module) {
+  if (!API_BASE) return;
+  try {
+    await apiFetch(`${API_BASE}/run-ai-explainer`, {
+      method: 'POST',
+      body: JSON.stringify({ module }),
+    });
+    console.info(`[ai-explainer] triggered for module=${module}`);
+  } catch (e) {
+    console.warn('[ai-explainer] non-blocking trigger failed:', e.message);
+  }
 }
 
 

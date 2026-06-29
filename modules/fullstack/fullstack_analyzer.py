@@ -1,4 +1,4 @@
-﻿import json
+import json
 import os
 import logging
 import time
@@ -16,10 +16,11 @@ logger = logging.getLogger()
 logger.setLevel(logging.INFO)
 
 TABLE_NAME  = os.environ["DYNAMODB_TABLE"]
-# SCAN_REGION: where AWS services (API GW, Cognito etc.) live
+# REGION: internal Lambda deployment region (for STS + DDB)
 REGION      = os.environ.get("SCAN_REGION") or os.environ.get("AWS_REGION", "us-east-1")
-# DDB_REGION: where the DynamoDB table lives (may differ from scan region)
+# DDB_REGION: where the CloudSentinel DynamoDB table lives
 DDB_REGION  = os.environ.get("DDB_REGION") or os.environ.get("AWS_REGION", "ap-south-1")
+AI_EXPLAINER_FN = os.environ.get("AI_EXPLAINER_FUNCTION_NAME", "cloudsentinel-ai-explainer")
 
 # Thresholds Ã¢â‚¬â€ web APIs. Ambica uses 1000ms for mobile; I use 2000ms here.
 LATENCY_THRESHOLD_MS = int(os.environ.get("LATENCY_THRESHOLD_MS", "2000"))
@@ -570,7 +571,119 @@ def purge_module_risks(table, module):
     except Exception as e:
         logger.error(f"Failed to purge old risks: {e}")
 
+
 def get_clients(scan_region, role_arn=None):
     """
     Build boto3 clients scoped to scan_region.
     If role_arn is provided, assume that role first (cross-account).
+    """
+    if role_arn:
+        sts = boto3.client("sts", region_name=REGION)
+        creds = sts.assume_role(
+            RoleArn=role_arn,
+            RoleSessionName="cloudsentinel-fullstack-scan",
+            DurationSeconds=900,
+        )["Credentials"]
+        session_kwargs = dict(
+            aws_access_key_id=creds["AccessKeyId"],
+            aws_secret_access_key=creds["SecretAccessKey"],
+            aws_session_token=creds["SessionToken"],
+        )
+        logger.info(f"Assumed role {role_arn}, scanning region {scan_region}")
+    else:
+        session_kwargs = {}
+        logger.info(f"Scanning own account, region {scan_region}")
+
+    apigw = boto3.client("apigateway", region_name=scan_region, **session_kwargs)
+    cw    = boto3.client("cloudwatch",  region_name=scan_region, **session_kwargs)
+    return apigw, cw
+
+
+def _invoke_ai_explainer(module):
+    """Fire-and-forget: trigger AI explainer Lambda so explanations are ready immediately."""
+    try:
+        boto3.client("lambda", region_name=REGION).invoke(
+            FunctionName=AI_EXPLAINER_FN,
+            InvocationType="Event",
+            Payload=json.dumps({"source": f"{module}-scanner", "module": module}),
+        )
+        logger.info(f"ai-explainer triggered for module={module}")
+    except Exception as e:
+        logger.warning(f"Could not trigger ai-explainer (non-fatal): {e}")
+
+
+def lambda_handler(event, context):
+    _start = time.time()
+    logger.info("fullstack-analyzer started")
+
+    body         = json.loads((event.get("body") or "{}"))
+    role_arn     = body.get("targetRoleArn") or None
+    scan_region  = body.get("scanRegion") or os.environ.get("SCAN_REGION") or os.environ.get("AWS_REGION", "us-east-1")
+    api_base_url = (body.get("apiBaseUrl") or "").rstrip("/")
+    threshold_ms = int(body.get("latencyThresholdMs") or LATENCY_THRESHOLD_MS)
+
+    ddb   = boto3.resource("dynamodb", region_name=DDB_REGION)
+    table = ddb.Table(TABLE_NAME)
+
+    try:
+        apigw, cw = get_clients(scan_region, role_arn)
+    except Exception as e:
+        logger.error(f"Cannot assume role / build clients: {e}")
+        return {
+            "statusCode": 403,
+            "headers": CORS_HEADERS,
+            "body": json.dumps({"error": f"Cannot access AWS account: {e}"}),
+        }
+
+    purge_module_risks(table, "fullstack")
+
+    all_risks = []
+
+    # ── Config-based checks (cross-account API GW read) ──────────────────────
+    all_risks += scan_api_authentication(apigw, table)
+    all_risks += scan_throttling(apigw, table)
+    all_risks += scan_waf_association(apigw, table)
+    all_risks += scan_api_logging(apigw, table)
+    all_risks += scan_cloudwatch_alarms(apigw, cw, table)
+
+    # ── Historical CloudWatch metrics ─────────────────────────────────────────
+    all_risks += scan_cloudwatch_metrics(apigw, cw, table)
+
+    # ── Real-time HTTP tests (live calls from Lambda → user's API) ────────────
+    if api_base_url:
+        logger.info(f"Running real-time HTTP tests against {api_base_url}")
+        all_risks += test_live_latency(api_base_url, table, threshold_ms)
+        all_risks += test_rate_limiting(api_base_url, table)
+        all_risks += test_auth_enforcement(api_base_url, table)
+    else:
+        logger.info("No apiBaseUrl provided — skipping real-time HTTP tests")
+
+    emit_scan_completed("fullstack", all_risks)
+
+    # Trigger AI explainer immediately so explanations appear without waiting for hourly schedule
+    _invoke_ai_explainer("fullstack")
+
+    duration_ms = int((time.time() - _start) * 1000)
+    try:
+        cw.put_metric_data(
+            Namespace="CloudSentinel/Performance",
+            MetricData=[{
+                "MetricName": "ScanDurationMs",
+                "Dimensions": [{"Name": "Module", "Value": "fullstack"}],
+                "Value": duration_ms,
+                "Unit": "Milliseconds",
+            }],
+        )
+    except Exception as e:
+        logger.warning(f"CloudWatch metric write failed: {e}")
+
+    logger.info(f"fullstack scan complete — {len(all_risks)} risk(s) in {duration_ms}ms (region={scan_region})")
+    return {
+        "statusCode": 200,
+        "headers": CORS_HEADERS,
+        "body": json.dumps({
+            "message": "Full-Stack scan complete",
+            "risksFound": len(all_risks),
+            "durationMs": duration_ms,
+        }),
+    }

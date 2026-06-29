@@ -25,7 +25,23 @@ function loadConnectionState() {
   }
 
   /* Button wiring */
-  document.getElementById('btn-connect-aws').addEventListener('click', () => openModal('modal-aws'));
+  document.getElementById('btn-connect-aws').addEventListener('click', () => {
+    openModal('modal-aws');
+    // If globally connected from dashboard, skip straight to Step 3 (consent)
+    const gAws = getGlobalAws ? getGlobalAws() : null;
+    if (gAws) {
+      // Pre-fill account ID and region from global connection
+      const acctEl = document.getElementById('aws-account-id');
+      const regionEl = document.getElementById('aws-target-region');
+      if (acctEl)   acctEl.value   = gAws.accountId;
+      if (regionEl) regionEl.value = gAws.region;
+      // Jump straight to consent step
+      _cloudSkipToStep3(gAws);
+    } else {
+      awsStep1();
+    }
+  });
+
   document.getElementById('btn-connect-gcp').addEventListener('click', () => openModal('modal-gcp'));
   const disconnectBtn = document.getElementById('btn-disconnect');
   if (disconnectBtn) disconnectBtn.addEventListener('click', () => openModal('modal-disconnect'));
@@ -276,6 +292,33 @@ function selectMethod(method) {
   selectedMethod = method;
   document.getElementById('method-cfn').style.borderColor = method==='cfn' ? 'var(--blue)' : 'var(--border)';
   document.getElementById('method-tf').style.borderColor  = method==='tf'  ? 'var(--blue)' : 'var(--border)';
+}
+
+function _cloudSkipToStep3(gAws) {
+  ['aws-step-1','aws-step-2','aws-step-3'].forEach(id => document.getElementById(id).style.display='none');
+  document.getElementById('aws-step-3').style.display='';
+  setWizardStep(3);
+
+  const roleArnInput = document.getElementById('aws-role-arn');
+  if (roleArnInput) roleArnInput.value = gAws.roleArn;
+
+  // Inject banner if not already there
+  const step3 = document.getElementById('aws-step-3');
+  if (step3 && !document.getElementById('cloud-global-banner')) {
+    const banner = document.createElement('div');
+    banner.id = 'cloud-global-banner';
+    banner.className = 'info-box';
+    banner.style.cssText = 'border-color:var(--low);margin-bottom:1rem';
+    banner.innerHTML = `<span class="info-icon">&#10003;</span><div>Using your globally connected AWS account &middot; <strong>${gAws.accountId}</strong> &middot; <strong>${gAws.region}</strong>. Confirm consent below to start scanning.</div>`;
+    step3.prepend(banner);
+  }
+
+  const consentBox = document.getElementById('aws-consent');
+  const confirmBtn = document.getElementById('btn-confirm-aws');
+  if (consentBox && confirmBtn) {
+    confirmBtn.disabled = !consentBox.checked;
+    consentBox.addEventListener('change', () => { confirmBtn.disabled = !consentBox.checked; });
+  }
 }
 
 function awsStep1() {

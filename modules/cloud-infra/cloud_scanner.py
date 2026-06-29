@@ -14,6 +14,7 @@ logger.setLevel(logging.INFO)
 
 TABLE_NAME      = os.environ["DYNAMODB_TABLE"]
 LAMBDA_REGION   = os.environ.get("AWS_REGION", "us-east-1")  # where THIS Lambda lives
+AI_EXPLAINER_FN = os.environ.get("AI_EXPLAINER_FUNCTION_NAME", "cloudsentinel-ai-explainer")
 TARGET_ROLE_ARN = os.environ.get("TARGET_ROLE_ARN", "")
 GCP_SECRET_NAME = os.environ.get("GCP_SECRET_NAME", "")
 
@@ -900,7 +901,7 @@ def lambda_handler(event, context):
     # are ready by the time the user refreshes (no need to wait for EventBridge schedule).
     try:
         boto3.client("lambda", region_name=LAMBDA_REGION).invoke(
-            FunctionName=f"cloudsentinel-ai-explainer",
+            FunctionName=AI_EXPLAINER_FN,
             InvocationType="Event",   # async — does not block the scan response
             Payload=json.dumps({"source": "cloud-scanner", "module": "cloud-infra"}),
         )

@@ -1,4 +1,4 @@
-﻿import json
+import json
 import os
 import logging
 import time
@@ -19,6 +19,7 @@ TABLE_NAME = os.environ["DYNAMODB_TABLE"]
 # SCAN_REGION overrides the Lambda-injected AWS_REGION so we can scan a
 # different region (e.g. us-east-1 resources from an ap-south-1 Lambda).
 REGION     = os.environ.get("SCAN_REGION") or os.environ.get("AWS_REGION", "us-east-1")
+AI_EXPLAINER_FN = os.environ.get("AI_EXPLAINER_FUNCTION_NAME", "cloudsentinel-ai-explainer")
 
 CORS_HEADERS = {
     "Content-Type":                "application/json",
@@ -726,6 +727,17 @@ def lambda_handler(event, context):
         logger.info("No apiBaseUrl provided â€” skipping real-time HTTP tests")
 
     emit_scan_completed("mobile", all_risks)
+
+    # Trigger AI explainer immediately — no need to wait for hourly EventBridge schedule
+    try:
+        boto3.client("lambda", region_name=REGION).invoke(
+            FunctionName=AI_EXPLAINER_FN,
+            InvocationType="Event",
+            Payload=json.dumps({"source": "mobile-scanner", "module": "mobile"}),
+        )
+        logger.info("ai-explainer triggered for mobile")
+    except Exception as e:
+        logger.warning(f"Could not trigger ai-explainer (non-fatal): {e}")
 
     duration_ms = int((time.time() - _start) * 1000)
     try:
