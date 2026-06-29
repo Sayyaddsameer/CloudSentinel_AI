@@ -64,3 +64,11 @@ Team053_CloudSentinel_AI_IEEE.docx
 *_payload.json
 fix_groq_env.py
 invoke_policy.json
+
+# Test output files
+chat_test_out*.json
+scan_out*.json
+experiment_results*.json
+*_latency_results.json
+smoke.json
+

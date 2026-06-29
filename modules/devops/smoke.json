@@ -1,1 +1,0 @@
-{"statusCode": 200, "headers": {"Content-Type": "application/json", "Access-Control-Allow-Origin": "*"}, "body": "{\"message\": \"DevOps scan complete\", \"risksFound\": 3, \"durationMs\": 2018}"}
