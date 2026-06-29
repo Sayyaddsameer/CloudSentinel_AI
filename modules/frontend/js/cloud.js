@@ -349,24 +349,22 @@ function awsStep2() {
  * dropdown changes, and remembers the choice for the disconnect step. */
 function updateCfnLinks() {
   const TEMPLATE_URL = window.ENV_CFN_TEMPLATE_URL || '';
-  const LAMBDA_ROLE  = window.ENV_LAMBDA_ROLE_ARN  || '';
   const sel    = document.getElementById('aws-target-region');
   const REGION = (sel && sel.value) || window.ENV_REGION || 'us-east-1';
-  localStorage.setItem('cs_aws_region', REGION);   /* remembered for disconnect */
+  localStorage.setItem('cs_aws_region', REGION);
   if (!TEMPLATE_URL) { showToast('CloudFormation template URL not configured. Set ENV_CFN_TEMPLATE_URL in env.js.', 'error'); return; }
-  const cfnParams = LAMBDA_ROLE
-    ? `&param_CloudSentinelLambdaRoleArn=${encodeURIComponent(LAMBDA_ROLE)}&param_ExternalId=cloudsentinel`
-    : '';
+
+  // Only ExternalId param needed — Lambda role ARN is hardcoded in the template
+  const cfnParams = `&param_ExternalId=cloudsentinel`;
   const cfnUrl = `https://${REGION}.console.aws.amazon.com/cloudformation/home?region=${REGION}#/stacks/create/review?templateURL=${encodeURIComponent(TEMPLATE_URL)}&stackName=CloudSentinel-Scanner${cfnParams}`;
   const link = document.getElementById('cfn-link');
   if (link) link.href = cfnUrl;
 
   const cliCmd = document.getElementById('cfn-cli-cmd');
   if (cliCmd) {
-    cliCmd.textContent = `aws cloudformation create-stack \\\n  --stack-name CloudSentinel-Scanner \\\n  --template-url ${TEMPLATE_URL} \\\n  --capabilities CAPABILITY_NAMED_IAM \\\n  --region ${REGION}`;
+    cliCmd.textContent = `aws cloudformation create-stack \\\n  --stack-name CloudSentinel-Scanner \\\n  --template-url ${TEMPLATE_URL} \\\n  --capabilities CAPABILITY_NAMED_IAM \\\n  --parameters ParameterKey=ExternalId,ParameterValue=cloudsentinel \\\n  --region ${REGION}`;
   }
 
-  /* Keep the Disconnect (delete-stack) command in the same region */
   const disc = document.getElementById('disconnect-cli-cmd');
   if (disc) {
     disc.textContent = `aws cloudformation delete-stack \\\n  --stack-name CloudSentinel-Scanner \\\n  --region ${REGION}`;

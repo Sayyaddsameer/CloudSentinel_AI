@@ -5,18 +5,10 @@ Description: >
   devops) to assume a read-only scanning role for cross-account analysis.
 
 Parameters:
-  CloudSentinelAccountId:
-    Type: String
-    Description: AWS account ID of the CloudSentinel platform (where the Lambdas run)
-  CloudSentinelLambdaRoleArn:
-    Type: String
-    Description: >
-      ARN of the shared cloudsentinel-lambda-role in the platform account.
-      All scanner Lambdas share this role, so trusting it allows all modules to scan.
   ExternalId:
     Type: String
     Default: cloudsentinel
-    Description: External ID used in sts:AssumeRole trust condition for extra security
+    Description: External ID for sts:AssumeRole (keep default unless told otherwise)
 
 Resources:
   CloudSentinelScannerRole:
@@ -28,7 +20,8 @@ Resources:
         Statement:
           - Effect: Allow
             Principal:
-              AWS: !Ref CloudSentinelLambdaRoleArn
+              # cloudsentinel-lambda-role is shared by ALL scanner Lambdas in the platform account
+              AWS: "arn:aws:iam::871070087236:role/cloudsentinel-lambda-role"
             Action: sts:AssumeRole
             Condition:
               StringEquals:
