@@ -1,7 +1,9 @@
-import json
+﻿import json
 import os
 import logging
 import time
+import urllib.request
+import urllib.error
 from datetime import datetime, timezone, timedelta
 
 import boto3
@@ -47,13 +49,13 @@ def build_risk(resource, resource_name, risk_type, risk_reason, priority,
 def save_risk(table, risk):
     try:
         table.put_item(Item=risk)
-        logger.info(f"Saved: [{risk['riskPriority']}] {risk['riskType']} — {risk['resourceName']}")
+        logger.info(f"Saved: [{risk['riskPriority']}] {risk['riskType']} â€” {risk['resourceName']}")
     except ClientError as e:
         logger.error(f"DynamoDB put_item failed: {e}")
 
 
 # ---------------------------------------------------------------------------
-# API Gateway — check for missing authorization on API routes
+# API Gateway â€” check for missing authorization on API routes
 # ---------------------------------------------------------------------------
 
 def scan_api_gateway(apigw, table):
@@ -111,7 +113,7 @@ def scan_api_gateway(apigw, table):
 
 
 # ---------------------------------------------------------------------------
-# Cognito — check for weak password policies and MFA settings
+# Cognito â€” check for weak password policies and MFA settings
 # ---------------------------------------------------------------------------
 
 def scan_cognito_pools(cognito, table):
@@ -180,7 +182,7 @@ def scan_cognito_pools(cognito, table):
 
 
 # ---------------------------------------------------------------------------
-# API Gateway — check p95 latency against mobile threshold
+# API Gateway â€” check p95 latency against mobile threshold
 # ---------------------------------------------------------------------------
 
 def scan_api_latency(apigw, cw, table, latency_threshold_ms):
@@ -215,7 +217,7 @@ def scan_api_latency(apigw, cw, table, latency_threshold_ms):
                     f"p95 latency for '{api_name}' is {int(p95_latency)}ms, above the {latency_threshold_ms}ms mobile threshold.",
                     "High",
                     remediation_steps=[
-                        "Increase Lambda memory — this also increases CPU allocation",
+                        "Increase Lambda memory â€” this also increases CPU allocation",
                         "Enable provisioned concurrency to eliminate cold starts",
                         "Add DynamoDB DAX or ElastiCache to reduce read latency",
                     ],
@@ -232,7 +234,7 @@ def scan_api_latency(apigw, cw, table, latency_threshold_ms):
 
 
 # ---------------------------------------------------------------------------
-# IAM — check for Lambda execution roles with overly broad permissions
+# IAM â€” check for Lambda execution roles with overly broad permissions
 # ---------------------------------------------------------------------------
 
 def scan_iam_lambda_roles(iam, table):
@@ -282,7 +284,7 @@ def scan_iam_lambda_roles(iam, table):
                             ],
                             alternative_solutions=[
                                 "Use AWS IAM Access Analyzer to identify and remove unused permissions",
-                                "Separate Lambda roles by function — one role per Lambda with minimal perms",
+                                "Separate Lambda roles by function â€” one role per Lambda with minimal perms",
                             ],
                         )
                         found.append(r)
@@ -295,7 +297,7 @@ def scan_iam_lambda_roles(iam, table):
 
 
 # ---------------------------------------------------------------------------
-# Lambda — check function timeout, memory, and reserved concurrency
+# Lambda â€” check function timeout, memory, and reserved concurrency
 # ---------------------------------------------------------------------------
 
 def scan_lambda_health(lambda_client, table):
@@ -385,7 +387,7 @@ def scan_lambda_health(lambda_client, table):
 
 
 # ---------------------------------------------------------------------------
-# API Gateway — check for missing access logging on REST API stages
+# API Gateway â€” check for missing access logging on REST API stages
 # ---------------------------------------------------------------------------
 
 def scan_api_gateway_logging(apigw, table):
@@ -440,7 +442,7 @@ def scan_api_gateway_logging(apigw, table):
 
 
 # ---------------------------------------------------------------------------
-# API Gateway — detect elevated 4XX error rates via CloudWatch
+# API Gateway â€” detect elevated 4XX error rates via CloudWatch
 # ---------------------------------------------------------------------------
 
 def scan_4xx_error_rates(apigw, cw, table):
@@ -499,7 +501,7 @@ def scan_4xx_error_rates(apigw, cw, table):
 
 def purge_module_risks(table, module):
     try:
-        resp = table.query(
+        resp  = table.query(
             IndexName="module-index",
             KeyConditionExpression="#m = :m",
             ExpressionAttributeNames={"#m": "module"},
@@ -515,7 +517,6 @@ def purge_module_risks(table, module):
                 ExclusiveStartKey=resp["LastEvaluatedKey"],
             )
             items.extend(resp.get("Items", []))
-
         with table.batch_writer(overwrite_by_pkeys=["resourceId", "riskTimestamp"]) as batch:
             for item in items:
                 rid = item.get("resourceId")
@@ -525,40 +526,204 @@ def purge_module_risks(table, module):
     except Exception as e:
         logger.error(f"Failed to purge old risks: {e}")
 
+
+# ---------------------------------------------------------------------------
+# Real-time HTTP tests â€” shared pattern with fullstack module
+# ---------------------------------------------------------------------------
+
+_SCANNER_UA = "CloudSentinel-Scanner/1.0"
+
+
+def _http_get(url, headers=None, timeout=10):
+    req = urllib.request.Request(url, headers={"User-Agent": _SCANNER_UA, **(headers or {})})
+    t0  = time.time()
+    try:
+        with urllib.request.urlopen(req, timeout=timeout) as r:
+            r.read()
+            return r.status, int((time.time() - t0) * 1000)
+    except urllib.error.HTTPError as e:
+        return e.code, int((time.time() - t0) * 1000)
+    except Exception:
+        return None, None
+
+
+def test_live_latency(api_base_url, table, threshold_ms):
+    """3 live HTTP requests averaged against threshold."""
+    found = []
+    if not api_base_url:
+        return found
+    samples = []
+    for _ in range(3):
+        _, elapsed = _http_get(api_base_url)
+        if elapsed is not None:
+            samples.append(elapsed)
+        time.sleep(0.3)
+    if not samples:
+        logger.warning(f"Could not reach {api_base_url} â€” skipping latency check")
+        return found
+    avg_ms = int(sum(samples) / len(samples))
+    logger.info(f"Live latency: {samples} â†’ avg {avg_ms}ms (threshold {threshold_ms}ms)")
+    if avg_ms > threshold_ms:
+        r = build_risk(
+            api_base_url, "",
+            "High Real-Time Mobile API Latency",
+            f"Live measurement: average response is {avg_ms}ms (samples: {samples}) â€” "
+            f"above the {threshold_ms}ms mobile threshold. Users will experience app slowdowns.",
+            "High" if avg_ms > threshold_ms * 2 else "Medium",
+            remediation_steps=[
+                "Check Lambda execution time and memory allocation",
+                "Enable Lambda provisioned concurrency to remove cold starts",
+                "Add API Gateway stage caching for read-heavy endpoints",
+            ],
+            alternative_solutions=[
+                "Use CloudFront with regional cache for mobile clients",
+                "Move heavy computation to async jobs and return immediately",
+            ],
+        )
+        found.append(r)
+        save_risk(table, r)
+    return found
+
+
+def test_rate_limiting(api_base_url, table):
+    """20 rapid requests â€” no 429 means rate limiting is absent."""
+    found = []
+    if not api_base_url:
+        return found
+    got_429 = False
+    for i in range(20):
+        status, _ = _http_get(api_base_url, timeout=5)
+        if status == 429:
+            got_429 = True
+            logger.info(f"Rate limiting confirmed at request #{i+1}")
+            break
+    if not got_429:
+        r = build_risk(
+            api_base_url, "",
+            "No Rate Limiting Enforced on Mobile API",
+            f"20 rapid requests to {api_base_url} returned no HTTP 429. "
+            "Mobile apps can be reverse-engineered to flood your API without any throttle.",
+            "High",
+            remediation_steps=[
+                "Enable throttling on the API Gateway stage (burst + rate limit)",
+                "Add a Usage Plan and API key for your mobile app",
+            ],
+            alternative_solutions=[
+                "Add a WAF rate-based rule throttling by IP",
+                "Implement token bucket rate limiting in Lambda",
+            ],
+        )
+        found.append(r)
+        save_risk(table, r)
+    return found
+
+
+def test_auth_enforcement(api_base_url, table):
+    """Call API without auth â€” 401/403 = secure, anything else = exposed."""
+    found = []
+    if not api_base_url:
+        return found
+    status, _ = _http_get(api_base_url, timeout=10)
+    logger.info(f"Auth check: {api_base_url} returned HTTP {status}")
+    if status is not None and status not in (401, 403):
+        r = build_risk(
+            api_base_url, "",
+            "Mobile API Accessible Without Authentication (Live Verified)",
+            f"Unauthenticated request to {api_base_url} returned HTTP {status} â€” "
+            "not 401 or 403. Any user (including compromised devices) can call this API directly.",
+            "High",
+            remediation_steps=[
+                "Add a Cognito User Pool authorizer or AWS_IAM auth to API Gateway",
+                "Rotate any API keys that may have been exposed",
+            ],
+            alternative_solutions=[
+                "Use AWS WAF to block requests missing an Authorization header",
+                "Implement JWT validation in the Lambda function itself",
+            ],
+        )
+        found.append(r)
+        save_risk(table, r)
+    return found
+
+
+# ---------------------------------------------------------------------------
+# Entry point
+# ---------------------------------------------------------------------------
+
+def get_clients(scan_region, role_arn=None):
+    """
+    Build boto3 clients scoped to scan_region.
+    If role_arn provided, assume cross-account role first.
+    """
+    if role_arn:
+        sts = boto3.client("sts", region_name=REGION)
+        creds = sts.assume_role(
+            RoleArn=role_arn,
+            RoleSessionName="cloudsentinel-mobile-scan",
+            DurationSeconds=900,
+        )["Credentials"]
+        session_kwargs = dict(
+            aws_access_key_id=creds["AccessKeyId"],
+            aws_secret_access_key=creds["SecretAccessKey"],
+            aws_session_token=creds["SessionToken"],
+        )
+        logger.info(f"Assumed role {role_arn}, scanning region {scan_region}")
+    else:
+        session_kwargs = {}
+        logger.info(f"Scanning own account, region {scan_region}")
+
+    apigw         = boto3.client("apigateway",  region_name=scan_region, **session_kwargs)
+    cognito       = boto3.client("cognito-idp", region_name=scan_region, **session_kwargs)
+    iam           = boto3.client("iam",          region_name=scan_region, **session_kwargs)
+    cw            = boto3.client("cloudwatch",   region_name=scan_region, **session_kwargs)
+    lambda_client = boto3.client("lambda",       region_name=scan_region, **session_kwargs)
+    return apigw, cognito, iam, cw, lambda_client
+
+
 def lambda_handler(event, context):
     logger.info("mobile-analyzer started")
+    _start = time.time()
 
-    # Accept optional params from the frontend (API URL + custom threshold)
-    latency_ms = int(os.environ.get("LATENCY_THRESHOLD_MS", "1000"))
+    body         = json.loads((event.get("body") or "{}"))
+    role_arn     = body.get("targetRoleArn") or None
+    scan_region  = body.get("scanRegion") or os.environ.get("AWS_REGION", "us-east-1")
+    api_base_url = (body.get("apiBaseUrl") or "").rstrip("/")
+    threshold_ms = int(body.get("latencyThresholdMs") or os.environ.get("LATENCY_THRESHOLD_MS", "1000"))
+
+    ddb   = boto3.resource("dynamodb", region_name=REGION)
+    table = ddb.Table(TABLE_NAME)
+
     try:
-        body = json.loads((event.get("body") or "{}"))
-        custom_threshold = body.get("latencyThresholdMs")
-        if custom_threshold:
-            latency_ms = int(custom_threshold)
-    except Exception:
-        pass
-
-    ddb     = boto3.resource("dynamodb", region_name=REGION)
-    table   = ddb.Table(TABLE_NAME)
-    apigw   = boto3.client("apigateway",  region_name=REGION)
-    cognito = boto3.client("cognito-idp", region_name=REGION)
-    iam     = boto3.client("iam",         region_name=REGION)
-    cw      = boto3.client("cloudwatch",  region_name=REGION)
+        apigw, cognito, iam, cw, lambda_client = get_clients(scan_region, role_arn)
+    except Exception as e:
+        logger.error(f"Cannot assume role / build clients: {e}")
+        return {
+            "statusCode": 403,
+            "headers": CORS_HEADERS,
+            "body": json.dumps({"error": f"Cannot access AWS account: {e}"}),
+        }
 
     purge_module_risks(table, "mobile")
 
-    _start = time.time()
-
     all_risks = []
+
+    # â”€â”€ Config-based checks (cross-account AWS reads) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     all_risks += scan_api_gateway(apigw, table)
     all_risks += scan_cognito_pools(cognito, table)
     all_risks += scan_iam_lambda_roles(iam, table)
-    all_risks += scan_api_latency(apigw, cw, table, latency_ms)
-
-    lambda_client = boto3.client("lambda", region_name=REGION)
+    all_risks += scan_api_latency(apigw, cw, table, threshold_ms)   # historical CW
     all_risks += scan_lambda_health(lambda_client, table)
     all_risks += scan_api_gateway_logging(apigw, table)
     all_risks += scan_4xx_error_rates(apigw, cw, table)
+
+    # â”€â”€ Real-time HTTP tests (live calls from Lambda â†’ user's mobile API) â”€â”€â”€
+    if api_base_url:
+        logger.info(f"Running real-time HTTP tests against {api_base_url}")
+        all_risks += test_live_latency(api_base_url, table, threshold_ms)
+        all_risks += test_rate_limiting(api_base_url, table)
+        all_risks += test_auth_enforcement(api_base_url, table)
+    else:
+        logger.info("No apiBaseUrl provided â€” skipping real-time HTTP tests")
 
     emit_scan_completed("mobile", all_risks)
 
@@ -576,7 +741,7 @@ def lambda_handler(event, context):
     except Exception as e:
         logger.warning(f"CloudWatch metric write failed: {e}")
 
-    logger.info(f"mobile scan complete -- {len(all_risks)} risk(s) (latency threshold: {latency_ms}ms) in {duration_ms}ms")
+    logger.info(f"mobile scan complete â€” {len(all_risks)} risk(s) in {duration_ms}ms (region={scan_region})")
     return {
         "statusCode": 200,
         "headers": CORS_HEADERS,

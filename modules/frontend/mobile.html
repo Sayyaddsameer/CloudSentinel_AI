@@ -132,41 +132,92 @@
 </div>
 
 <div class="modal-overlay" id="modal-mobile">
-  <div class="modal">
+  <div class="modal" style="max-width:560px">
     <div class="modal-header">
-      <div><div class="modal-title">Connect Mobile Backend</div><div class="modal-subtitle">Enter your backend API URL and AWS account details</div></div>
+      <div><div class="modal-title">Connect Mobile Backend</div><div class="modal-subtitle" id="mob-modal-sub">Step 1 of 2 — AWS Account access</div></div>
       <span class="modal-close" onclick="closeModal('modal-mobile')">X</span>
     </div>
     <div class="modal-body">
-      <div class="info-box">
-        <span class="info-icon">[i]</span>
-        <div>CloudSentinel reads API Gateway configuration and CloudWatch metrics (latency, 4XX, 5XX, Lambda errors). No mobile app changes are required.</div>
+
+      <!-- Step 1: Account credentials -->
+      <div id="mob-step-1">
+        <div class="info-box mb-3" style="border-color:var(--accent)">
+          <span class="info-icon">&#9888;</span>
+          <div>
+            CloudSentinel needs <strong>read-only access</strong> to scan Cognito User Pools, Lambda health, IAM roles, and CloudWatch metrics.
+            Deploy the scanner stack once — same stack as Cloud Infrastructure module.
+            <br><br>
+            <strong>Already connected Cloud Infrastructure?</strong> No new stack needed — same role is reused.
+          </div>
+        </div>
+        <div style="margin-bottom:1rem">
+          <a href="https://console.aws.amazon.com/cloudformation/home#/stacks/create/review?templateURL=https://cloudsentinel-artifacts-871070087236.s3.ap-south-1.amazonaws.com/templates/scanner-role.yaml&stackName=CloudSentinel-Scanner"
+             target="_blank" class="btn btn-outline w-full" style="justify-content:center">
+            &#9654; Deploy CloudSentinel Scanner Stack (if not done)
+          </a>
+          <div class="form-hint" style="text-align:center;margin-top:.4rem">Opens AWS CloudFormation — takes ~30 seconds</div>
+        </div>
+        <div class="form-group">
+          <label class="form-label">AWS Account ID</label>
+          <input class="form-input" id="mobile-account-id" placeholder="123456789012" maxlength="12" autocomplete="off">
+          <span class="form-hint">12-digit number — top-right of AWS console</span>
+        </div>
+        <div class="form-group">
+          <label class="form-label">AWS Region (where your backend runs)</label>
+          <select class="form-input" id="mobile-region">
+            <option value="us-east-1">us-east-1 — US East (N. Virginia)</option>
+            <option value="us-east-2">us-east-2 — US East (Ohio)</option>
+            <option value="us-west-1">us-west-1 — US West (N. California)</option>
+            <option value="us-west-2">us-west-2 — US West (Oregon)</option>
+            <option value="ap-south-1">ap-south-1 — Asia Pacific (Mumbai)</option>
+            <option value="ap-southeast-1">ap-southeast-1 — Asia Pacific (Singapore)</option>
+            <option value="ap-southeast-2">ap-southeast-2 — Asia Pacific (Sydney)</option>
+            <option value="ap-northeast-1">ap-northeast-1 — Asia Pacific (Tokyo)</option>
+            <option value="ap-northeast-2">ap-northeast-2 — Asia Pacific (Seoul)</option>
+            <option value="eu-west-1">eu-west-1 — Europe (Ireland)</option>
+            <option value="eu-west-2">eu-west-2 — Europe (London)</option>
+            <option value="eu-central-1">eu-central-1 — Europe (Frankfurt)</option>
+            <option value="eu-north-1">eu-north-1 — Europe (Stockholm)</option>
+            <option value="sa-east-1">sa-east-1 — South America (São Paulo)</option>
+            <option value="ca-central-1">ca-central-1 — Canada (Central)</option>
+          </select>
+        </div>
       </div>
-      <div class="form-group">
-        <label class="form-label">Mobile API Base URL</label>
-        <input class="form-input" id="mobile-api-url" placeholder="https://xxxxxxx.execute-api.us-east-1.amazonaws.com/prod">
-        <span class="form-hint">This is the API your Flutter app calls</span>
+
+      <!-- Step 2: API URL for real-time testing -->
+      <div id="mob-step-2" style="display:none">
+        <div class="info-box mb-3">
+          <span class="info-icon">&#9889;</span>
+          <div>
+            CloudSentinel will make <strong>live HTTP calls</strong> to your mobile API to measure real latency,
+            verify authentication is enforced, and test rate limiting.
+          </div>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Mobile API Base URL <span style="color:var(--text-2);font-weight:400">(for live testing)</span></label>
+          <input class="form-input" id="mobile-api-url" placeholder="https://xxxxxxx.execute-api.us-east-1.amazonaws.com/prod" autocomplete="off">
+          <span class="form-hint">This is the API your Flutter/React Native app calls</span>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Latency Alert Threshold (ms)</label>
+          <input class="form-input" id="mobile-threshold" type="number" value="1000" min="100" max="10000">
+          <span class="form-hint">Mobile users expect &lt;1000ms — flag when live response exceeds this</span>
+        </div>
+        <label class="checkbox-group">
+          <input type="checkbox" id="mobile-consent">
+          <span class="form-hint">I authorize CloudSentinel to read my AWS backend config, make test HTTP requests to my mobile API, and read CloudWatch metrics for security and performance analysis.</span>
+        </label>
       </div>
-      <div class="form-group">
-        <label class="form-label">AWS Account ID</label>
-        <input class="form-input" id="mobile-account-id" placeholder="123456789012" maxlength="12">
-      </div>
-      <div class="form-group">
-        <label class="form-label">Latency Alert Threshold (ms)</label>
-        <input class="form-input" id="mobile-threshold" type="number" placeholder="1000" min="100" max="10000">
-        <span class="form-hint">Risks are flagged when average latency exceeds this value</span>
-      </div>
-      <label class="checkbox-group">
-        <input type="checkbox" id="mobile-consent">
-        <span class="form-hint">I authorize CloudSentinel to read CloudWatch metrics for my mobile backend API for performance and security analysis.</span>
-      </label>
+
     </div>
     <div class="modal-footer">
+      <button class="btn btn-outline" id="mob-btn-back" style="display:none" onclick="mobGoBack()">&larr; Back</button>
       <button class="btn btn-outline" onclick="closeModal('modal-mobile')">Cancel</button>
-      <button class="btn btn-primary" onclick="confirmMobileConnect()">Connect &amp; Monitor</button>
+      <button class="btn btn-primary" id="mob-btn-next" onclick="mobNextStep()">Next &rarr;</button>
     </div>
   </div>
 </div>
+
 
 <button id="chatbot-fab" title="Ask AI about mobile backend risks">AI</button>
 <div id="chatbot-panel">

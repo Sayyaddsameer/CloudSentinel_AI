@@ -50,14 +50,14 @@
   <div id="view-connect">
     <div class="info-box mb-3">
       <span class="info-icon">[lock]</span>
-      <div>Connect your API Gateway to discover unauthenticated endpoints, missing throttling, and high error rates using CloudWatch metric analysis.</div>
+      <div>CloudSentinel scans your API Gateway configuration <strong>and</strong> makes live HTTP calls to your API to measure real-time latency, test rate limiting, and verify authentication. Requires the CloudSentinel scanner role in your AWS account.</div>
     </div>
     <div class="provider-card" style="max-width:480px" id="apigw-card">
       <div class="provider-logo">API</div>
       <div class="provider-name">AWS API Gateway</div>
-      <div class="provider-desc">Scan REST API endpoints for security and performance issues. Uses the same AWS connection as the Cloud Infrastructure module if already configured.</div>
+      <div class="provider-desc">Real-time authentication testing, live latency measurement, rate-limit burst tests, WAF check, and CloudWatch 5XX trend analysis.</div>
       <div class="provider-status" id="apigw-status"><span style="color:var(--text-3)">&#9679; Not connected</span></div>
-      <button class="btn btn-primary w-full" id="btn-connect-apigw">Connect API Gateway</button>
+      <button class="btn btn-primary w-full" id="btn-connect-apigw">Connect AWS Account</button>
     </div>
   </div>
 
@@ -101,36 +101,92 @@
 </div>
 
 <div class="modal-overlay" id="modal-apigw">
-  <div class="modal">
+  <div class="modal" style="max-width:560px">
     <div class="modal-header">
-      <div><div class="modal-title">Connect API Gateway</div><div class="modal-subtitle">Enter your API Gateway endpoint to begin scanning</div></div>
+      <div><div class="modal-title">Connect AWS Account</div><div class="modal-subtitle" id="fs-modal-sub">Step 1 of 2 — AWS Account access</div></div>
       <span class="modal-close" onclick="closeModal('modal-apigw')">X</span>
     </div>
     <div class="modal-body">
-      <div class="info-box">
-        <span class="info-icon">[i]</span>
-        <div>CloudSentinel reads your API Gateway configuration and CloudWatch metrics using the IAM scan role. If you've connected AWS in the Cloud module, access is already configured.</div>
+
+      <!-- Step 1: Account credentials -->
+      <div id="fs-step-1">
+        <div class="info-box mb-3" style="border-color:var(--accent)">
+          <span class="info-icon">&#9888;</span>
+          <div>
+            CloudSentinel needs <strong>read-only access</strong> to your AWS account to scan API Gateway config.
+            Deploy the CloudSentinel scanner stack once — then enter your Account ID below.
+            <br><br>
+            <strong>Already connected Cloud Infrastructure?</strong> No new stack needed — same role is reused.
+          </div>
+        </div>
+        <div style="margin-bottom:1rem">
+          <a href="https://console.aws.amazon.com/cloudformation/home#/stacks/create/review?templateURL=https://cloudsentinel-artifacts-871070087236.s3.ap-south-1.amazonaws.com/templates/scanner-role.yaml&stackName=CloudSentinel-Scanner"
+             target="_blank" class="btn btn-outline w-full" style="justify-content:center">
+            &#9654; Deploy CloudSentinel Scanner Stack (if not done)
+          </a>
+          <div class="form-hint" style="text-align:center;margin-top:.4rem">Opens AWS CloudFormation — takes ~30 seconds</div>
+        </div>
+        <div class="form-group">
+          <label class="form-label">AWS Account ID</label>
+          <input class="form-input" id="fs-account-id" placeholder="123456789012" maxlength="12" autocomplete="off">
+          <span class="form-hint">12-digit number — top-right of AWS console</span>
+        </div>
+        <div class="form-group">
+          <label class="form-label">AWS Region (where your APIs live)</label>
+          <select class="form-input" id="fs-region">
+            <option value="us-east-1">us-east-1 — US East (N. Virginia)</option>
+            <option value="us-east-2">us-east-2 — US East (Ohio)</option>
+            <option value="us-west-1">us-west-1 — US West (N. California)</option>
+            <option value="us-west-2">us-west-2 — US West (Oregon)</option>
+            <option value="ap-south-1">ap-south-1 — Asia Pacific (Mumbai)</option>
+            <option value="ap-southeast-1">ap-southeast-1 — Asia Pacific (Singapore)</option>
+            <option value="ap-southeast-2">ap-southeast-2 — Asia Pacific (Sydney)</option>
+            <option value="ap-northeast-1">ap-northeast-1 — Asia Pacific (Tokyo)</option>
+            <option value="ap-northeast-2">ap-northeast-2 — Asia Pacific (Seoul)</option>
+            <option value="eu-west-1">eu-west-1 — Europe (Ireland)</option>
+            <option value="eu-west-2">eu-west-2 — Europe (London)</option>
+            <option value="eu-central-1">eu-central-1 — Europe (Frankfurt)</option>
+            <option value="eu-north-1">eu-north-1 — Europe (Stockholm)</option>
+            <option value="sa-east-1">sa-east-1 — South America (São Paulo)</option>
+            <option value="ca-central-1">ca-central-1 — Canada (Central)</option>
+          </select>
+        </div>
       </div>
-      <div class="form-group">
-        <label class="form-label">API Gateway Invoke URL</label>
-        <input class="form-input" id="api-url-input" placeholder="https://xxxxxx.execute-api.us-east-1.amazonaws.com/prod">
-        <span class="form-hint">Found in API Gateway -> your API -> Stages -> Invoke URL</span>
+
+      <!-- Step 2: API URL for real-time testing -->
+      <div id="fs-step-2" style="display:none">
+        <div class="info-box mb-3">
+          <span class="info-icon">&#9889;</span>
+          <div>
+            CloudSentinel will make <strong>live HTTP calls</strong> to your API to measure real latency,
+            test if rate limiting returns 429, and verify unauthenticated requests are blocked.
+          </div>
+        </div>
+        <div class="form-group">
+          <label class="form-label">API Base URL <span style="color:var(--text-2);font-weight:400">(for live testing)</span></label>
+          <input class="form-input" id="fs-api-url" placeholder="https://xxxxxx.execute-api.us-east-1.amazonaws.com/prod" autocomplete="off">
+          <span class="form-hint">API Gateway → your API → Stages → Invoke URL</span>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Latency Alert Threshold (ms)</label>
+          <input class="form-input" id="fs-threshold" type="number" value="2000" min="100" max="30000">
+          <span class="form-hint">A risk is flagged when live response time exceeds this value</span>
+        </div>
+        <label class="checkbox-group">
+          <input type="checkbox" id="apigw-consent">
+          <span class="form-hint">I authorize CloudSentinel to read my API Gateway config, make test HTTP requests to my API, and read CloudWatch metrics for security analysis.</span>
+        </label>
       </div>
-      <div class="form-group">
-        <label class="form-label">AWS Region</label>
-        <input class="form-input" id="api-region" placeholder="us-east-1">
-      </div>
-      <label class="checkbox-group">
-        <input type="checkbox" id="apigw-consent">
-        <span class="form-hint">I authorize CloudSentinel to read my API Gateway configuration and CloudWatch metrics for security analysis.</span>
-      </label>
+
     </div>
     <div class="modal-footer">
+      <button class="btn btn-outline" id="fs-btn-back" style="display:none" onclick="fsGoBack()">&larr; Back</button>
       <button class="btn btn-outline" onclick="closeModal('modal-apigw')">Cancel</button>
-      <button class="btn btn-primary" onclick="confirmApigwConnect()">Connect &amp; Scan</button>
+      <button class="btn btn-primary" id="fs-btn-next" onclick="fsNextStep()">Next &rarr;</button>
     </div>
   </div>
 </div>
+
 
 <button id="chatbot-fab" title="Ask AI about API risks">AI</button>
 <div id="chatbot-panel">
