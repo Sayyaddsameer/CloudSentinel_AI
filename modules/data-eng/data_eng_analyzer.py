@@ -16,6 +16,7 @@ TABLE_NAME  = os.environ["DYNAMODB_TABLE"]
 REGION      = os.environ.get("AWS_REGION", "ap-south-1")
 DDB_REGION  = os.environ.get("DDB_REGION") or REGION
 AI_EXPLAINER_FN = os.environ.get("AI_EXPLAINER_FUNCTION_NAME", "cloudsentinel-ai-explainer")
+STS_EXTERNAL_ID = os.environ.get("STS_EXTERNAL_ID", "cloudsentinel")
 GLUE_FAIL_THRESHOLD = int(os.environ.get("GLUE_FAIL_THRESHOLD", "2"))
 GLUE_RUNS_WINDOW    = int(os.environ.get("GLUE_RUNS_WINDOW", "5"))
 
@@ -397,6 +398,7 @@ def get_clients(scan_region, role_arn=None):
             RoleArn=role_arn,
             RoleSessionName="cloudsentinel-data-scan",
             DurationSeconds=900,
+            ExternalId=STS_EXTERNAL_ID,
         )["Credentials"]
         session_kwargs = dict(
             aws_access_key_id=creds["AccessKeyId"],
@@ -426,22 +428,23 @@ def lambda_handler(event, context):
 
     try:
         s3, ddb_client, glue = get_clients(scan_region, role_arn)
+        aws_checks_ok = True
     except Exception as e:
-        logger.error(f"Cannot assume role / build clients: {e}")
-        return {
-            "statusCode": 403,
-            "headers": CORS_HEADERS,
-            "body": json.dumps({"error": f"Cannot access AWS account: {e}"}),
-        }
+        logger.warning(f"Role assumption failed — skipping AWS checks: {e}")
+        s3 = ddb_client = glue = None
+        aws_checks_ok = False
 
     purge_module_risks(table, "data-eng")
 
     all_risks = []
-    all_risks += scan_s3_data_buckets(s3, table)
-    all_risks += scan_dynamodb_tables(ddb_client, table)
-    all_risks += scan_glue_jobs(glue, table)
-    all_risks += scan_s3_versioning_logging(s3, table)
-    all_risks += scan_dynamodb_pitr(ddb_client, table)
+    if aws_checks_ok:
+        all_risks += scan_s3_data_buckets(s3, table)
+        all_risks += scan_dynamodb_tables(ddb_client, table)
+        all_risks += scan_glue_jobs(glue, table)
+        all_risks += scan_s3_versioning_logging(s3, table)
+        all_risks += scan_dynamodb_pitr(ddb_client, table)
+    else:
+        logger.info("AWS data checks skipped — role not accessible")
 
     emit_scan_completed("data-eng", all_risks)
 

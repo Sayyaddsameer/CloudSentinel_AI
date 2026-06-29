@@ -16,11 +16,10 @@ logger = logging.getLogger()
 logger.setLevel(logging.INFO)
 
 TABLE_NAME  = os.environ["DYNAMODB_TABLE"]
-# REGION: internal Lambda deployment region (for STS + DDB)
 REGION      = os.environ.get("SCAN_REGION") or os.environ.get("AWS_REGION", "us-east-1")
-# DDB_REGION: where the CloudSentinel DynamoDB table lives
 DDB_REGION  = os.environ.get("DDB_REGION") or os.environ.get("AWS_REGION", "ap-south-1")
-AI_EXPLAINER_FN = os.environ.get("AI_EXPLAINER_FUNCTION_NAME", "cloudsentinel-ai-explainer")
+AI_EXPLAINER_FN  = os.environ.get("AI_EXPLAINER_FUNCTION_NAME", "cloudsentinel-ai-explainer")
+STS_EXTERNAL_ID  = os.environ.get("STS_EXTERNAL_ID", "cloudsentinel")
 
 # Thresholds Ã¢â‚¬â€ web APIs. Ambica uses 1000ms for mobile; I use 2000ms here.
 LATENCY_THRESHOLD_MS = int(os.environ.get("LATENCY_THRESHOLD_MS", "2000"))
@@ -583,6 +582,7 @@ def get_clients(scan_region, role_arn=None):
             RoleArn=role_arn,
             RoleSessionName="cloudsentinel-fullstack-scan",
             DurationSeconds=900,
+            ExternalId=STS_EXTERNAL_ID,
         )["Credentials"]
         session_kwargs = dict(
             aws_access_key_id=creds["AccessKeyId"],
@@ -627,27 +627,25 @@ def lambda_handler(event, context):
 
     try:
         apigw, cw = get_clients(scan_region, role_arn)
+        aws_checks_ok = True
     except Exception as e:
-        logger.error(f"Cannot assume role / build clients: {e}")
-        return {
-            "statusCode": 403,
-            "headers": CORS_HEADERS,
-            "body": json.dumps({"error": f"Cannot access AWS account: {e}"}),
-        }
+        logger.warning(f"Role assumption failed — skipping AWS config checks, running HTTP-only tests: {e}")
+        apigw, cw = None, None
+        aws_checks_ok = False
 
     purge_module_risks(table, "fullstack")
 
     all_risks = []
 
-    # ── Config-based checks (cross-account API GW read) ──────────────────────
-    all_risks += scan_api_authentication(apigw, table)
-    all_risks += scan_throttling(apigw, table)
-    all_risks += scan_waf_association(apigw, table)
-    all_risks += scan_api_logging(apigw, table)
-    all_risks += scan_cloudwatch_alarms(apigw, cw, table)
-
-    # ── Historical CloudWatch metrics ─────────────────────────────────────────
-    all_risks += scan_cloudwatch_metrics(apigw, cw, table)
+    if aws_checks_ok:
+        all_risks += scan_api_authentication(apigw, table)
+        all_risks += scan_throttling(apigw, table)
+        all_risks += scan_waf_association(apigw, table)
+        all_risks += scan_api_logging(apigw, table)
+        all_risks += scan_cloudwatch_alarms(apigw, cw, table)
+        all_risks += scan_cloudwatch_metrics(apigw, cw, table)
+    else:
+        logger.info("AWS config checks skipped — role not accessible")
 
     # ── Real-time HTTP tests (live calls from Lambda → user's API) ────────────
     if api_base_url:

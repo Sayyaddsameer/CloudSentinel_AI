@@ -20,6 +20,7 @@ TABLE_NAME = os.environ["DYNAMODB_TABLE"]
 # different region (e.g. us-east-1 resources from an ap-south-1 Lambda).
 REGION     = os.environ.get("SCAN_REGION") or os.environ.get("AWS_REGION", "us-east-1")
 AI_EXPLAINER_FN = os.environ.get("AI_EXPLAINER_FUNCTION_NAME", "cloudsentinel-ai-explainer")
+STS_EXTERNAL_ID = os.environ.get("STS_EXTERNAL_ID", "cloudsentinel")
 
 CORS_HEADERS = {
     "Content-Type":                "application/json",
@@ -662,6 +663,7 @@ def get_clients(scan_region, role_arn=None):
             RoleArn=role_arn,
             RoleSessionName="cloudsentinel-mobile-scan",
             DurationSeconds=900,
+            ExternalId=STS_EXTERNAL_ID,
         )["Credentials"]
         session_kwargs = dict(
             aws_access_key_id=creds["AccessKeyId"],
@@ -696,26 +698,26 @@ def lambda_handler(event, context):
 
     try:
         apigw, cognito, iam, cw, lambda_client = get_clients(scan_region, role_arn)
+        aws_checks_ok = True
     except Exception as e:
-        logger.error(f"Cannot assume role / build clients: {e}")
-        return {
-            "statusCode": 403,
-            "headers": CORS_HEADERS,
-            "body": json.dumps({"error": f"Cannot access AWS account: {e}"}),
-        }
+        logger.warning(f"Role assumption failed — running HTTP-only tests: {e}")
+        apigw = cognito = iam = cw = lambda_client = None
+        aws_checks_ok = False
 
     purge_module_risks(table, "mobile")
 
     all_risks = []
 
-    # â”€â”€ Config-based checks (cross-account AWS reads) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-    all_risks += scan_api_gateway(apigw, table)
-    all_risks += scan_cognito_pools(cognito, table)
-    all_risks += scan_iam_lambda_roles(iam, table)
-    all_risks += scan_api_latency(apigw, cw, table, threshold_ms)   # historical CW
-    all_risks += scan_lambda_health(lambda_client, table)
-    all_risks += scan_api_gateway_logging(apigw, table)
-    all_risks += scan_4xx_error_rates(apigw, cw, table)
+    if aws_checks_ok:
+        all_risks += scan_api_gateway(apigw, table)
+        all_risks += scan_cognito_pools(cognito, table)
+        all_risks += scan_iam_lambda_roles(iam, table)
+        all_risks += scan_api_latency(apigw, cw, table, threshold_ms)
+        all_risks += scan_lambda_health(lambda_client, table)
+        all_risks += scan_api_gateway_logging(apigw, table)
+        all_risks += scan_4xx_error_rates(apigw, cw, table)
+    else:
+        logger.info("AWS config checks skipped — role not accessible")
 
     # â”€â”€ Real-time HTTP tests (live calls from Lambda â†’ user's mobile API) â”€â”€â”€
     if api_base_url:

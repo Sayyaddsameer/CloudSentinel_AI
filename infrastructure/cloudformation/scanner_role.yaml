@@ -1,21 +1,22 @@
 AWSTemplateFormatVersion: "2010-09-09"
 Description: >
-  CloudSentinel Scanner Role — deploy this stack in a target AWS account
-  to allow the CloudSentinel cloud-scanner Lambda to assume a read-only
-  scanning role. This is how CloudSentinel accesses accounts it doesn't
-  own without requiring permanent credentials.
+  CloudSentinel Scanner Role — deploy this stack in your AWS account to allow
+  all CloudSentinel scanner Lambdas (cloud-infra, fullstack, mobile, data-eng,
+  devops) to assume a read-only scanning role for cross-account analysis.
 
 Parameters:
   CloudSentinelAccountId:
     Type: String
-    Description: AWS account ID of the CloudSentinel platform (where the Lambda runs)
+    Description: AWS account ID of the CloudSentinel platform (where the Lambdas run)
   CloudSentinelLambdaRoleArn:
     Type: String
-    Description: ARN of the cloudsentinel-lambda-role in the platform account
+    Description: >
+      ARN of the shared cloudsentinel-lambda-role in the platform account.
+      All scanner Lambdas share this role, so trusting it allows all modules to scan.
   ExternalId:
     Type: String
     Default: cloudsentinel
-    Description: External ID used in the STS AssumeRole trust condition for extra security
+    Description: External ID used in sts:AssumeRole trust condition for extra security
 
 Resources:
   CloudSentinelScannerRole:
@@ -37,25 +38,109 @@ Resources:
           PolicyDocument:
             Version: "2012-10-17"
             Statement:
-              - Effect: Allow
+              # ── Cloud-Infra module ──────────────────────────────────────────
+              - Sid: S3Scan
+                Effect: Allow
                 Action:
                   - s3:ListAllMyBuckets
+                  - s3:GetBucketLocation
                   - s3:GetBucketPublicAccessBlock
                   - s3:GetBucketEncryption
+                  - s3:GetBucketVersioning
+                  - s3:GetBucketPolicy
+                  - s3:GetBucketAcl
+                  - s3:GetBucketLogging
+                Resource: "*"
+              - Sid: EC2Scan
+                Effect: Allow
+                Action:
                   - ec2:DescribeSecurityGroups
+                  - ec2:DescribeInstances
+                  - ec2:DescribeRegions
+                Resource: "*"
+              - Sid: IAMScan
+                Effect: Allow
+                Action:
                   - iam:GetAccountPasswordPolicy
+                  - iam:ListUsers
+                  - iam:GetUser
+                  - iam:ListRoles
+                  - iam:GetRole
+                Resource: "*"
+              - Sid: ConfigScan
+                Effect: Allow
+                Action:
+                  - config:DescribeConfigRules
                   - config:GetComplianceDetailsByConfigRule
                   - config:DescribeComplianceByConfigRule
+                Resource: "*"
+              # ── Full-Stack & Mobile modules ─────────────────────────────────
+              - Sid: APIGatewayScan
+                Effect: Allow
+                Action:
+                  - apigateway:GET
+                Resource: "*"
+              - Sid: CognitoScan
+                Effect: Allow
+                Action:
+                  - cognito-idp:ListUserPools
+                  - cognito-idp:DescribeUserPool
+                  - cognito-idp:GetUserPoolMfaConfig
+                Resource: "*"
+              - Sid: WAFScan
+                Effect: Allow
+                Action:
+                  - wafv2:ListWebACLs
+                  - wafv2:GetWebACL
+                  - wafv2:ListResourcesForWebACL
+                Resource: "*"
+              # ── Data-Eng module ─────────────────────────────────────────────
+              - Sid: GlueScan
+                Effect: Allow
+                Action:
+                  - glue:GetJobs
+                  - glue:GetJob
+                  - glue:GetJobRuns
+                  - glue:ListJobs
+                Resource: "*"
+              - Sid: DynamoDBScan
+                Effect: Allow
+                Action:
+                  - dynamodb:ListTables
+                  - dynamodb:DescribeTable
+                  - dynamodb:DescribeContinuousBackups
+                Resource: "*"
+              # ── Shared — CloudWatch metrics (all modules) ───────────────────
+              - Sid: CloudWatchScan
+                Effect: Allow
+                Action:
+                  - cloudwatch:GetMetricStatistics
+                  - cloudwatch:GetMetricData
+                  - cloudwatch:ListMetrics
+                  - cloudwatch:DescribeAlarms
+                Resource: "*"
+              # ── DevOps module ───────────────────────────────────────────────
+              - Sid: LambdaScan
+                Effect: Allow
+                Action:
+                  - lambda:ListFunctions
+                  - lambda:GetFunction
+                  - lambda:GetFunctionConfiguration
                 Resource: "*"
       Tags:
         - Key: Project
           Value: CloudSentinel
         - Key: Purpose
           Value: cross-account-scanner
+        - Key: ManagedBy
+          Value: CloudFormation
 
 Outputs:
   ScannerRoleArn:
     Description: >
-      Copy this ARN and set it as the TARGET_ROLE_ARN environment variable
-      on the cloudsentinel-cloud-scanner Lambda function.
+      Role ARN assumed by all CloudSentinel scanner Lambdas.
+      Paste this into the CloudSentinel dashboard when connecting your account.
     Value: !GetAtt CloudSentinelScannerRole.Arn
+  ExternalId:
+    Description: External ID to use when connecting in the CloudSentinel dashboard
+    Value: !Ref ExternalId
