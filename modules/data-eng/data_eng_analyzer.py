@@ -13,7 +13,7 @@ logger = logging.getLogger()
 logger.setLevel(logging.INFO)
 
 TABLE_NAME  = os.environ["DYNAMODB_TABLE"]
-REGION      = os.environ.get("AWS_REGION", "ap-south-1")
+REGION      = os.environ["AWS_REGION"]
 DDB_REGION  = os.environ.get("DDB_REGION") or REGION
 AI_EXPLAINER_FN = os.environ.get("AI_EXPLAINER_FUNCTION_NAME", "cloudsentinel-ai-explainer")
 STS_EXTERNAL_ID = os.environ.get("STS_EXTERNAL_ID", "cloudsentinel")
@@ -421,7 +421,7 @@ def lambda_handler(event, context):
 
     body        = json.loads((event.get("body") or "{}"))
     role_arn    = body.get("targetRoleArn") or None
-    scan_region = body.get("scanRegion") or os.environ.get("SCAN_REGION") or os.environ.get("AWS_REGION", "us-east-1")
+    scan_region = body.get("scanRegion") or os.environ.get("SCAN_REGION") or os.environ["AWS_REGION"]
 
     ddb   = boto3.resource("dynamodb", region_name=DDB_REGION)
     table = ddb.Table(TABLE_NAME)

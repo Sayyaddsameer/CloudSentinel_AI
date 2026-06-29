@@ -1,0 +1,1 @@
+{"errorMessage": "name 'REGION' is not defined", "errorType": "NameError", "requestId": "8007db75-e653-4604-8c91-1c7f0eedadc8", "stackTrace": ["  File \"/var/task/cloud_scanner.py\", line 844, in lambda_handler\n    ddb = boto3.resource(\"dynamodb\", region_name=REGION)\n"]}

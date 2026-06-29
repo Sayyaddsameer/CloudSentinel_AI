@@ -13,7 +13,7 @@ logger = logging.getLogger()
 logger.setLevel(logging.INFO)
 
 TABLE_NAME      = os.environ["DYNAMODB_TABLE"]
-LAMBDA_REGION   = os.environ.get("AWS_REGION", "us-east-1")  # where THIS Lambda lives
+LAMBDA_REGION   = os.environ["AWS_REGION"]  # where THIS Lambda lives
 AI_EXPLAINER_FN = os.environ.get("AI_EXPLAINER_FUNCTION_NAME", "cloudsentinel-ai-explainer")
 TARGET_ROLE_ARN = os.environ.get("TARGET_ROLE_ARN", "")
 GCP_SECRET_NAME = os.environ.get("GCP_SECRET_NAME", "")

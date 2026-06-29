@@ -348,21 +348,28 @@ function awsStep2() {
  * region (not the platform's ENV_REGION). Re-runs whenever the region
  * dropdown changes, and remembers the choice for the disconnect step. */
 function updateCfnLinks() {
-  const TEMPLATE_URL = window.ENV_CFN_TEMPLATE_URL || '';
+  const TEMPLATE_URL  = window.ENV_CFN_TEMPLATE_URL  || '';
+  const PLATFORM_ACCT = window.ENV_PLATFORM_ACCOUNT_ID || '871070087236';
+  const LAMBDA_ROLE   = window.ENV_LAMBDA_ROLE_NAME    || 'cloudsentinel-lambda-role';
   const sel    = document.getElementById('aws-target-region');
   const REGION = (sel && sel.value) || window.ENV_REGION || 'us-east-1';
   localStorage.setItem('cs_aws_region', REGION);
   if (!TEMPLATE_URL) { showToast('CloudFormation template URL not configured. Set ENV_CFN_TEMPLATE_URL in env.js.', 'error'); return; }
 
-  // Only ExternalId param needed — Lambda role ARN is hardcoded in the template
-  const cfnParams = `&param_ExternalId=cloudsentinel`;
+  // Pre-fill all CFN parameters — user just clicks through without typing anything
+  const cfnParams = [
+    `param_CloudSentinelAccountId=${encodeURIComponent(PLATFORM_ACCT)}`,
+    `param_CloudSentinelLambdaRoleName=${encodeURIComponent(LAMBDA_ROLE)}`,
+    `param_ExternalId=cloudsentinel`,
+  ].map(p => `&${p}`).join('');
+
   const cfnUrl = `https://${REGION}.console.aws.amazon.com/cloudformation/home?region=${REGION}#/stacks/create/review?templateURL=${encodeURIComponent(TEMPLATE_URL)}&stackName=CloudSentinel-Scanner${cfnParams}`;
   const link = document.getElementById('cfn-link');
   if (link) link.href = cfnUrl;
 
   const cliCmd = document.getElementById('cfn-cli-cmd');
   if (cliCmd) {
-    cliCmd.textContent = `aws cloudformation create-stack \\\n  --stack-name CloudSentinel-Scanner \\\n  --template-url ${TEMPLATE_URL} \\\n  --capabilities CAPABILITY_NAMED_IAM \\\n  --parameters ParameterKey=ExternalId,ParameterValue=cloudsentinel \\\n  --region ${REGION}`;
+    cliCmd.textContent = `aws cloudformation create-stack \\\n  --stack-name CloudSentinel-Scanner \\\n  --template-url ${TEMPLATE_URL} \\\n  --capabilities CAPABILITY_NAMED_IAM \\\n  --parameters \\\n    ParameterKey=CloudSentinelAccountId,ParameterValue=<platform-account-id> \\\n    ParameterKey=CloudSentinelLambdaRoleName,ParameterValue=cloudsentinel-lambda-role \\\n    ParameterKey=ExternalId,ParameterValue=cloudsentinel \\\n  --region ${REGION}`;
   }
 
   const disc = document.getElementById('disconnect-cli-cmd');

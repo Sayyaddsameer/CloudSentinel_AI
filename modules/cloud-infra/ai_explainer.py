@@ -13,7 +13,7 @@ logger = logging.getLogger()
 logger.setLevel(logging.INFO)
 
 TABLE_NAME  = os.environ["DYNAMODB_TABLE"]
-REGION      = os.environ.get("AWS_REGION", "us-east-1")
+REGION      = os.environ["AWS_REGION"]
 BEDROCK_MODEL = os.environ.get("BEDROCK_MODEL_ID", "anthropic.claude-3-haiku-20240307-v1:0")
 MAX_TOKENS  = int(os.environ.get("MAX_TOKENS", "400"))
 MAX_RISKS   = int(os.environ.get("MAX_RISKS_PER_RUN", "50"))

@@ -25,7 +25,7 @@ logger = logging.getLogger()
 logger.setLevel(logging.INFO)
 
 TABLE_NAME           = os.environ["DYNAMODB_TABLE"]
-REGION               = os.environ.get("AWS_REGION", "us-east-1")
+REGION               = os.environ["AWS_REGION"]
 AI_EXPLAINER_FN      = os.environ.get("AI_EXPLAINER_FUNCTION_NAME", "cloudsentinel-ai-explainer")
 WEBHOOK_SECRET_ARN   = os.environ.get("WEBHOOK_SECRET_ARN", "")
 GITHUB_PAT_SECRET_ARN = os.environ.get("GITHUB_PAT_SECRET_ARN", "")

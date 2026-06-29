@@ -18,9 +18,12 @@ logger.setLevel(logging.INFO)
 TABLE_NAME = os.environ["DYNAMODB_TABLE"]
 # SCAN_REGION overrides the Lambda-injected AWS_REGION so we can scan a
 # different region (e.g. us-east-1 resources from an ap-south-1 Lambda).
-REGION     = os.environ.get("SCAN_REGION") or os.environ.get("AWS_REGION", "us-east-1")
+REGION     = os.environ.get("SCAN_REGION") or os.environ["AWS_REGION"]
 AI_EXPLAINER_FN = os.environ.get("AI_EXPLAINER_FUNCTION_NAME", "cloudsentinel-ai-explainer")
 STS_EXTERNAL_ID = os.environ.get("STS_EXTERNAL_ID", "cloudsentinel")
+
+# Set by lambda_handler — used by build_risk to stamp correct region on cards
+_SCAN_REGION = REGION
 
 CORS_HEADERS = {
     "Content-Type":                "application/json",
@@ -44,7 +47,7 @@ def build_risk(resource, resource_name, risk_type, risk_reason, priority,
         remediation_steps=remediation_steps,
         alternative_solutions=alternative_solutions,
         cloud_provider="AWS",
-        region=REGION,
+        region=_SCAN_REGION,
     )
 
 
@@ -689,9 +692,12 @@ def lambda_handler(event, context):
 
     body         = json.loads((event.get("body") or "{}"))
     role_arn     = body.get("targetRoleArn") or None
-    scan_region  = body.get("scanRegion") or os.environ.get("AWS_REGION", "us-east-1")
+    scan_region  = body.get("scanRegion") or os.environ.get("AWS_REGION")
     api_base_url = (body.get("apiBaseUrl") or "").rstrip("/")
     threshold_ms = int(body.get("latencyThresholdMs") or os.environ.get("LATENCY_THRESHOLD_MS", "1000"))
+
+    global _SCAN_REGION
+    _SCAN_REGION = scan_region
 
     ddb   = boto3.resource("dynamodb", region_name=REGION)
     table = ddb.Table(TABLE_NAME)

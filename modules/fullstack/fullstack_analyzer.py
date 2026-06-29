@@ -16,10 +16,13 @@ logger = logging.getLogger()
 logger.setLevel(logging.INFO)
 
 TABLE_NAME  = os.environ["DYNAMODB_TABLE"]
-REGION      = os.environ.get("SCAN_REGION") or os.environ.get("AWS_REGION", "us-east-1")
-DDB_REGION  = os.environ.get("DDB_REGION") or os.environ.get("AWS_REGION", "ap-south-1")
+REGION      = os.environ.get("SCAN_REGION") or os.environ["AWS_REGION"]
+DDB_REGION  = os.environ.get("DDB_REGION") or os.environ["AWS_REGION"]
 AI_EXPLAINER_FN  = os.environ.get("AI_EXPLAINER_FUNCTION_NAME", "cloudsentinel-ai-explainer")
 STS_EXTERNAL_ID  = os.environ.get("STS_EXTERNAL_ID", "cloudsentinel")
+
+# Set by lambda_handler to the user-chosen scan region before any build_risk calls
+_SCAN_REGION = REGION
 
 # Thresholds Ã¢â‚¬â€ web APIs. Ambica uses 1000ms for mobile; I use 2000ms here.
 LATENCY_THRESHOLD_MS = int(os.environ.get("LATENCY_THRESHOLD_MS", "2000"))
@@ -34,7 +37,7 @@ CORS_HEADERS = {
 
 def build_risk(api_name, resource_path, risk_type, risk_reason, priority,
                remediation_steps=None, alternative_solutions=None):
-    # Facade over shared schema
+    # Facade over shared schema — uses _SCAN_REGION set by lambda_handler
     return build_risk_record(
         module="fullstack",
         resource="API Gateway",
@@ -45,7 +48,7 @@ def build_risk(api_name, resource_path, risk_type, risk_reason, priority,
         remediation_steps=remediation_steps,
         alternative_solutions=alternative_solutions,
         cloud_provider="AWS",
-        region=REGION,
+        region=_SCAN_REGION,
     )
 
 
@@ -618,9 +621,13 @@ def lambda_handler(event, context):
 
     body         = json.loads((event.get("body") or "{}"))
     role_arn     = body.get("targetRoleArn") or None
-    scan_region  = body.get("scanRegion") or os.environ.get("SCAN_REGION") or os.environ.get("AWS_REGION", "us-east-1")
+    scan_region  = body.get("scanRegion") or os.environ.get("SCAN_REGION") or os.environ["AWS_REGION"]
     api_base_url = (body.get("apiBaseUrl") or "").rstrip("/")
     threshold_ms = int(body.get("latencyThresholdMs") or LATENCY_THRESHOLD_MS)
+
+    # Set module-level region so build_risk stamps every risk card with the correct region
+    global _SCAN_REGION
+    _SCAN_REGION = scan_region
 
     ddb   = boto3.resource("dynamodb", region_name=DDB_REGION)
     table = ddb.Table(TABLE_NAME)
