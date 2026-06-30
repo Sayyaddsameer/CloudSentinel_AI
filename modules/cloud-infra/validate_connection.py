@@ -17,7 +17,7 @@ from botocore.exceptions import ClientError
 logger = logging.getLogger()
 logger.setLevel(logging.INFO)
 
-REGION = os.environ.get("AWS_REGION", "us-east-1")
+REGION = os.environ["AWS_REGION"]
 
 CORS_HEADERS = {
     "Content-Type": "application/json",

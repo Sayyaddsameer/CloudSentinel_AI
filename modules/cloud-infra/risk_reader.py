@@ -11,7 +11,7 @@ logger = logging.getLogger()
 logger.setLevel(logging.INFO)
 
 TABLE_NAME = os.environ["DYNAMODB_TABLE"]
-REGION     = os.environ.get("AWS_REGION", "us-east-1")
+REGION     = os.environ["AWS_REGION"]
 PAGE_LIMIT = int(os.environ.get("RISKS_PAGE_LIMIT", "100"))
 
 CORS_HEADERS = {

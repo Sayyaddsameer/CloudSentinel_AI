@@ -148,7 +148,8 @@ function renderActivityFeed() {
     const d       = new Date(h.timestamp);
     const time    = d.toLocaleString('en-IN', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' });
     const dotClass = h.high > 0 ? 'high' : h.medium > 0 ? 'medium' : 'scan';
-    const modSlug  = h.module.replace('-', '');
+    const PAGE = { 'cloud-infra':'cloud', 'devops':'devops', 'fullstack':'fullstack', 'data-eng':'data', 'mobile':'mobile' };
+    const modSlug  = PAGE[h.module] || h.module;
     return `
       <div class="activity-item">
         <div class="activity-dot ${dotClass}">${MOD_ICONS[h.module] || '[scan]'}</div>

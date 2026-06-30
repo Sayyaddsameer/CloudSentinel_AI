@@ -32,7 +32,7 @@ class RiskRecord:
     aiExplanation:        str = ""
     riskCategory:         str = ""
     status:               str = "OPEN"
-    region:               str = "us-east-1"
+    region:               str = ""
     source:               str = "scanner"   # "scanner" | "aws-config"
 
     def __post_init__(self):
@@ -64,7 +64,7 @@ def build_risk_record(
     remediation_steps:    List[str] = None,
     alternative_solutions: List[str] = None,
     cloud_provider:       str = "AWS",
-    region:               str = "us-east-1",
+    region:               str = "",
 ) -> dict:
     """
     Returns a plain dict ready for DynamoDB PutItem.

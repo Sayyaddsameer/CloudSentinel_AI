@@ -32,7 +32,7 @@ from botocore.exceptions import ClientError
 
 logger = logging.getLogger(__name__)
 
-REGION = os.environ.get("AWS_REGION", "us-east-1")
+REGION = os.environ["AWS_REGION"]
 
 
 def emit_scan_completed(module: str, risks: list) -> None:

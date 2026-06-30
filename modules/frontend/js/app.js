@@ -531,7 +531,7 @@ function renderRiskCards(risks, containerId, filterPriority = 'All') {
       <div class="risk-card-reason">${escHtml(r.riskReason)}</div>
       <div class="risk-card-footer">
         <button class="risk-expand-btn" onclick="toggleRiskDetail(this,'risk-detail-${containerId}-${i}')">View details &amp; remediation</button>
-        <span class="text-xs text-dimmer">${escHtml(r.region || 'us-east-1')}</span>
+        <span class="text-xs text-dimmer">${escHtml(r.region || '')}</span>
       </div>
       <div class="risk-details" id="risk-detail-${containerId}-${i}">
         <div>

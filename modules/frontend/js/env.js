@@ -8,9 +8,10 @@
  * These are non-secret deployment outputs safe to store in source control.
  */
 
-window.ENV_COGNITO_POOL_ID   = "ap-south-1_ftbUPY1vp";
-window.ENV_COGNITO_CLIENT_ID = "15spdi2nb2chdujo0a0s3sgvrm";
-window.ENV_API_URL            = "https://5311fuhco9.execute-api.ap-south-1.amazonaws.com/dev";
-window.ENV_REGION             = "ap-south-1";
-window.ENV_CFN_TEMPLATE_URL   = "https://cloudsentinel-cf-templates-871070087236.s3.amazonaws.com/scanner-role.yaml";
-window.ENV_LAMBDA_ROLE_ARN    = "arn:aws:iam::871070087236:role/cloudsentinel-lambda-role";
+window.ENV_COGNITO_POOL_ID      = "ap-south-1_ftbUPY1vp";
+window.ENV_COGNITO_CLIENT_ID    = "15spdi2nb2chdujo0a0s3sgvrm";
+window.ENV_API_URL              = "https://5311fuhco9.execute-api.ap-south-1.amazonaws.com/dev";
+window.ENV_REGION               = "ap-south-1";
+window.ENV_CFN_TEMPLATE_URL     = "https://cloudsentinel-cf-templates-871070087236.s3.amazonaws.com/scanner-role.yaml";
+window.ENV_PLATFORM_ACCOUNT_ID  = "871070087236";
+window.ENV_LAMBDA_ROLE_NAME     = "cloudsentinel-lambda-role";
