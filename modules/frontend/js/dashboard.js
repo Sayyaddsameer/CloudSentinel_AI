@@ -133,35 +133,6 @@ function initDashboard() {
   set('ws-high',      connected ? highCount  : '--');
   set('ws-connected', `${connected}/${MODULE_KEYS.length}`);
 
-  /* Recent activity feed */
-  renderActivityFeed();
-}
-
-/* ── Activity feed ────────────────────────────────────────── */
-function renderActivityFeed() {
-  const feed = document.getElementById('activity-feed');
-  if (!feed) return;
-  const history = getAllHistory(10);
-  if (!history.length) return; /* keep empty state */
-
-  feed.innerHTML = history.map(h => {
-    const d       = new Date(h.timestamp);
-    const time    = d.toLocaleString('en-IN', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' });
-    const dotClass = h.high > 0 ? 'high' : h.medium > 0 ? 'medium' : 'scan';
-    return `
-      <div class="activity-item">
-        <div class="activity-dot ${dotClass}">${MOD_ICONS[h.module] || '[scan]'}</div>
-        <div class="activity-content">
-          <div class="activity-title">${MOD_NAMES[h.module] || h.module} -- ${h.total} risk${h.total !== 1 ? 's' : ''} detected</div>
-          <div class="activity-meta">
-            ${time} &middot;
-            <span style="color:var(--high)">${h.high} High</span> &middot;
-            <span style="color:var(--medium)">${h.medium} Medium</span> &middot;
-            <span style="color:var(--low)">${h.low} Low</span>
-          </div>
-        </div>
-      </div>`;
-  }).join('');
 }
 
 /* ── Start ────────────────────────────────────────────────── */
