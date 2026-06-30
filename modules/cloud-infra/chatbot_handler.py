@@ -10,7 +10,8 @@ logger = logging.getLogger()
 logger.setLevel(logging.INFO)
 
 TABLE_NAME    = os.environ["DYNAMODB_TABLE"]
-REGION        = os.environ.get("AWS_REGION", "us-east-1")
+REGION        = os.environ["AWS_REGION"]
+DDB_REGION    = os.environ.get("DDB_REGION") or REGION
 BEDROCK_MODEL = os.environ.get("BEDROCK_MODEL_ID", "anthropic.claude-3-haiku-20240307-v1:0")
 CONTEXT_LIMIT = int(os.environ.get("CHATBOT_CONTEXT_RISKS", "20"))
 MAX_TOKENS    = int(os.environ.get("MAX_TOKENS", "600"))
@@ -23,7 +24,7 @@ GROQ_MODEL   = os.environ.get("GROQ_MODEL", "llama-3.3-70b-versatile")
 GROQ_URL     = os.environ.get("GROQ_URL", "https://api.groq.com/openai/v1/chat/completions")
 
 # Initialize clients outside the handler for connection reuse across invocations (reduces cold-starts)
-ddb   = boto3.resource("dynamodb", region_name=REGION)
+ddb   = boto3.resource("dynamodb", region_name=DDB_REGION)
 table = ddb.Table(TABLE_NAME)
 bedrock = boto3.client("bedrock-runtime", region_name=REGION)
 

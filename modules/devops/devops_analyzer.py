@@ -26,6 +26,7 @@ logger.setLevel(logging.INFO)
 
 TABLE_NAME           = os.environ["DYNAMODB_TABLE"]
 REGION               = os.environ["AWS_REGION"]
+DDB_REGION           = os.environ.get("DDB_REGION") or REGION
 AI_EXPLAINER_FN      = os.environ.get("AI_EXPLAINER_FUNCTION_NAME", "cloudsentinel-ai-explainer")
 WEBHOOK_SECRET_ARN   = os.environ.get("WEBHOOK_SECRET_ARN", "")
 GITHUB_PAT_SECRET_ARN = os.environ.get("GITHUB_PAT_SECRET_ARN", "")
@@ -491,7 +492,7 @@ def purge_module_risks(table, module):
 def lambda_handler(event, context):
     _start = time.time()
     logger.info("devops-analyzer invoked")
-    ddb   = boto3.resource("dynamodb", region_name=REGION)
+    ddb   = boto3.resource("dynamodb", region_name=DDB_REGION)
     table = ddb.Table(TABLE_NAME)
 
     raw_body = (event.get("body") or "{}").encode("utf-8")

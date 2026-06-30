@@ -19,6 +19,7 @@ TABLE_NAME = os.environ["DYNAMODB_TABLE"]
 # SCAN_REGION overrides the Lambda-injected AWS_REGION so we can scan a
 # different region (e.g. us-east-1 resources from an ap-south-1 Lambda).
 REGION     = os.environ.get("SCAN_REGION") or os.environ["AWS_REGION"]
+DDB_REGION = os.environ.get("DDB_REGION") or os.environ["AWS_REGION"]
 AI_EXPLAINER_FN = os.environ.get("AI_EXPLAINER_FUNCTION_NAME", "cloudsentinel-ai-explainer")
 STS_EXTERNAL_ID = os.environ.get("STS_EXTERNAL_ID", "cloudsentinel")
 
@@ -699,7 +700,7 @@ def lambda_handler(event, context):
     global _SCAN_REGION
     _SCAN_REGION = scan_region
 
-    ddb   = boto3.resource("dynamodb", region_name=REGION)
+    ddb   = boto3.resource("dynamodb", region_name=DDB_REGION)
     table = ddb.Table(TABLE_NAME)
 
     try:
