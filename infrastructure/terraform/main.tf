@@ -255,11 +255,33 @@ resource "aws_s3_bucket" "artifacts" {
 }
 
 resource "aws_s3_bucket_public_access_block" "artifacts" {
-  bucket                  = aws_s3_bucket.artifacts.id
+  bucket = aws_s3_bucket.artifacts.id
+  # ACLs blocked; bucket policy allowed so CloudFormation in other accounts
+  # can fetch the scanner-role template from the templates/ prefix.
   block_public_acls       = true
   ignore_public_acls      = true
-  block_public_policy     = true
-  restrict_public_buckets = true
+  block_public_policy     = false
+  restrict_public_buckets = false
+}
+
+# Allow public GET only on templates/ — required for cross-account CloudFormation
+resource "aws_s3_bucket_policy" "artifacts_templates_public" {
+  bucket = aws_s3_bucket.artifacts.id
+  # Must wait for public-access block to be updated first
+  depends_on = [aws_s3_bucket_public_access_block.artifacts]
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Sid       = "PublicReadTemplates"
+        Effect    = "Allow"
+        Principal = "*"
+        Action    = "s3:GetObject"
+        Resource  = "${aws_s3_bucket.artifacts.arn}/templates/*"
+      }
+    ]
+  })
 }
 
 resource "aws_s3_bucket_versioning" "artifacts" {

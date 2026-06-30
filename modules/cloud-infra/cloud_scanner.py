@@ -869,7 +869,29 @@ def lambda_handler(event, context):
     all_risks = []
 
     if "aws" in providers:
-        clients = get_aws_clients(role_arn=target_role_arn, scan_region=scan_region)
+        try:
+            clients = get_aws_clients(role_arn=target_role_arn, scan_region=scan_region)
+        except ClientError as e:
+            code = e.response["Error"]["Code"]
+            if code in ("AccessDenied", "AccessDeniedException"):
+                msg = (
+                    "Cannot assume the scanner role in the target account. "
+                    "Please deploy the CloudSentinel-Scanner CloudFormation stack "
+                    f"in account {(target_role_arn or '').split(':')[4] or 'unknown'} first, "
+                    "then reconnect."
+                )
+                logger.error(msg)
+                return {
+                    "statusCode": 403,
+                    "headers": {
+                        "Content-Type": "application/json",
+                        "Access-Control-Allow-Origin": os.environ.get("AMPLIFY_DOMAIN", "*"),
+                        "Access-Control-Allow-Headers": "Content-Type,Authorization",
+                        "Access-Control-Allow-Methods": "POST,OPTIONS",
+                    },
+                    "body": json.dumps({"error": msg, "code": "ROLE_NOT_FOUND"}),
+                }
+            raise
         all_risks += scan_root_mfa(clients, table)           # Critical severity check
         all_risks += scan_s3_buckets(clients, table)
         all_risks += scan_security_groups(clients, table)
