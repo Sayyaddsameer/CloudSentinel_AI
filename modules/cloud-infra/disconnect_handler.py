@@ -192,4 +192,5 @@ def _purge_risks(module: str) -> int:
         logger.info("Purged %d risk records for module=%s", purged, module)
     except Exception as e:
         logger.error("Failed to purge risks for module=%s: %s", module, e)
+        raise  # re-raise so caller surfaces the error rather than silently returning 0
     return purged

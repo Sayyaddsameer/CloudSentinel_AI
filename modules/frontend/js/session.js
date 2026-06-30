@@ -201,7 +201,10 @@ async function _doAutoLogout() {
   }
   try { clearSession(); } catch(e) {}
   localStorage.removeItem(LAST_ACTIVITY_KEY);
-  window.location.href = 'index.html?reason=timeout';
+  /* Depth-aware redirect so logout works from any page depth */
+  const depth = (window.location.pathname.match(/\//g) || []).length - 1;
+  const prefix = depth > 0 ? '../'.repeat(depth) : '';
+  window.location.href = prefix + 'index.html?reason=timeout';
 }
 
 function openSessionSettings() {
