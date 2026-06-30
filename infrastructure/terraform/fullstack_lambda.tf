@@ -34,7 +34,7 @@ resource "aws_lambda_function" "fullstack_analyzer" {
     }
   }
 
-  tags = { Project = var.project, Module = "fullstack", Owner = "gowrish" }
+  tags = { Project = var.project, Module = "fullstack" }
 }
 
 resource "aws_api_gateway_resource" "scan_fullstack" {

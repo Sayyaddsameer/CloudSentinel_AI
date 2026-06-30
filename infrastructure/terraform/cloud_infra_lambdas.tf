@@ -35,7 +35,7 @@ resource "aws_lambda_function" "cloud_scanner" {
     }
   }
 
-  tags = { Project = var.project, Module = "cloud-infra", Owner = "sameer" }
+  tags = { Project = var.project, Module = "cloud-infra" }
 }
 
 resource "aws_lambda_permission" "cloud_scanner_apigw" {
@@ -78,7 +78,7 @@ resource "aws_lambda_function" "ai_explainer" {
     }
   }
 
-  tags = { Project = var.project, Module = "cloud-infra", Owner = "sameer" }
+  tags = { Project = var.project, Module = "cloud-infra" }
 }
 
 resource "aws_lambda_permission" "ai_explainer_events" {
@@ -122,7 +122,7 @@ resource "aws_lambda_function" "chatbot_handler" {
     }
   }
 
-  tags = { Project = var.project, Module = "cloud-infra", Owner = "sameer" }
+  tags = { Project = var.project, Module = "cloud-infra" }
 }
 
 resource "aws_lambda_permission" "chatbot_apigw" {
@@ -160,7 +160,7 @@ resource "aws_lambda_function" "risk_reader" {
     }
   }
 
-  tags = { Project = var.project, Module = "cloud-infra", Owner = "sameer" }
+  tags = { Project = var.project, Module = "cloud-infra" }
 }
 
 resource "aws_lambda_permission" "risk_reader_apigw" {
@@ -198,7 +198,7 @@ resource "aws_lambda_function" "disconnect_handler" {
     }
   }
 
-  tags = { Project = var.project, Module = "cloud-infra", Owner = "sameer" }
+  tags = { Project = var.project, Module = "cloud-infra" }
 }
 
 resource "aws_lambda_permission" "disconnect_handler_apigw" {
@@ -248,7 +248,7 @@ resource "aws_lambda_function" "validate_connection" {
     }
   }
 
-  tags = { Project = var.project, Module = "cloud-infra", Owner = "sameer" }
+  tags = { Project = var.project, Module = "cloud-infra" }
 }
 
 resource "aws_api_gateway_resource" "validate_connection" {

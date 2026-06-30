@@ -91,7 +91,7 @@ function initDashboard() {
   set('welcome-greeting', `${greet}, ${user.name.split(' ')[0]}`);
 
   /* Module cards */
-  let totalRisks = 0, highCount = 0, connected = 0;
+  let totalRisks = 0, criticalCount = 0, highCount = 0, mediumCount = 0, lowCount = 0, connected = 0;
 
   MODULE_KEYS.forEach(mod => {
     const conns       = getConnections(mod);
@@ -105,8 +105,11 @@ function initDashboard() {
       /* Load cached risk counts from history for offline-first display */
       const latestHistory = getModuleHistory(mod, 1)[0];
       if (latestHistory) {
-        totalRisks += latestHistory.total;
-        highCount  += latestHistory.high;
+        totalRisks   += latestHistory.total;
+        criticalCount += (latestHistory.critical || 0);
+        highCount    += latestHistory.high;
+        mediumCount  += (latestHistory.medium || 0);
+        lowCount     += (latestHistory.low    || 0);
         const el = document.getElementById(COUNT_IDS[mod]);
         if (el) el.textContent = `${latestHistory.total} risk${latestHistory.total !== 1 ? 's' : ''}`;
       } else {
@@ -132,6 +135,18 @@ function initDashboard() {
   set('ws-total',     connected ? totalRisks : '--');
   set('ws-high',      connected ? highCount  : '--');
   set('ws-connected', `${connected}/${MODULE_KEYS.length}`);
+
+  /* Posture score — S = max(0, 100 - 20C - 10H - 5M - 2L) */
+  if (connected) {
+    const score = Math.max(0, 100 - 20 * criticalCount - 10 * highCount - 5 * mediumCount - 2 * lowCount);
+    const postureEl = document.getElementById('ws-posture');
+    if (postureEl) {
+      postureEl.textContent = score + '/100';
+      postureEl.style.color = score >= 80 ? 'var(--low)'
+                            : score >= 50 ? 'var(--medium)'
+                            : 'var(--critical)';
+    }
+  }
 
 }
 

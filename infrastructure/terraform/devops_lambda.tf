@@ -33,7 +33,7 @@ resource "aws_lambda_function" "devops_analyzer" {
     }
   }
 
-  tags = { Project = var.project, Module = "devops", Owner = "vivek" }
+  tags = { Project = var.project, Module = "devops" }
 }
 
 resource "aws_api_gateway_resource" "scan_devops" {

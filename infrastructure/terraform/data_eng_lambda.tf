@@ -33,7 +33,7 @@ resource "aws_lambda_function" "data_eng_analyzer" {
     }
   }
 
-  tags = { Project = var.project, Module = "data-eng", Owner = "srivallisa" }
+  tags = { Project = var.project, Module = "data-eng" }
 }
 
 resource "aws_api_gateway_resource" "scan_data_eng" {

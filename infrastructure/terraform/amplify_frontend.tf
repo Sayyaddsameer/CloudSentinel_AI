@@ -25,14 +25,14 @@ resource "aws_amplify_app" "portal" {
     PROJECT = var.project
   }
 
-  tags = { Project = var.project, Owner = "akash" }
+  tags = { Project = var.project, ManagedBy = "Terraform" }
 }
 
-resource "aws_amplify_branch" "feature_frontend" {
+resource "aws_amplify_branch" "main" {
   count             = var.github_token != "" ? 1 : 0
   app_id            = aws_amplify_app.portal[0].id
-  branch_name       = "feature/frontend"
-  stage             = "DEVELOPMENT"
+  branch_name       = "main"
+  stage             = "PRODUCTION"
   enable_auto_build = true
 }
 
@@ -46,5 +46,5 @@ resource "aws_amplify_branch" "develop" {
 
 output "amplify_default_domain" {
   sensitive = true
-  value     = var.github_token != "" ? "https://${aws_amplify_branch.develop[0].branch_name}.${aws_amplify_app.portal[0].default_domain}" : "(Amplify not configured — set github_token to enable)"
+  value     = var.github_token != "" ? "https://main.${aws_amplify_app.portal[0].default_domain}" : "(Amplify not configured — set github_token to enable)"
 }

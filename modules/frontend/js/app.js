@@ -280,10 +280,11 @@ function recordScanToHistory(module, risks) {
   const history = JSON.parse(localStorage.getItem(key) || '[]');
   history.unshift({
     timestamp: new Date().toISOString(),
-    total: risks.length,
-    high: risks.filter(r => r.riskPriority === 'High').length,
-    medium: risks.filter(r => r.riskPriority === 'Medium').length,
-    low: risks.filter(r => r.riskPriority === 'Low').length,
+    total:    risks.length,
+    critical: risks.filter(r => r.riskPriority === 'Critical').length,
+    high:     risks.filter(r => r.riskPriority === 'High').length,
+    medium:   risks.filter(r => r.riskPriority === 'Medium').length,
+    low:      risks.filter(r => r.riskPriority === 'Low').length,
     risks: risks.slice(0, 10),
     module,
   });

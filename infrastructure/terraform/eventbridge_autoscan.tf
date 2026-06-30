@@ -25,7 +25,7 @@ resource "aws_lambda_function" "auto_rescan_router" {
     }
   }
 
-  tags = { Project = var.project, Module = "auto-rescan", Owner = "sameer" }
+  tags = { Project = var.project, Module = "auto-rescan" }
 }
 
 resource "aws_lambda_permission" "allow_eventbridge_autoscan" {

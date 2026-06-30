@@ -36,7 +36,7 @@ resource "aws_lambda_function" "mobile_analyzer" {
     }
   }
 
-  tags = { Project = var.project, Module = "mobile", Owner = "ambica" }
+  tags = { Project = var.project, Module = "mobile" }
 }
 
 resource "aws_api_gateway_resource" "scan_mobile" {

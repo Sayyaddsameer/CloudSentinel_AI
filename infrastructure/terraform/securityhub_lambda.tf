@@ -21,7 +21,7 @@ resource "aws_lambda_function" "securityhub_handler" {
     }
   }
 
-  tags = { Project = var.project, Module = "cloud-infra", Owner = "sameer" }
+  tags = { Project = var.project, Module = "cloud-infra" }
 }
 
 resource "aws_cloudwatch_event_rule" "securityhub_findings" {
