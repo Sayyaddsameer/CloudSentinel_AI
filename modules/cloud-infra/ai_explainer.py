@@ -240,7 +240,12 @@ def lambda_handler(event, context):
     comp    = boto3.client("comprehend",       region_name=REGION)
 
     risks = fetch_open_risks(table)
-    logger.info(f"{len(risks)} risk(s) need AI explanation")
+    # Apply the MAX_RISKS cap — was declared at L19 but never used.
+    # Without this cap, 100+ risks × 2.1s sleep = Lambda timeout → SAFE_FALLBACK for all remaining.
+    if len(risks) > MAX_RISKS:
+        logger.info(f"Capping {len(risks)} risks to MAX_RISKS={MAX_RISKS} — remainder will be retried on next EventBridge trigger")
+        risks = risks[:MAX_RISKS]
+    logger.info(f"{len(risks)} risk(s) queued for AI explanation this run")
 
     processed = 0
     latencies_ms = []          # per-finding LLM latency (paper Q2)
@@ -248,8 +253,10 @@ def lambda_handler(event, context):
     rescued = 0                # passed only after the strict retry (temp 0.05)
     fallback_used = 0          # both attempts failed the guardrail
 
-    for risk in risks:
-        time.sleep(2.1)   # Groq free tier: 30 RPM → 2s min gap; 2.1s avoids 429s
+    for i, risk in enumerate(risks):
+        # Rate-limit delay: only sleep BETWEEN calls, not before the first one
+        if i > 0:
+            time.sleep(2.1)   # Groq free tier: 30 RPM → 2s min gap; 2.1s avoids 429s
         _t0 = time.time()
         explanation = call_llm(build_bedrock_prompt(risk), bedrock, temperature=0.1)
         latency_ms = int((time.time() - _t0) * 1000)
@@ -264,7 +271,12 @@ def lambda_handler(event, context):
             if rvalid:
                 explanation = retry; rescued += 1
             else:
-                explanation = SAFE_FALLBACK; fallback_used += 1
+                # Do NOT store SAFE_FALLBACK — leave aiExplanation empty ("") so the
+                # next EventBridge invocation picks this risk up and retries it.
+                # Previously storing SAFE_FALLBACK permanently excluded it from retries.
+                logger.warning(f"Both attempts failed for {risk.get('resourceId')} — skipping (will retry next run)")
+                explanation = ""   # empty = will be retried
+                fallback_used += 1
 
         latencies_ms.append(latency_ms)
         logger.info(f"LLM ({LLM_PROVIDER}) latency: {latency_ms}ms for '{risk.get('riskType', '')}'")
