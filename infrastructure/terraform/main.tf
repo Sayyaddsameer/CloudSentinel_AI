@@ -228,10 +228,6 @@ resource "aws_dynamodb_table" "risks" {
     enabled = true
   }
 
-  # Active cross-region replica — provides < 1-second RPO for risk records
-  replica {
-    region_name = var.secondary_region
-  }
 
   tags = {
     Project = var.project

@@ -120,12 +120,22 @@
           </div>
         </div>
         <div style="margin-bottom:1rem">
-          <a href="https://console.aws.amazon.com/cloudformation/home#/stacks/create/review?templateURL=https://cloudsentinel-artifacts-871070087236.s3.ap-south-1.amazonaws.com/templates/scanner-role.yaml&stackName=CloudSentinel-Scanner"
+          <a id="cfn-deploy-link" href="#"
              target="_blank" class="btn btn-outline w-full" style="justify-content:center">
             &#9654; Deploy CloudSentinel Scanner Stack (if not done)
           </a>
           <div class="form-hint" style="text-align:center;margin-top:.4rem">Opens AWS CloudFormation — takes ~30 seconds</div>
         </div>
+        <script>
+          (function(){
+            var tpl = window.ENV_CFN_TEMPLATE_URL || '';
+            if (tpl) {
+              document.getElementById('cfn-deploy-link').href =
+                'https://console.aws.amazon.com/cloudformation/home#/stacks/create/review?templateURL='
+                + encodeURIComponent(tpl) + '&stackName=CloudSentinel-Scanner';
+            }
+          })();
+        </script>
         <div class="form-group">
           <label class="form-label">AWS Account ID</label>
           <input class="form-input" id="fs-account-id" placeholder="123456789012" maxlength="12" autocomplete="off">

@@ -31,19 +31,6 @@ resource "aws_sns_topic_policy" "alerts" {
 
 data "aws_iam_policy_document" "sns_policy" {
   statement {
-    sid    = "AllowLambdaPublish"
-    effect = "Allow"
-
-    principals {
-      type        = "Service"
-      identifiers = ["lambda.amazonaws.com"]
-    }
-
-    actions   = ["SNS:Publish"]
-    resources = [aws_sns_topic.alerts.arn]
-  }
-
-  statement {
     sid    = "AllowAccountOwner"
     effect = "Allow"
 

@@ -66,12 +66,15 @@ resource "aws_iam_role_policy" "sfn_lambda_invoke" {
   })
 }
 
-# ── CloudWatch log group for Step Functions ───────────────────
+# Import existing log group (may already exist from previous partial deploy)
 resource "aws_cloudwatch_log_group" "sfn_logs" {
   name              = "/aws/states/CloudSentinelScanOrchestrator"
   retention_in_days = 30
+  tags              = { Project = "CloudSentinel" }
 
-  tags = { Project = "CloudSentinel" }
+  lifecycle {
+    ignore_changes = [tags]
+  }
 }
 
 # ── State Machine definition ───────────────────────────────────
