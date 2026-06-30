@@ -29,6 +29,7 @@ resource "aws_lambda_function" "cloud_scanner" {
   environment {
     variables = {
       DYNAMODB_TABLE  = aws_dynamodb_table.risks.name
+      DDB_REGION      = var.aws_region
       GCP_SECRET_NAME = var.gcp_secret_name
       TARGET_ROLE_ARN = var.target_role_arn
     }

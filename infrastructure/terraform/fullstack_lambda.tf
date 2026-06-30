@@ -24,6 +24,7 @@ resource "aws_lambda_function" "fullstack_analyzer" {
   environment {
     variables = {
       DYNAMODB_TABLE            = aws_dynamodb_table.risks.name
+      DDB_REGION                = var.aws_region
       LATENCY_THRESHOLD_MS      = "2000"
       ERROR_5XX_THRESHOLD       = "10"
       LOOKBACK_HOURS            = "1"
