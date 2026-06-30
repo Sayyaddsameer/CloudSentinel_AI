@@ -534,6 +534,83 @@ resource "aws_api_gateway_integration" "notify_post" {
 }
 
 # ---------------------------------------------------------------------------
+# /scan-all POST — triggers Step Functions parallel orchestrator
+# ---------------------------------------------------------------------------
+
+data "archive_file" "scan_all_zip" {
+  type        = "zip"
+  source_file = "${path.module}/../../modules/cloud-infra/scan_all_handler.py"
+  output_path = "${path.module}/../../modules/cloud-infra/scan_all_handler.zip"
+}
+
+resource "aws_lambda_function" "scan_all_handler" {
+  filename         = data.archive_file.scan_all_zip.output_path
+  function_name    = "${var.project}-scan-all-handler"
+  role             = aws_iam_role.lambda_role.arn
+  handler          = "scan_all_handler.lambda_handler"
+  runtime          = "python3.11"
+  timeout          = 30
+  memory_size      = 128
+  source_code_hash = data.archive_file.scan_all_zip.output_base64sha256
+
+  environment {
+    variables = {
+      SFN_ARN        = aws_sfn_state_machine.scan_orchestrator.arn
+      AMPLIFY_DOMAIN = var.amplify_domain
+    }
+  }
+
+  tags = { Project = var.project, Module = "orchestration" }
+}
+
+resource "aws_lambda_permission" "scan_all_apigw" {
+  statement_id  = "AllowAPIGatewayScanAll"
+  action        = "lambda:InvokeFunction"
+  function_name = aws_lambda_function.scan_all_handler.function_name
+  principal     = "apigateway.amazonaws.com"
+  source_arn    = "${aws_api_gateway_rest_api.api.execution_arn}/*/*"
+}
+
+# Allow the Lambda role to start Step Functions executions
+resource "aws_iam_role_policy" "lambda_sfn_start" {
+  name = "${var.project}-lambda-sfn-start"
+  role = aws_iam_role.lambda_role.id
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [{
+      Sid      = "StartScanOrchestrator"
+      Effect   = "Allow"
+      Action   = "states:StartExecution"
+      Resource = aws_sfn_state_machine.scan_orchestrator.arn
+    }]
+  })
+}
+
+resource "aws_api_gateway_resource" "scan_all" {
+  rest_api_id = aws_api_gateway_rest_api.api.id
+  parent_id   = aws_api_gateway_rest_api.api.root_resource_id
+  path_part   = "scan-all"
+}
+
+resource "aws_api_gateway_method" "scan_all_post" {
+  rest_api_id   = aws_api_gateway_resource.scan_all.rest_api_id
+  resource_id   = aws_api_gateway_resource.scan_all.id
+  http_method   = "POST"
+  authorization = "COGNITO_USER_POOLS"
+  authorizer_id = aws_api_gateway_authorizer.cognito.id
+}
+
+resource "aws_api_gateway_integration" "scan_all_post" {
+  rest_api_id             = aws_api_gateway_resource.scan_all.rest_api_id
+  resource_id             = aws_api_gateway_resource.scan_all.id
+  http_method             = aws_api_gateway_method.scan_all_post.http_method
+  integration_http_method = "POST"
+  type                    = "AWS_PROXY"
+  uri                     = aws_lambda_function.scan_all_handler.invoke_arn
+}
+
+
+# ---------------------------------------------------------------------------
 # Outputs
 # ---------------------------------------------------------------------------
 

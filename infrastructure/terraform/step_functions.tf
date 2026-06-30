@@ -89,7 +89,7 @@ resource "aws_sfn_state_machine" "scan_orchestrator" {
   logging_configuration {
     log_destination        = "${aws_cloudwatch_log_group.sfn_logs.arn}:*"
     include_execution_data = true
-    level                  = "ERROR"
+    level                  = "ALL"   # was ERROR — changed to ALL for execution timing visibility
   }
 
   tracing_configuration {
