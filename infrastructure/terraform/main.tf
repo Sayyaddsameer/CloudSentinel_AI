@@ -166,6 +166,16 @@ variable "chatbot_context_risks" {
   default     = 20
 }
 
+variable "allowed_scan_account_ids" {
+  description = "Comma-separated list of AWS account IDs whose Security Hub findings should be stored. Leave empty to auto-exclude only the platform account."
+  type        = string
+  default     = ""
+}
+
+# Resolve the current caller account ID dynamically (used by securityhub_handler to filter own-account findings)
+data "aws_caller_identity" "current" {}
+
+
 variable "notification_threshold" {
   description = "Minimum risk priority level that triggers an email notification (High | Medium | All)"
   type        = string

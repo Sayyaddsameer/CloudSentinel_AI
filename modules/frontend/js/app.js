@@ -612,16 +612,34 @@ async function callDisconnectApi(module, provider = 'all') {
 /**
  * autoDisconnectAll -- revokes all connected modules.
  * Called on manual logout AND auto-logout (session expiry).
+ *
+ * Checks BOTH module-level cs_conn_* AND the global cs_global_aws/gcp keys
+ * so that globally-connected users (who never opened individual module pages)
+ * also have their DynamoDB risks purged and CloudFormation stacks deleted.
  */
 async function autoDisconnectAll() {
   const MODULES = ['cloud-infra', 'devops', 'fullstack', 'data-eng', 'mobile'];
+
+  // Check module-level connections
   const connected = MODULES.filter(m => Object.keys(getConnections(m)).length > 0);
-  if (connected.length === 0) return;
+
+  // Also check global connections — if global AWS is set, ALL modules that use it
+  // need to be disconnected even if they never stored their own cs_conn_ entry.
+  let globalAws = null;
+  let globalGcp = null;
+  try { globalAws = JSON.parse(localStorage.getItem('cs_global_aws') || 'null'); } catch {}
+  try { globalGcp = JSON.parse(localStorage.getItem('cs_global_gcp') || 'null'); } catch {}
+
+  const needsGlobalDisconnect = (globalAws || globalGcp) && connected.length < MODULES.length;
+
+  if (connected.length === 0 && !needsGlobalDisconnect) return;
 
   if (typeof showToast === 'function') {
-    showToast(`Revoking access to ${connected.length} connected module(s)...`, 'info', 4000);
+    const count = needsGlobalDisconnect ? MODULES.length : connected.length;
+    showToast(`Revoking access to ${count} connected module(s)...`, 'info', 4000);
   }
 
+  // Disconnect module-specific connections
   await Promise.allSettled(
     connected.map(async m => {
       await callDisconnectApi(m, 'all').catch(() => { });
@@ -631,6 +649,42 @@ async function autoDisconnectAll() {
       console.info(`[disconnect] Module ${m} revoked and local data cleared.`);
     })
   );
+
+  // Disconnect globally-connected modules (those not already handled above)
+  if (needsGlobalDisconnect) {
+    const globalRoleArn   = globalAws?.roleArn   || '';
+    const globalStackName = globalAws?.stackName  || 'CloudSentinel-Scanner';
+    const unhandled = MODULES.filter(m => !connected.includes(m));
+
+    await Promise.allSettled(
+      unhandled.map(async m => {
+        // Call API with the global role so it can purge DynamoDB risks for this module
+        if (!API_BASE) return;
+        try {
+          await fetch(`${API_BASE}/disconnect`, {
+            method: 'POST',
+            headers: { Authorization: getToken() || '', 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              module:    m,
+              provider:  'all',
+              roleArn:   globalRoleArn,
+              stackName: globalStackName,
+            }),
+          });
+        } catch (e) {
+          console.warn(`[disconnect] Global disconnect for ${m} failed:`, e.message);
+        }
+        localStorage.removeItem(`cs_conn_${m}`);
+        localStorage.removeItem(`cs_scan_${m}`);
+        localStorage.removeItem(`cs_history_${m}`);
+        console.info(`[disconnect] Global module ${m} revoked.`);
+      })
+    );
+
+    // Clear global connection keys AFTER the API calls complete
+    localStorage.removeItem('cs_global_aws');
+    localStorage.removeItem('cs_global_gcp');
+  }
 
   /* Clear session-level previous risks on logout */
   clearAllPreviousRisks();

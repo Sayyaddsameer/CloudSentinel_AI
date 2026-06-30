@@ -17,7 +17,12 @@ resource "aws_lambda_function" "securityhub_handler" {
 
   environment {
     variables = {
-      DYNAMODB_TABLE = aws_dynamodb_table.risks.name
+      DYNAMODB_TABLE          = aws_dynamodb_table.risks.name
+      # Dynamically resolved — no hardcoding of account IDs
+      PLATFORM_ACCOUNT_ID     = data.aws_caller_identity.current.account_id
+      # Leave blank to auto-filter only the platform account.
+      # Populate with comma-separated target account IDs for strict allow-listing.
+      ALLOWED_SCAN_ACCOUNT_IDS = var.allowed_scan_account_ids
     }
   }
 

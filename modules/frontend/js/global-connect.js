@@ -259,9 +259,32 @@ function _gawsConfirm() {
   renderGlobalConnectSection();
 }
 
-function disconnectGlobalAws() {
+async function disconnectGlobalAws() {
+  const aws = getGlobalAws();
+  // Call /disconnect API to purge DynamoDB risks for ALL modules that used this global role
+  if (aws?.roleArn && typeof API_BASE !== 'undefined' && API_BASE && typeof getToken === 'function') {
+    try {
+      await fetch(`${API_BASE}/disconnect`, {
+        method: 'POST',
+        headers: { Authorization: getToken() || '', 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          module:    'all',
+          provider:  'aws',
+          roleArn:   aws.roleArn,
+          stackName: aws.stackName || 'CloudSentinel-Scanner',
+        }),
+      });
+    } catch (e) {
+      console.warn('[global-connect] disconnectGlobalAws API call failed:', e.message);
+    }
+  }
   clearGlobalAws();
-  if (typeof showToast === 'function') showToast('AWS global connection removed', 'info');
+  // Clear module-level connection cache so pages re-check on next load
+  ['cloud-infra', 'devops', 'fullstack', 'data-eng', 'mobile'].forEach(m => {
+    localStorage.removeItem(`cs_conn_${m}`);
+    localStorage.removeItem(`cs_scan_${m}`);
+  });
+  if (typeof showToast === 'function') showToast('AWS global connection removed and risks cleared', 'info');
   renderGlobalConnectSection();
 }
 
@@ -354,9 +377,22 @@ function _ggcpConfirm() {
   renderGlobalConnectSection();
 }
 
-function disconnectGlobalGcp() {
+async function disconnectGlobalGcp() {
+  // Call /disconnect API to purge GCP-sourced risks for the cloud-infra module
+  if (typeof API_BASE !== 'undefined' && API_BASE && typeof getToken === 'function') {
+    try {
+      await fetch(`${API_BASE}/disconnect`, {
+        method: 'POST',
+        headers: { Authorization: getToken() || '', 'Content-Type': 'application/json' },
+        body: JSON.stringify({ module: 'cloud-infra', provider: 'gcp', roleArn: '', stackName: '' }),
+      });
+    } catch (e) {
+      console.warn('[global-connect] disconnectGlobalGcp API call failed:', e.message);
+    }
+  }
   clearGlobalGcp();
   window._gcpKeySession = null;
+  localStorage.removeItem('cs_conn_cloud-infra');
   if (typeof showToast === 'function') showToast('GCP global connection removed', 'info');
   renderGlobalConnectSection();
 }
