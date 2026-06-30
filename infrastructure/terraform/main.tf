@@ -372,6 +372,11 @@ resource "aws_api_gateway_deployment" "dev" {
     aws_api_gateway_integration.scan_cloud_post,
     aws_api_gateway_integration.disconnect_post,
     aws_api_gateway_integration.notify_post,
+    aws_api_gateway_integration.devops_post,
+    aws_api_gateway_integration.fullstack_post,
+    aws_api_gateway_integration.mobile_post,
+    aws_api_gateway_integration.data_eng_post,
+    aws_api_gateway_integration.validate_connection_post,
   ]
   lifecycle { create_before_destroy = true }
 }
@@ -528,5 +533,11 @@ output "lambda_role_arn" {
 }
 
 output "artifacts_bucket" {
-  value = aws_s3_bucket.artifacts.id
+  description = "Name of the S3 artifacts bucket"
+  value       = aws_s3_bucket.artifacts.id
+}
+
+output "aws_region" {
+  description = "AWS region where CloudSentinel is deployed"
+  value       = var.aws_region
 }

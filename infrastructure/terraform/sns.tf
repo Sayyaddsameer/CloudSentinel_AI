@@ -23,25 +23,33 @@ resource "aws_sns_topic_subscription" "admin_email" {
   endpoint  = var.alert_email
 }
 
-# Topic resource policy — allow the Lambda execution role to publish
+# SNS topic resource policy — restricts topic access to this AWS account only.
+# NOTE: SNS resource policies do NOT support Service principals (e.g. lambda.amazonaws.com).
+# Lambda publish access is granted via the inline IAM role policy below instead.
 resource "aws_sns_topic_policy" "alerts" {
-  arn    = aws_sns_topic.alerts.arn
-  policy = data.aws_iam_policy_document.sns_policy.json
-}
+  arn = aws_sns_topic.alerts.arn
 
-data "aws_iam_policy_document" "sns_policy" {
-  statement {
-    sid    = "AllowAccountOwner"
-    effect = "Allow"
-
-    principals {
-      type        = "AWS"
-      identifiers = ["arn:aws:iam::${data.aws_caller_identity.current.account_id}:root"]
-    }
-
-    actions   = ["SNS:*"]
-    resources = [aws_sns_topic.alerts.arn]
-  }
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Sid    = "AllowAccountOwner"
+        Effect = "Allow"
+        Principal = {
+          AWS = "arn:aws:iam::${data.aws_caller_identity.current.account_id}:root"
+        }
+        Action = [
+          "SNS:Publish",
+          "SNS:Subscribe",
+          "SNS:GetTopicAttributes",
+          "SNS:SetTopicAttributes",
+          "SNS:ListSubscriptionsByTopic",
+          "SNS:DeleteTopic"
+        ]
+        Resource = aws_sns_topic.alerts.arn
+      }
+    ]
+  })
 }
 
 # Inline IAM policy — allows the shared Lambda role to publish to this topic

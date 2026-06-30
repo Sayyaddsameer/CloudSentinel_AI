@@ -66,14 +66,15 @@ resource "aws_iam_role_policy" "sfn_lambda_invoke" {
   })
 }
 
-# Import existing log group (may already exist from previous partial deploy)
 resource "aws_cloudwatch_log_group" "sfn_logs" {
   name              = "/aws/states/CloudSentinelScanOrchestrator"
   retention_in_days = 30
-  tags              = { Project = "CloudSentinel" }
+  tags              = { Project = var.project }
 
   lifecycle {
-    ignore_changes = [tags]
+    # Prevent destroy errors if the group was already created outside Terraform
+    ignore_changes  = [tags]
+    prevent_destroy = false
   }
 }
 
@@ -311,10 +312,9 @@ resource "aws_sfn_state_machine" "scan_orchestrator" {
   })
 
   tags = {
-    Project     = "CloudSentinel"
+    Project     = var.project
     Environment = var.environment
     ManagedBy   = "Terraform"
-    Owner       = "Vivek Kantipudi"
   }
 }
 
