@@ -377,6 +377,9 @@ resource "aws_api_gateway_deployment" "dev" {
     aws_api_gateway_integration.mobile_post,
     aws_api_gateway_integration.data_eng_post,
     aws_api_gateway_integration.validate_connection_post,
+    aws_api_gateway_integration_response.options,
+    aws_api_gateway_gateway_response.default_4xx,
+    aws_api_gateway_gateway_response.default_5xx,
   ]
   lifecycle { create_before_destroy = true }
 }
