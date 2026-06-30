@@ -177,6 +177,12 @@ variable "notification_threshold" {
   }
 }
 
+variable "sts_external_id" {
+  description = "ExternalId used in sts:AssumeRole when scanners assume the cloudsentinel-scanner-role in target accounts. Must match the value set in the CloudFormation scanner stack."
+  type        = string
+  default     = "cloudsentinel"
+}
+
 # ---------------------------------------------------------------------------
 # DynamoDB — risk records table
 # ---------------------------------------------------------------------------

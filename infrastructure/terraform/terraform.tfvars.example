@@ -100,3 +100,11 @@ gcp_secret_prefix = "cloudsentinel-gcp-creds"
 # S3 bucket used to serve CloudFormation templates to external accounts).
 # Example: "my-public-bucket-123456789012,another-intentional-resource"
 ignored_resources = ""
+
+# ExternalId required when scanner Lambdas assume cloudsentinel-scanner-role in target accounts.
+# Must match the value in the CloudFormation scanner_role.yaml stack (default: cloudsentinel).
+sts_external_id = "cloudsentinel"
+
+# ARN of Secrets Manager secret holding the GitHub PAT for the DevOps analyzer.
+# Required only if using GitHub repository scanning in the DevOps module.
+github_pat_secret_arn = ""

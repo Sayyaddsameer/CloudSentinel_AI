@@ -23,12 +23,15 @@ resource "aws_lambda_function" "mobile_analyzer" {
 
   environment {
     variables = {
-      DYNAMODB_TABLE         = aws_dynamodb_table.risks.name
-      LATENCY_THRESHOLD_MS   = "1000"
-      ERROR_5XX_THRESHOLD    = "10"
-      ERROR_4XX_THRESHOLD    = "50"
-      LAMBDA_ERROR_THRESHOLD = "5"
-      LOOKBACK_HOURS         = "1"
+      DYNAMODB_TABLE             = aws_dynamodb_table.risks.name
+      LATENCY_THRESHOLD_MS       = "1000"
+      ERROR_5XX_THRESHOLD        = "10"
+      ERROR_4XX_THRESHOLD        = "50"
+      LAMBDA_ERROR_THRESHOLD     = "5"
+      LOOKBACK_HOURS             = "1"
+      STS_EXTERNAL_ID            = var.sts_external_id
+      AI_EXPLAINER_FUNCTION_NAME = aws_lambda_function.ai_explainer.function_name
+      AMPLIFY_DOMAIN             = var.amplify_domain
     }
   }
 

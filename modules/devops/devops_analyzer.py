@@ -31,6 +31,9 @@ WEBHOOK_SECRET_ARN   = os.environ.get("WEBHOOK_SECRET_ARN", "")
 GITHUB_PAT_SECRET_ARN = os.environ.get("GITHUB_PAT_SECRET_ARN", "")
 GITHUB_API_BASE      = "https://api.github.com"
 
+# Set by lambda_handler to the user-chosen scan region before any build_risk calls
+_SCAN_REGION = REGION
+
 # Regex patterns for secret detection
 SECRET_PATTERNS = [
     re.compile(r'(?i)(password|passwd|secret|token|api_key|apikey)\s*[:=]\s*["\']?\S{8,}'),
@@ -192,7 +195,7 @@ def build_risk(repo_name, risk_type, risk_reason, priority,
         remediation_steps=remediation_steps,
         alternative_solutions=alternative_solutions,
         cloud_provider="AWS",
-        region=REGION,
+        region=_SCAN_REGION,
     )
 
 
@@ -493,6 +496,10 @@ def lambda_handler(event, context):
 
     raw_body = (event.get("body") or "{}").encode("utf-8")
     body     = json.loads(raw_body)
+
+    # Set scan region for risk card labels
+    global _SCAN_REGION
+    _SCAN_REGION = body.get("scanRegion") or os.environ.get("SCAN_REGION") or REGION
 
     purge_module_risks(table, "devops")
 

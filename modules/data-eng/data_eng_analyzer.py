@@ -20,6 +20,9 @@ STS_EXTERNAL_ID = os.environ.get("STS_EXTERNAL_ID", "cloudsentinel")
 GLUE_FAIL_THRESHOLD = int(os.environ.get("GLUE_FAIL_THRESHOLD", "2"))
 GLUE_RUNS_WINDOW    = int(os.environ.get("GLUE_RUNS_WINDOW", "5"))
 
+# Set by lambda_handler to the user-chosen scan region before any build_risk calls
+_SCAN_REGION = REGION
+
 # Keywords that suggest sensitive data — based on naming conventions
 SENSITIVE_PATTERNS = [
     "user", "customer", "client", "patient", "payment",
@@ -50,7 +53,7 @@ def build_risk(resource, resource_name, risk_type, risk_reason, priority,
         remediation_steps=remediation_steps,
         alternative_solutions=alternative_solutions,
         cloud_provider="AWS",
-        region=REGION,
+        region=_SCAN_REGION,
     )
 
 
@@ -422,6 +425,9 @@ def lambda_handler(event, context):
     body        = json.loads((event.get("body") or "{}"))
     role_arn    = body.get("targetRoleArn") or None
     scan_region = body.get("scanRegion") or os.environ.get("SCAN_REGION") or os.environ["AWS_REGION"]
+
+    global _SCAN_REGION
+    _SCAN_REGION = scan_region
 
     ddb   = boto3.resource("dynamodb", region_name=DDB_REGION)
     table = ddb.Table(TABLE_NAME)

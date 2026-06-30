@@ -23,9 +23,12 @@ resource "aws_lambda_function" "data_eng_analyzer" {
 
   environment {
     variables = {
-      DYNAMODB_TABLE      = aws_dynamodb_table.risks.name
-      GLUE_FAIL_THRESHOLD = "2"
-      GLUE_RUNS_WINDOW    = "5"
+      DYNAMODB_TABLE             = aws_dynamodb_table.risks.name
+      GLUE_FAIL_THRESHOLD        = "2"
+      GLUE_RUNS_WINDOW           = "5"
+      STS_EXTERNAL_ID            = var.sts_external_id
+      AI_EXPLAINER_FUNCTION_NAME = aws_lambda_function.ai_explainer.function_name
+      AMPLIFY_DOMAIN             = var.amplify_domain
     }
   }
 

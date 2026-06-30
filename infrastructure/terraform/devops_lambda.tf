@@ -23,10 +23,12 @@ resource "aws_lambda_function" "devops_analyzer" {
 
   environment {
     variables = {
-      DYNAMODB_TABLE         = aws_dynamodb_table.risks.name
-      WEBHOOK_SECRET_ARN     = var.webhook_secret_arn
-      GITHUB_PAT_SECRET_ARN  = var.github_pat_secret_arn
-      DEFAULT_GITHUB_REPO    = var.default_github_repo   # e.g. "myorg/myrepo"
+      DYNAMODB_TABLE             = aws_dynamodb_table.risks.name
+      WEBHOOK_SECRET_ARN         = var.webhook_secret_arn
+      GITHUB_PAT_SECRET_ARN      = var.github_pat_secret_arn
+      DEFAULT_GITHUB_REPO        = var.default_github_repo
+      AI_EXPLAINER_FUNCTION_NAME = aws_lambda_function.ai_explainer.function_name
+      AMPLIFY_DOMAIN             = var.amplify_domain
     }
   }
 
