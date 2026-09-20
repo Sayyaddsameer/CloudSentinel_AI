@@ -49,10 +49,12 @@ def get_aws_clients(role_arn=None, scan_region=None):
         logger.info(f"Scanning own account, region {target_region}")
 
     return {
-        "s3":     boto3.client("s3",     **kwargs),
-        "ec2":    boto3.client("ec2",    **kwargs),
-        "iam":    boto3.client("iam",    **kwargs),
-        "config": boto3.client("config", **kwargs),
+        "s3":         boto3.client("s3",         **kwargs),
+        "ec2":        boto3.client("ec2",        **kwargs),
+        "iam":        boto3.client("iam",        **kwargs),
+        "config":     boto3.client("config",     **kwargs),
+        "cloudtrail": boto3.client("cloudtrail", **kwargs),
+        "rds":        boto3.client("rds",        **kwargs),
     }
 
 
@@ -525,7 +527,10 @@ def scan_iam_users(clients, table):
     KEY_MAX_AGE_DAYS = 90
 
     try:
-        users = iam.list_users().get("Users", [])
+        paginator = iam.get_paginator("list_users")
+        users = []
+        for page in paginator.paginate():
+            users.extend(page.get("Users", []))
     except ClientError as e:
         logger.warning(f"list_users: {e}")
         return found
@@ -676,7 +681,7 @@ def scan_cloudtrail(clients, table):
     """Check whether CloudTrail is enabled and actively logging (Critical if not)."""
     found = []
     try:
-        cloudtrail = boto3.client("cloudtrail", region_name=LAMBDA_REGION)
+        cloudtrail = clients.get("cloudtrail") or boto3.client("cloudtrail", region_name=LAMBDA_REGION)
         trails = cloudtrail.describe_trails(includeShadowTrails=False).get("trailList", [])
         if not trails:
             r = build_risk(
@@ -774,7 +779,7 @@ def scan_rds_public(clients, table):
     """Check RDS DB instances for public accessibility (High if publicly accessible)."""
     found = []
     try:
-        rds = boto3.client("rds", region_name=LAMBDA_REGION)
+        rds = clients.get("rds") or boto3.client("rds", region_name=LAMBDA_REGION)
         paginator = rds.get_paginator("describe_db_instances")
         for page in paginator.paginate():
             for instance in page.get("DBInstances", []):
@@ -855,8 +860,8 @@ def lambda_handler(event, context):
         scan_region     = body.get("scanRegion") or None   # user-selected region from frontend
         if "providers" in body:
             providers = body["providers"]
-    except Exception:
-        pass
+    except Exception as e:
+        logger.warning(f"Failed to parse request body, using defaults: {e}")
 
     if scan_region:
         logger.info(f"Scanning user-selected region: {scan_region}")
