@@ -5,10 +5,10 @@
  * Re-run `python post_deploy.py` after every `terraform apply`.
  */
 
-window.ENV_COGNITO_POOL_ID     = "us-east-1_UsSqAp9rk";
-window.ENV_COGNITO_CLIENT_ID   = "bha9koc8i295aq4mc4djkmu5o";
-window.ENV_API_URL             = "https://09o5nuivnk.execute-api.us-east-1.amazonaws.com/dev";
+window.ENV_COGNITO_POOL_ID     = "us-east-1_iyUvbrybe";
+window.ENV_COGNITO_CLIENT_ID   = "4uecblm0lgcifp411th36ccgc6";
+window.ENV_API_URL             = "https://cq9c8h6a26.execute-api.us-east-1.amazonaws.com/dev";
 window.ENV_REGION              = "us-east-1";
-window.ENV_CFN_TEMPLATE_URL    = "https://cloudsentinel-artifacts-871070087236.s3.us-east-1.amazonaws.com/templates/scanner-role.yaml";
-window.ENV_PLATFORM_ACCOUNT_ID = "871070087236";
+window.ENV_CFN_TEMPLATE_URL    = "https://cloudsentinel-artifacts-432120272500.s3.us-east-1.amazonaws.com/templates/scanner-role.yaml";
+window.ENV_PLATFORM_ACCOUNT_ID = "432120272500";
 window.ENV_LAMBDA_ROLE_NAME    = "cloudsentinel-lambda-role";
